@@ -10,6 +10,7 @@ export default function MenuManager() {
   const [categories, setCategories] = useState([]);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [notification, setNotification] = useState('');
   
   const [formData, setFormData] = useState({
     name: '',
@@ -33,6 +34,11 @@ export default function MenuManager() {
     } catch (err) {
       console.error('Failed to fetch categories:', err);
     }
+  };
+
+  const showNotification = (msg) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(''), 3000);
   };
 
   const fetchMenu = async () => {
@@ -99,6 +105,7 @@ export default function MenuManager() {
 
       if (res.ok) {
         setIsModalOpen(false);
+        showNotification(editingItem ? 'Item updated successfully!' : 'Item added successfully!');
         fetchMenu();
       }
     } catch (err) {
@@ -174,6 +181,7 @@ export default function MenuManager() {
       });
       if (res.ok) {
         setNewCategoryName('');
+        showNotification('Category added successfully!');
         fetchCategories();
       } else {
         const data = await res.json();
@@ -448,6 +456,21 @@ export default function MenuManager() {
                 )}
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Global Notification Toast */}
+      <AnimatePresence>
+        {notification && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.9 }}
+            className="fixed bottom-6 right-6 bg-surface-container-high border border-primary/30 text-primary px-6 py-4 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.5),0_0_20px_rgba(212,175,55,0.15)] flex items-center gap-3 z-[200]"
+          >
+            <span className="material-symbols-outlined text-[24px]">check_circle</span>
+            <span className="font-body-md font-medium tracking-wide">{notification}</span>
           </motion.div>
         )}
       </AnimatePresence>
