@@ -55,6 +55,43 @@ router.post('/staff', requireAdmin, async (req, res) => {
   }
 });
 
+// Update a staff member's role
+router.patch('/staff/:id/role', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.body;
+
+    if (role !== 'ADMIN' && role !== 'STAFF') {
+      return res.status(400).json({ error: 'Invalid role' });
+    }
+
+    if (id === req.user.id) {
+      return res.status(400).json({ error: 'You cannot change your own role' });
+    }
+
+    const db = await getDB();
+    const targetUser = await db.collection('admins').findOne({ _id: new ObjectId(id) });
+    
+    if (!targetUser) {
+      return res.status(404).json({ error: 'Staff member not found' });
+    }
+
+    // Admin cannot change any other admin roles
+    if (targetUser.role === 'ADMIN') {
+      return res.status(403).json({ error: 'You cannot modify the role of another Admin' });
+    }
+
+    await db.collection('admins').updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { role } }
+    );
+
+    res.json({ success: true, role });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update staff member role' });
+  }
+});
+
 // Delete a staff member
 router.delete('/staff/:id', requireAdmin, async (req, res) => {
   try {
@@ -66,6 +103,17 @@ router.delete('/staff/:id', requireAdmin, async (req, res) => {
     }
 
     const db = await getDB();
+    const targetUser = await db.collection('admins').findOne({ _id: new ObjectId(id) });
+
+    if (!targetUser) {
+      return res.status(404).json({ error: 'Staff member not found' });
+    }
+
+    // Admin cannot delete other admin accounts
+    if (targetUser.role === 'ADMIN') {
+      return res.status(403).json({ error: 'You cannot delete another Admin account' });
+    }
+
     await db.collection('admins').deleteOne({ _id: new ObjectId(id) });
     res.json({ success: true });
   } catch (error) {
