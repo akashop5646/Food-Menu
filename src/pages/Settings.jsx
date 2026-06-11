@@ -15,6 +15,13 @@ export default function Settings({ user }) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [actionError, setActionError] = useState('');
 
+  // Google Pay config states
+  const [gpayId, setGpayId] = useState('');
+  const [gpayLoading, setGpayLoading] = useState(true);
+  const [gpaySubmitting, setGpaySubmitting] = useState(false);
+  const [gpaySuccess, setGpaySuccess] = useState(false);
+  const [gpayError, setGpayError] = useState('');
+
   const fetchStaff = async () => {
     try {
       const res = await fetch('/api/settings/staff', { credentials: 'include' });
@@ -28,8 +35,47 @@ export default function Settings({ user }) {
     }
   };
 
+  const fetchGpay = async () => {
+    try {
+      const res = await fetch('/api/settings/gpay', { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch Google Pay config');
+      const data = await res.json();
+      setGpayId(data.gpayId || '');
+    } catch (err) {
+      console.error('Failed to load Google Pay config:', err);
+    } finally {
+      setGpayLoading(false);
+    }
+  };
+
+  const handleGpaySubmit = async (e) => {
+    e.preventDefault();
+    setGpaySubmitting(true);
+    setGpayError('');
+    setGpaySuccess(false);
+
+    try {
+      const res = await fetch('/api/settings/gpay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gpayId }),
+        credentials: 'include'
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save Google Pay settings');
+
+      setGpaySuccess(true);
+    } catch (err) {
+      setGpayError(err.message);
+    } finally {
+      setGpaySubmitting(false);
+    }
+  };
+
   useEffect(() => {
     fetchStaff();
+    fetchGpay();
   }, []);
 
   const handleUpdateRole = async (memberId, newRole) => {
@@ -117,7 +163,7 @@ export default function Settings({ user }) {
   };
 
   return (
-    <div className="max-w-4xl mx-auto py-8 px-margin-mobile md:px-0">
+    <div className="max-w-4xl mx-auto py-8 px-margin-mobile md:px-0 flex flex-col gap-8">
       <div className="bg-surface-container rounded-2xl border border-outline-variant/20 shadow-lg overflow-hidden">
         
         {/* Header */}
@@ -188,6 +234,90 @@ export default function Settings({ user }) {
                 </div>
               </div>
             ))
+          )}
+        </div>
+      </div>
+
+      {/* Google Pay Configuration Card */}
+      <div className="bg-surface-container rounded-2xl border border-outline-variant/20 shadow-lg overflow-hidden">
+        {/* Header */}
+        <div className="p-6 md:p-8 border-b border-outline-variant/10">
+          <h2 className="font-headline-md text-2xl text-on-surface flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary">payments</span>
+            Google Pay Integration
+          </h2>
+          <p className="font-body-md text-on-surface-variant mt-1">
+            Configure your business UPI ID to receive payments directly from customers at checkout.
+          </p>
+        </div>
+
+        {/* Form */}
+        <div className="p-6 md:p-8">
+          {gpayLoading ? (
+            <div className="flex justify-center py-8">
+              <span className="material-symbols-outlined text-primary text-4xl animate-spin">progress_activity</span>
+            </div>
+          ) : (
+            <form onSubmit={handleGpaySubmit} className="flex flex-col gap-6">
+              {gpayError && (
+                <div className="bg-error/10 text-error px-4 py-3 rounded-lg border border-error/20 text-sm font-medium">
+                  {gpayError}
+                </div>
+              )}
+              {gpaySuccess && (
+                <div className="bg-primary/10 text-primary px-4 py-3 rounded-lg border border-primary/20 text-sm font-medium flex items-center gap-2">
+                  <span className="material-symbols-outlined text-lg">check_circle</span>
+                  Google Pay settings saved successfully!
+                </div>
+              )}
+
+              <div>
+                <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1.5 uppercase tracking-widest">
+                  Google Pay UPI VPA (ID)
+                </label>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    type="text"
+                    value={gpayId}
+                    onChange={(e) => {
+                      setGpayId(e.target.value);
+                      setGpaySuccess(false);
+                      setGpayError('');
+                    }}
+                    className="flex-1 bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors"
+                    placeholder="e.g. businessname@okaxis or 9876543210@upi"
+                  />
+                  <button
+                    type="submit"
+                    disabled={gpaySubmitting}
+                    className="bg-primary text-on-primary px-8 py-3 rounded-lg font-label-caps text-[12px] uppercase tracking-widest gold-glow disabled:opacity-50 flex items-center justify-center gap-2 transition-all shrink-0 cursor-pointer"
+                  >
+                    {gpaySubmitting ? (
+                      <span className="material-symbols-outlined animate-spin text-[16px]">progress_activity</span>
+                    ) : (
+                      <span className="material-symbols-outlined text-[18px]">save</span>
+                    )}
+                    Save Settings
+                  </button>
+                </div>
+                <p className="font-body-sm text-[11px] text-on-surface-variant opacity-70 mt-2 leading-relaxed">
+                  Enter the UPI VPA connected to your Google Pay Business account. Customers will send their payments directly to this address.
+                </p>
+              </div>
+
+              {/* Informational preview */}
+              <div className="bg-surface-container-lowest/50 border border-outline-variant/15 rounded-xl p-4 flex gap-3">
+                <span className="material-symbols-outlined text-primary text-2xl shrink-0">info</span>
+                <div>
+                  <h4 className="font-title-sm text-sm text-on-surface font-semibold">How this works for customers</h4>
+                  <p className="font-body-sm text-[12px] text-on-surface-variant/80 mt-1 leading-relaxed">
+                    Once saved, the "Pay Now" option is enabled on the checkout menu. 
+                    On mobile devices, it triggers Google Pay or any other UPI app natively. 
+                    On desktop, it displays a dynamic gold-accented QR Code for customers to scan and complete their checkout instantly.
+                  </p>
+                </div>
+              </div>
+            </form>
           )}
         </div>
       </div>

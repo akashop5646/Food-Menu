@@ -24,20 +24,33 @@ function MenuPage() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [qrCode, setQrCode] = useState('');
 
+  // Google Pay / UPI configuration and states
+  const [gpayId, setGpayId] = useState('');
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentQrCode, setPaymentQrCode] = useState('');
+
   // Fetch menu items and categories from API
   useEffect(() => {
     const fetchMenu = async () => {
       try {
-        const [itemsRes, catsRes] = await Promise.all([
+        const [itemsRes, catsRes, gpayRes] = await Promise.all([
           fetch('/api/menu'),
           fetch('/api/categories'),
+          fetch('/api/settings/gpay'),
         ]);
         const items = await itemsRes.json();
         const cats = await catsRes.json();
+        let gpayData = { gpayId: '' };
+        try {
+          gpayData = await gpayRes.json();
+        } catch (e) {
+          console.error(e);
+        }
         setMenuItems(Array.isArray(items) ? items : []);
         setCategories(['All', ...(Array.isArray(cats) ? cats.map(c => c.name) : [])]);
+        setGpayId(gpayData.gpayId || '');
       } catch (err) {
-        console.error('Failed to fetch menu:', err);
+        console.error('Failed to fetch initial page data:', err);
       } finally {
         setMenuLoading(false);
       }
@@ -119,6 +132,48 @@ function MenuPage() {
       color: { dark: '#10110e', light: '#f7f1e8' },
     }).then(setQrCode);
   }, [isCheckoutOpen, orderPayload]);
+
+  const upiUrl = useMemo(() => {
+    if (!gpayId || !cartTotal) return '';
+    return `upi://pay?pa=${gpayId}&pn=${encodeURIComponent("Aurum Table")}&am=${cartTotal.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Table ${selectedTable} Order`)}`;
+  }, [gpayId, cartTotal, selectedTable]);
+
+  useEffect(() => {
+    if (!isCheckoutOpen || !upiUrl) {
+      setPaymentQrCode('');
+      return;
+    }
+    QRCode.toDataURL(upiUrl, {
+      margin: 1,
+      width: 280,
+      color: { dark: '#10110e', light: '#f7f1e8' },
+    }).then(setPaymentQrCode);
+  }, [isCheckoutOpen, upiUrl]);
+
+  const handlePayNow = () => {
+    if (!gpayId) {
+      showNotification('Online payments are currently disabled. Please choose Pay Later.');
+      return;
+    }
+
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (isMobile) {
+      window.location.href = upiUrl;
+      setTimeout(() => {
+        setIsCheckoutOpen(false);
+        setCart([]);
+        showNotification('Initiating payment... Thank you for your order!');
+      }, 1000);
+    } else {
+      setShowPaymentModal(true);
+    }
+  };
+
+  const handlePayLater = () => {
+    setIsCheckoutOpen(false);
+    setCart([]);
+    showNotification('Thank you! Your order has been placed. You can pay later at the counter.');
+  };
 
   return (
     <div className="bg-background text-on-surface pb-32 min-h-screen">
@@ -421,10 +476,16 @@ function MenuPage() {
               </div>
               
               <div className="w-full space-y-4">
-                <button className="w-full bg-gold-metallic text-on-primary py-3 rounded font-label-caps text-label-caps uppercase tracking-wider gold-glow transition-all flex items-center justify-center gap-2">
+                <button 
+                  onClick={handlePayNow}
+                  className="w-full bg-gold-metallic text-on-primary py-3 rounded font-label-caps text-label-caps uppercase tracking-wider gold-glow transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
                   <span className="material-symbols-outlined">credit_card</span> Pay Now
                 </button>
-                <button className="w-full bg-surface-container-high border border-outline-variant/50 text-on-surface py-3 rounded font-body-md text-body-md hover:border-primary/50 transition-colors flex items-center justify-center gap-2">
+                <button 
+                  onClick={handlePayLater}
+                  className="w-full bg-surface-container-high border border-outline-variant/50 text-on-surface py-3 rounded font-body-md text-body-md hover:border-primary/50 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                >
                   <span className="material-symbols-outlined">schedule</span> Pay Later
                 </button>
               </div>
@@ -569,6 +630,78 @@ function MenuPage() {
               </div>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+      {/* Payment QR Code Modal (Desktop fallback) */}
+      <AnimatePresence>
+        {showPaymentModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="bg-surface-container rounded-2xl border border-primary/20 shadow-2xl w-full max-w-md overflow-hidden text-center"
+            >
+              <div className="p-6 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-lowest">
+                <h3 className="font-headline-sm text-primary flex items-center gap-2">
+                  <span className="material-symbols-outlined">qr_code_scanner</span>
+                  Pay with Google Pay / UPI
+                </h3>
+                <button onClick={() => setShowPaymentModal(false)} className="text-on-surface-variant hover:text-primary transition-colors">
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+
+              <div className="p-8 flex flex-col items-center justify-center">
+                {/* Order Summary */}
+                <div className="mb-6">
+                  <span className="font-label-caps text-label-caps text-on-surface-variant block mb-1">Amount to Pay</span>
+                  <strong className="font-price-display text-4xl text-primary font-bold">₹{cartTotal.toFixed(2)}</strong>
+                </div>
+
+                {/* QR Code */}
+                <div className="bg-white p-4 rounded-xl mb-6 border-4 border-primary-container/30 gold-glow">
+                  {paymentQrCode ? (
+                    <img src={paymentQrCode} alt="UPI Payment QR Code" className="w-56 h-56 rounded" />
+                  ) : (
+                    <div className="w-56 h-56 flex items-center justify-center text-on-primary font-label-caps">Generating QR...</div>
+                  )}
+                </div>
+
+                <div className="w-full bg-surface-container-lowest/50 border border-outline-variant/15 rounded-xl p-4 mb-6 text-left">
+                  <div className="flex gap-2.5 items-start">
+                    <span className="material-symbols-outlined text-primary text-xl shrink-0 mt-0.5">info</span>
+                    <div>
+                      <h4 className="font-title-sm text-[13px] text-on-surface font-semibold">Instructions</h4>
+                      <p className="font-body-sm text-[12px] text-on-surface-variant/80 mt-1 leading-relaxed">
+                        Scan this QR code using Google Pay, PhonePe, Paytm, or any UPI-enabled banking app to transfer the exact amount directly to our restaurant account.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="w-full flex gap-3">
+                  <button 
+                    onClick={() => setShowPaymentModal(false)}
+                    className="flex-1 bg-surface-container-high border border-outline-variant/50 text-on-surface py-3 rounded font-body-md text-sm hover:border-primary/50 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setShowPaymentModal(false);
+                      setIsCheckoutOpen(false);
+                      setCart([]);
+                      showNotification('Thank you! Your order has been placed and payment is initiated.');
+                    }}
+                    className="flex-1 bg-gold-metallic text-on-primary py-3 rounded font-label-caps text-[12px] uppercase tracking-widest gold-glow cursor-pointer"
+                  >
+                    I Have Paid
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
