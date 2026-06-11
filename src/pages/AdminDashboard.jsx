@@ -19,6 +19,7 @@ export default function AdminDashboard() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   // Theme State
   const [isDark, setIsDark] = useState(true);
@@ -181,8 +182,14 @@ export default function AdminDashboard() {
       {/* Main Content Area */}
       <div className="flex-1 md:ml-[280px] flex flex-col h-screen overflow-hidden">
         {/* TopAppBar */}
-        <header className="w-full h-20 sticky top-0 bg-background/80 backdrop-blur-md flex justify-between items-center px-margin-desktop z-40 transition-colors">
-          <div className="flex items-center gap-4">
+        <header className="w-full h-20 sticky top-0 bg-background/80 backdrop-blur-md flex justify-between items-center px-margin-mobile md:px-margin-desktop z-40 transition-colors">
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setIsMobileMenuOpen(true)} 
+              className="md:hidden text-on-surface-variant hover:text-primary transition-all p-2 -ml-2 rounded-lg flex items-center justify-center cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[24px]">menu</span>
+            </button>
             <h2 className="font-headline-lg text-headline-lg text-primary tracking-tight">Aurum OS</h2>
           </div>
           <div className="flex items-center gap-2 sm:gap-6">
@@ -261,6 +268,99 @@ export default function AdminDashboard() {
           )}
         </main>
       </div>
+
+      {/* Mobile Drawer Navigation */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 md:hidden"
+            />
+            {/* Drawer */}
+            <motion.nav
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed left-0 top-0 bottom-0 w-[280px] bg-surface-container/95 backdrop-blur-[20px] border-r border-outline-variant/20 shadow-2xl flex flex-col z-50 py-6"
+            >
+              <div className="px-6 mb-8 flex justify-between items-center">
+                <div>
+                  <h1 className="font-display-lg text-2xl font-bold text-primary tracking-tight">Aurum Table</h1>
+                  <p className="font-body-sm text-[12px] text-on-surface-variant mt-1">Digital Concierge</p>
+                </div>
+                <button 
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="text-on-surface-variant hover:text-primary p-1 rounded-lg flex items-center justify-center cursor-pointer"
+                >
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+
+              <ul className="flex-1 space-y-2">
+                {SIDEBAR_ITEMS.map((item) => {
+                  if (item.adminOnly && user?.role !== 'ADMIN') return null;
+                  const isActive = activeTab === item.id;
+                  return (
+                    <li key={item.id}>
+                      <a 
+                        href="#"
+                        onClick={(e) => { 
+                          e.preventDefault(); 
+                          setActiveTab(item.id);
+                          setIsMobileMenuOpen(false); 
+                        }}
+                        className={isActive 
+                          ? "flex items-center gap-4 text-primary border-l-4 border-primary bg-primary/10 py-3 px-6 transition-all duration-300 shadow-[inset_10px_0_15px_-10px_rgba(212,175,55,0.3)] pl-5" 
+                          : "flex items-center gap-4 text-on-surface-variant hover:text-on-surface py-3 px-6 transition-colors duration-200 pl-6"}
+                      >
+                        <span className="material-symbols-outlined" style={isActive && item.fill ? { fontVariationSettings: "'FILL' 1" } : {}}>
+                          {item.icon}
+                        </span>
+                        <span className="font-title-md text-title-md">{item.label}</span>
+                      </a>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              <div className="mt-auto px-6">
+                <div className="flex items-center justify-between p-3 bg-[#f4f7f6] dark:bg-surface-container-high/40 border border-[#e3ebe8] dark:border-outline-variant/10 rounded-2xl">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[#e2edea] dark:bg-teal-950/40 text-[#1b7c83] dark:text-teal-400 flex items-center justify-center font-display-md text-title-md font-bold">
+                      {user?.name?.charAt(0) || 'N'}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-title-sm text-[#121317] dark:text-on-surface font-semibold text-sm leading-tight">
+                        {user?.name || 'NupurStaff'}
+                      </span>
+                      <span className="text-[12px] text-[#6d8285] dark:text-on-surface-variant/80 mt-0.5 leading-none">
+                        {user?.role === 'ADMIN' ? 'Store Owner' : (user?.role === 'STAFF' ? 'Staff Member' : 'Store Owner')}
+                      </span>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={async () => {
+                      setIsMobileMenuOpen(false);
+                      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+                      navigate('/admin');
+                    }}
+                    className="text-[#7d9093] dark:text-on-surface-variant hover:text-error dark:hover:text-error hover:bg-error/10 p-2 rounded-xl transition-all duration-200 flex items-center justify-center"
+                    title="Logout"
+                  >
+                    <span className="material-symbols-outlined text-xl">logout</span>
+                  </button>
+                </div>
+              </div>
+            </motion.nav>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

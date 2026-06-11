@@ -334,72 +334,135 @@ export default function MenuManager() {
           </button>
         </div>
       ) : (
-        <div className="bg-surface-container-low rounded-xl border border-outline-variant/20 overflow-hidden shadow-lg animate-[fadeUp_0.8s_ease-out_forwards]">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-surface-container-high border-b border-outline-variant/30">
-                  <th className="px-6 py-4 font-label-caps text-on-surface-variant uppercase tracking-widest text-[12px]">Image</th>
-                  <th className="px-6 py-4 font-label-caps text-on-surface-variant uppercase tracking-widest text-[12px]">Name</th>
-                  <th className="px-6 py-4 font-label-caps text-on-surface-variant uppercase tracking-widest text-[12px]">Category</th>
-                  <th className="px-6 py-4 font-label-caps text-on-surface-variant uppercase tracking-widest text-[12px]">Price</th>
-                  <th className="px-6 py-4 font-label-caps text-on-surface-variant uppercase tracking-widest text-[12px]">Status</th>
-                  <th className="px-6 py-4 font-label-caps text-on-surface-variant uppercase tracking-widest text-[12px] text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredItems.map((item, idx) => (
-                  <tr key={item._id} className="border-b border-outline-variant/10 hover:bg-surface-container-highest/50 transition-colors">
-                    <td className="px-6 py-3">
-                      {item.image ? (
-                        <div className="w-12 h-12 rounded overflow-hidden border border-outline-variant/30">
-                          <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                        </div>
-                      ) : (
-                        <div className="w-12 h-12 rounded bg-surface-variant flex items-center justify-center border border-outline-variant/30">
-                          <span className="material-symbols-outlined text-on-surface-variant opacity-50 text-[20px]">image</span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-3">
-                      <div className="font-title-md text-on-surface">{item.name}</div>
-                      {item.chefPick && <div className="text-[10px] font-label-caps text-primary uppercase tracking-widest mt-1">Chef Pick</div>}
-                    </td>
-                    <td className="p-4 align-middle">
-                      <div className="flex flex-wrap gap-1">
-                        {(item.categories || (item.category ? [item.category] : [])).map(cat => (
-                          <span key={cat} className="bg-surface-variant text-on-surface-variant px-2 py-0.5 rounded-full text-[12px] font-label-caps uppercase tracking-widest">{cat}</span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-6 py-3 font-price-display text-on-surface">₹{item.price}</td>
-                    <td className="px-6 py-3">
-                      <button 
-                        onClick={() => toggleStatus(item)}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full font-label-caps text-[11px] uppercase tracking-widest transition-all ${
-                          item.available !== false 
-                            ? 'bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20' 
-                            : 'bg-error/10 text-error border border-error/30 hover:bg-error/20'
-                        }`}
-                      >
-                        <div className={`w-2 h-2 rounded-full ${item.available !== false ? 'bg-primary' : 'bg-error'}`}></div>
-                        {item.available !== false ? 'In Stock' : '86 (Out)'}
-                      </button>
-                    </td>
-                    <td className="px-6 py-3 text-right space-x-2">
-                      <button onClick={() => handleOpenModal(item)} className="p-2 text-on-surface-variant hover:text-primary transition-colors bg-surface-container rounded hover:bg-surface-bright">
-                        <span className="material-symbols-outlined text-[18px]">edit</span>
-                      </button>
-                      <button onClick={() => handleDelete(item._id)} className="p-2 text-on-surface-variant hover:text-error transition-colors bg-surface-container rounded hover:bg-error/10">
-                        <span className="material-symbols-outlined text-[18px]">delete</span>
-                      </button>
-                    </td>
+        <>
+          {/* Desktop Table View */}
+          <div className="hidden md:block bg-surface-container-low rounded-xl border border-outline-variant/20 overflow-hidden shadow-lg animate-[fadeUp_0.8s_ease-out_forwards]">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-surface-container-high border-b border-outline-variant/30">
+                    <th className="px-6 py-4 font-label-caps text-on-surface-variant uppercase tracking-widest text-[12px]">Image</th>
+                    <th className="px-6 py-4 font-label-caps text-on-surface-variant uppercase tracking-widest text-[12px]">Name</th>
+                    <th className="px-6 py-4 font-label-caps text-on-surface-variant uppercase tracking-widest text-[12px]">Category</th>
+                    <th className="px-6 py-4 font-label-caps text-on-surface-variant uppercase tracking-widest text-[12px]">Price</th>
+                    <th className="px-6 py-4 font-label-caps text-on-surface-variant uppercase tracking-widest text-[12px]">Status</th>
+                    <th className="px-6 py-4 font-label-caps text-on-surface-variant uppercase tracking-widest text-[12px] text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredItems.map((item, idx) => (
+                    <tr key={item._id} className="border-b border-outline-variant/10 hover:bg-surface-container-highest/50 transition-colors">
+                      <td className="px-6 py-3">
+                        {item.image ? (
+                          <div className="w-12 h-12 rounded overflow-hidden border border-outline-variant/30">
+                            <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                          </div>
+                        ) : (
+                          <div className="w-12 h-12 rounded bg-surface-variant flex items-center justify-center border border-outline-variant/30">
+                            <span className="material-symbols-outlined text-on-surface-variant opacity-50 text-[20px]">image</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-3">
+                        <div className="font-title-md text-on-surface">{item.name}</div>
+                        {item.chefPick && <div className="text-[10px] font-label-caps text-primary uppercase tracking-widest mt-1">Chef Pick</div>}
+                      </td>
+                      <td className="p-4 align-middle">
+                        <div className="flex flex-wrap gap-1">
+                          {(item.categories || (item.category ? [item.category] : [])).map(cat => (
+                            <span key={cat} className="bg-surface-variant text-on-surface-variant px-2 py-0.5 rounded-full text-[12px] font-label-caps uppercase tracking-widest">{cat}</span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-6 py-3 font-price-display text-on-surface">₹{item.price}</td>
+                      <td className="px-6 py-3">
+                        <button 
+                          onClick={() => toggleStatus(item)}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-full font-label-caps text-[11px] uppercase tracking-widest transition-all ${
+                            item.available !== false 
+                              ? 'bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20' 
+                              : 'bg-error/10 text-error border border-error/30 hover:bg-error/20'
+                          }`}
+                        >
+                          <div className={`w-2 h-2 rounded-full ${item.available !== false ? 'bg-primary' : 'bg-error'}`}></div>
+                          {item.available !== false ? 'In Stock' : '86 (Out)'}
+                        </button>
+                      </td>
+                      <td className="px-6 py-3 text-right space-x-2">
+                        <button onClick={() => handleOpenModal(item)} className="p-2 text-on-surface-variant hover:text-primary transition-colors bg-surface-container rounded hover:bg-surface-bright">
+                          <span className="material-symbols-outlined text-[18px]">edit</span>
+                        </button>
+                        <button onClick={() => handleDelete(item._id)} className="p-2 text-on-surface-variant hover:text-error transition-colors bg-surface-container rounded hover:bg-error/10">
+                          <span className="material-symbols-outlined text-[18px]">delete</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+
+          {/* Mobile Card List View */}
+          <div className="grid grid-cols-1 gap-4 md:hidden animate-[fadeUp_0.8s_ease-out_forwards]">
+            {filteredItems.map((item) => (
+              <div key={item._id} className="bg-surface-container-low border border-outline-variant/20 rounded-xl p-4 flex flex-col gap-4 shadow-sm">
+                <div className="flex gap-4">
+                  {/* Image */}
+                  {item.image ? (
+                    <div className="w-16 h-16 rounded-lg overflow-hidden border border-outline-variant/20 shrink-0">
+                      <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                    </div>
+                  ) : (
+                    <div className="w-16 h-16 rounded-lg bg-surface-variant flex items-center justify-center border border-outline-variant/20 shrink-0">
+                      <span className="material-symbols-outlined text-on-surface-variant opacity-50 text-[24px]">image</span>
+                    </div>
+                  )}
+                  
+                  {/* Details */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-start gap-2">
+                      <h4 className="font-title-md text-on-surface text-base truncate">{item.name}</h4>
+                      <span className="font-price-display text-on-surface text-sm shrink-0">₹{item.price}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {(item.categories || (item.category ? [item.category] : [])).map(cat => (
+                        <span key={cat} className="bg-surface-variant text-on-surface-variant px-2 py-0.5 rounded-full text-[10px] font-label-caps uppercase tracking-widest">{cat}</span>
+                      ))}
+                    </div>
+                    {item.chefPick && <div className="text-[9px] font-label-caps text-primary uppercase tracking-widest mt-1">Chef Pick</div>}
+                  </div>
+                </div>
+
+                {/* Status and Action Buttons */}
+                <div className="flex items-center justify-between border-t border-outline-variant/10 pt-3">
+                  {/* Status Toggle */}
+                  <button 
+                    onClick={() => toggleStatus(item)}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-label-caps text-[10px] uppercase tracking-widest transition-all ${
+                      item.available !== false 
+                        ? 'bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20' 
+                        : 'bg-error/10 text-error border border-error/30 hover:bg-error/20'
+                    }`}
+                  >
+                    <div className={`w-1.5 h-1.5 rounded-full ${item.available !== false ? 'bg-primary' : 'bg-error'}`}></div>
+                    {item.available !== false ? 'In Stock' : '86 (Out)'}
+                  </button>
+
+                  {/* Edit & Delete Actions */}
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => handleOpenModal(item)} className="p-2 text-on-surface-variant hover:text-primary transition-colors bg-surface-container rounded-lg hover:bg-surface-bright flex items-center justify-center">
+                      <span className="material-symbols-outlined text-[18px]">edit</span>
+                    </button>
+                    <button onClick={() => handleDelete(item._id)} className="p-2 text-on-surface-variant hover:text-error transition-colors bg-surface-container rounded-lg hover:bg-error/10 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-[18px]">delete</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       {/* Add/Edit Modal */}

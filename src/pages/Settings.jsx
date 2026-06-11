@@ -117,7 +117,7 @@ export default function Settings({ user }) {
   };
 
   return (
-    <div className="max-w-4xl mx-auto py-8">
+    <div className="max-w-4xl mx-auto py-8 px-margin-mobile md:px-0">
       <div className="bg-surface-container rounded-2xl border border-outline-variant/20 shadow-lg overflow-hidden">
         
         {/* Header */}
