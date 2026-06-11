@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import TablesAndQR from './TablesAndQR';
+import MenuManager from './MenuManager';
 const SIDEBAR_ITEMS = [
   { id: 'dashboard', icon: 'monitor_heart', label: 'Live KDS', fill: true },
   { id: 'menu', icon: 'restaurant_menu', label: 'Menu Manager' },
@@ -249,7 +250,11 @@ export default function AdminDashboard() {
             <TablesAndQR />
           )}
 
-          {activeTab !== 'dashboard' && activeTab !== 'tables' && (
+          {activeTab === 'menu' && (
+            <MenuManager />
+          )}
+
+          {activeTab !== 'dashboard' && activeTab !== 'tables' && activeTab !== 'menu' && (
              <motion.div
                initial={{ opacity: 0, y: 20 }}
                animate={{ opacity: 1, y: 0 }}
