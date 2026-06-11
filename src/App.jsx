@@ -218,7 +218,7 @@ function MenuPage() {
             setActiveOrder(data.order);
             setIsOrderVerified(true);
             // Clear cart & session ID if the order was just placed/verified
-            if (cart.length > 0) {
+            if (cart.length > 0 && checkoutSessionId && data.order.checkoutSessionId === checkoutSessionId) {
               setCart([]);
               localStorage.removeItem('aurum_cart');
               setCheckoutSessionId('');
