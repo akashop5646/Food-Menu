@@ -3,12 +3,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import TablesAndQR from './TablesAndQR';
 import MenuManager from './MenuManager';
+import Settings from './Settings';
+
 const SIDEBAR_ITEMS = [
   { id: 'dashboard', icon: 'monitor_heart', label: 'Live KDS', fill: true },
   { id: 'menu', icon: 'restaurant_menu', label: 'Menu Manager' },
   { id: 'payments', icon: 'payments', label: 'Payments' },
   { id: 'tables', icon: 'grid_view', label: 'Tables & QR' },
   { id: 'analytics', icon: 'analytics', label: 'Analytics' },
+  { id: 'settings', icon: 'settings', label: 'Settings', adminOnly: true },
 ];
 
 export default function AdminDashboard() {
@@ -126,6 +129,7 @@ export default function AdminDashboard() {
         </div>
         <ul className="flex-1 space-y-2">
           {SIDEBAR_ITEMS.map((item) => {
+            if (item.adminOnly && user?.role !== 'ADMIN') return null;
             const isActive = activeTab === item.id;
             return (
               <li key={item.id}>
@@ -197,7 +201,7 @@ export default function AdminDashboard() {
         </header>
 
         {/* Dynamic Content */}
-        <main className="flex-1 overflow-x-hidden overflow-y-auto md:overflow-x-auto md:overflow-y-hidden p-container-padding">
+        <main className="flex-1 p-margin-mobile md:p-margin-desktop overflow-y-auto mt-20 md:mt-0 pb-24 md:pb-8 relative z-10">
           {activeTab === 'dashboard' && (
             <div className="flex flex-col md:flex-row gap-gutter h-auto md:h-full md:min-w-[900px]">
               {/* Column 1: New Orders */}
@@ -246,15 +250,11 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {activeTab === 'tables' && (
-            <TablesAndQR />
-          )}
+          {activeTab === 'menu' && <MenuManager />}
+          {activeTab === 'tables' && <TablesAndQR />}
+          {activeTab === 'settings' && <Settings user={user} />}
 
-          {activeTab === 'menu' && (
-            <MenuManager />
-          )}
-
-          {activeTab !== 'dashboard' && activeTab !== 'tables' && activeTab !== 'menu' && (
+          {activeTab !== 'dashboard' && activeTab !== 'tables' && activeTab !== 'menu' && activeTab !== 'settings' && (
              <motion.div
                initial={{ opacity: 0, y: 20 }}
                animate={{ opacity: 1, y: 0 }}

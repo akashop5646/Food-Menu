@@ -17,7 +17,7 @@ function getSecret() {
 
 function signToken(user) {
   return jwt.sign(
-    { id: user._id.toString(), email: user.email, name: user.name },
+    { id: user._id.toString(), email: user.email, name: user.name, role: user.role || 'ADMIN' },
     getSecret(),
     { expiresIn: '7d' }
   );
@@ -45,13 +45,14 @@ router.post('/register', async (req, res) => {
       email: email.toLowerCase(),
       password: hashedPassword,
       provider: 'email',
+      role: 'ADMIN', // First user via form is ADMIN, or restrict this entirely? The user already has one.
       createdAt: new Date(),
     });
 
-    const user = { _id: result.insertedId, name, email: email.toLowerCase() };
+    const user = { _id: result.insertedId, name, email: email.toLowerCase(), role: 'ADMIN' };
     const token = signToken(user);
     res.cookie('token', token, COOKIE_OPTIONS);
-    res.json({ user: { id: user._id, name: user.name, email: user.email } });
+    res.json({ user: { id: user._id, name: user.name, email: user.email, role: user.role } });
   } catch (err) {
     console.error('Register error:', err);
     res.status(500).json({ error: 'Server error during registration.' });
@@ -81,7 +82,7 @@ router.post('/login', async (req, res) => {
 
     const token = signToken(user);
     res.cookie('token', token, COOKIE_OPTIONS);
-    res.json({ user: { id: user._id, name: user.name, email: user.email } });
+    res.json({ user: { id: user._id, name: user.name, email: user.email, role: user.role || 'ADMIN' } });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Server error during login.' });
@@ -109,26 +110,30 @@ router.post('/google', async (req, res) => {
     const db = await getDB();
     const admins = db.collection('admins');
 
-    // Upsert: create user if they don't exist, otherwise update
+    // Check if user exists first
+    const existingUser = await admins.findOne({ email: payload.email.toLowerCase() });
+    if (!existingUser) {
+      return res.status(403).json({ error: 'Account not authorized. Please contact an Admin.' });
+    }
+
+    // Update their info
     const result = await admins.findOneAndUpdate(
       { email: payload.email.toLowerCase() },
       {
         $set: {
           name: payload.name,
-          email: payload.email.toLowerCase(),
           picture: payload.picture,
           provider: 'google',
           lastLogin: new Date(),
-        },
-        $setOnInsert: { createdAt: new Date() },
+        }
       },
-      { upsert: true, returnDocument: 'after' }
+      { returnDocument: 'after' }
     );
 
     const user = result;
     const token = signToken(user);
     res.cookie('token', token, COOKIE_OPTIONS);
-    res.json({ user: { id: user._id, name: user.name, email: user.email, picture: user.picture } });
+    res.json({ user: { id: user._id, name: user.name, email: user.email, picture: user.picture, role: user.role || 'ADMIN' } });
   } catch (err) {
     console.error('Google auth error:', err);
     res.status(401).json({ error: 'Invalid Google credential.' });
@@ -144,7 +149,7 @@ router.get('/me', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, getSecret());
-    res.json({ user: { id: decoded.id, name: decoded.name, email: decoded.email } });
+    res.json({ user: { id: decoded.id, name: decoded.name, email: decoded.email, role: decoded.role } });
   } catch (err) {
     res.status(401).json({ error: 'Invalid or expired token.' });
   }
