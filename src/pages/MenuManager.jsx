@@ -7,6 +7,9 @@ export default function MenuManager() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [categories, setCategories] = useState([]);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
   
   const [formData, setFormData] = useState({
     name: '',
@@ -17,7 +20,20 @@ export default function MenuManager() {
     chefPick: false
   });
 
-  const categories = ['Starter', 'Main', 'Drink', 'Dessert', 'Signature', 'Small Plates'];
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch('/api/categories');
+      const data = await res.json();
+      setCategories(Array.isArray(data) ? data : []);
+      
+      // Update form default category if categories exist and form is empty
+      if (data.length > 0 && formData.category === 'Starter') {
+        setFormData(prev => ({ ...prev, category: data[0].name }));
+      }
+    } catch (err) {
+      console.error('Failed to fetch categories:', err);
+    }
+  };
 
   const fetchMenu = async () => {
     try {
@@ -37,6 +53,7 @@ export default function MenuManager() {
   };
 
   useEffect(() => {
+    fetchCategories();
     fetchMenu();
   }, []);
 
@@ -55,7 +72,7 @@ export default function MenuManager() {
       setEditingItem(null);
       setFormData({
         name: '',
-        category: 'Starter',
+        category: categories.length > 0 ? categories[0].name : '',
         price: '',
         description: '',
         image: '',
@@ -146,6 +163,39 @@ export default function MenuManager() {
     }
   };
 
+  const handleAddCategory = async (e) => {
+    e.preventDefault();
+    if (!newCategoryName.trim()) return;
+    try {
+      const res = await fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newCategoryName })
+      });
+      if (res.ok) {
+        setNewCategoryName('');
+        fetchCategories();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to add category');
+      }
+    } catch (err) {
+      console.error('Failed to add category:', err);
+    }
+  };
+
+  const handleDeleteCategory = async (id) => {
+    if (!window.confirm('Delete this category? Items in this category will not be deleted, but may not display properly.')) return;
+    try {
+      const res = await fetch(`/api/categories/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        fetchCategories();
+      }
+    } catch (err) {
+      console.error('Failed to delete category:', err);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full w-full pb-10">
       <div className="flex justify-between items-center mb-8 animate-[fadeUp_0.6s_ease-out_forwards]">
@@ -153,13 +203,22 @@ export default function MenuManager() {
           <h2 className="font-headline-md text-primary text-[28px] mb-1">Menu Management</h2>
           <p className="font-body-sm text-on-surface-variant">Organize and configure food items easily.</p>
         </div>
-        <button 
-          onClick={() => handleOpenModal()}
-          className="bg-primary text-on-primary font-title-md text-[14px] sm:text-[16px] font-semibold px-4 sm:px-6 py-2 rounded-DEFAULT ripple shadow-[0_0_15px_rgba(212,175,55,0.3)] hover:shadow-[0_0_25px_rgba(212,175,55,0.5)] transition-shadow duration-300 flex items-center gap-2"
-        >
-          <span className="material-symbols-outlined">add</span> 
-          <span>Add New Item</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setIsCategoryModalOpen(true)}
+            className="bg-surface-container text-on-surface hover:text-primary font-title-md text-[14px] sm:text-[16px] font-semibold px-4 py-2 rounded-DEFAULT border border-outline-variant/30 hover:border-primary/50 transition-all flex items-center gap-2"
+          >
+            <span className="material-symbols-outlined text-[20px]">category</span> 
+            <span className="hidden sm:inline">Categories</span>
+          </button>
+          <button 
+            onClick={() => handleOpenModal()}
+            className="bg-primary text-on-primary font-title-md text-[14px] sm:text-[16px] font-semibold px-4 sm:px-6 py-2 rounded-DEFAULT ripple shadow-[0_0_15px_rgba(212,175,55,0.3)] hover:shadow-[0_0_25px_rgba(212,175,55,0.5)] transition-shadow duration-300 flex items-center gap-2"
+          >
+            <span className="material-symbols-outlined">add</span> 
+            <span className="hidden sm:inline">Add New Item</span>
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -280,8 +339,9 @@ export default function MenuManager() {
                       className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none cursor-pointer"
                     >
                       {categories.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
+                        <option key={cat._id} value={cat.name}>{cat.name}</option>
                       ))}
+                      {categories.length === 0 && <option value="" disabled>No categories available</option>}
                     </select>
                   </div>
                   <div className="col-span-2">
@@ -328,6 +388,65 @@ export default function MenuManager() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Categories Manager Modal */}
+      <AnimatePresence>
+        {isCategoryModalOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-surface-container-low border border-outline-variant/30 rounded-xl w-full max-w-md p-6 shadow-2xl"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="font-headline-sm text-primary text-[24px]">Manage Categories</h2>
+                <button onClick={() => setIsCategoryModalOpen(false)} className="text-on-surface-variant hover:text-primary transition-colors">
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+
+              <form onSubmit={handleAddCategory} className="flex gap-2 mb-6">
+                <input 
+                  type="text" 
+                  value={newCategoryName} 
+                  onChange={e => setNewCategoryName(e.target.value)} 
+                  placeholder="New Category Name..." 
+                  className="flex-1 bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none" 
+                  required
+                />
+                <button type="submit" className="bg-primary text-on-primary px-4 py-2 rounded font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[18px]">add</span> Add
+                </button>
+              </form>
+
+              <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2">
+                {categories.length === 0 ? (
+                  <p className="text-on-surface-variant text-center py-4 font-body-sm opacity-50">No categories found. Create one above.</p>
+                ) : (
+                  categories.map(cat => (
+                    <div key={cat._id} className="flex justify-between items-center bg-surface-container-high px-4 py-3 rounded border border-outline-variant/20 hover:border-outline-variant/50 transition-colors">
+                      <span className="font-body-md text-on-surface">{cat.name}</span>
+                      <button 
+                        onClick={() => handleDeleteCategory(cat._id)} 
+                        className="text-on-surface-variant hover:text-error transition-colors p-1"
+                        title="Delete Category"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">delete</span>
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
             </motion.div>
           </motion.div>
         )}

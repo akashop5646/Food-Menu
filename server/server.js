@@ -8,6 +8,7 @@ import tablesRoutes from './routes/tables.js';
 import locationsRoutes from './routes/locations.js';
 import menuRoutes from './routes/menu.js';
 import uploadRoutes from './routes/upload.js';
+import categoriesRoutes from './routes/categories.js';
 dotenv.config();
 
 const app = express();
@@ -27,6 +28,7 @@ app.use('/api/tables', tablesRoutes);
 app.use('/api/locations', locationsRoutes);
 app.use('/api/menu', menuRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/categories', categoriesRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

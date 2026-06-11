@@ -28,18 +28,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET distinct categories
-router.get('/categories', async (req, res) => {
-  try {
-    const db = await getDB();
-    const categories = await db.collection('menu_items').distinct('category');
-    res.json(categories.sort());
-  } catch (error) {
-    console.error('Error fetching categories:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
 // POST create a new menu item
 router.post('/', async (req, res) => {
   try {

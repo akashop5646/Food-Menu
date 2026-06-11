@@ -28,12 +28,12 @@ function MenuPage() {
       try {
         const [itemsRes, catsRes] = await Promise.all([
           fetch('/api/menu'),
-          fetch('/api/menu/categories'),
+          fetch('/api/categories'),
         ]);
         const items = await itemsRes.json();
         const cats = await catsRes.json();
         setMenuItems(Array.isArray(items) ? items : []);
-        setCategories(['All', ...(Array.isArray(cats) ? cats : [])]);
+        setCategories(['All', ...(Array.isArray(cats) ? cats.map(c => c.name) : [])]);
       } catch (err) {
         console.error('Failed to fetch menu:', err);
       } finally {
