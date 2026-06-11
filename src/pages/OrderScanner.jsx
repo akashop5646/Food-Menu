@@ -12,7 +12,6 @@ export default function OrderScanner() {
   const [successMsg, setSuccessMsg] = useState('');
   const [isCameraOpen, setIsCameraOpen] = useState(false);
 
-  const inputRef = useRef(null);
   const qrScannerRef = useRef(null);
 
   const startCamera = () => {
@@ -65,13 +64,6 @@ export default function OrderScanner() {
       }
     };
   }, []);
-
-  // Focus input automatically on mount to support quick scanning guns
-  useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [parsedOrder, successMsg]);
 
   // Handle parsing QR code payload
   const handleInputChange = (val) => {
@@ -198,57 +190,31 @@ export default function OrderScanner() {
           )}
 
           {!parsedOrder && (
-            <>
-              {/* Camera Scanning Area */}
-              <div className="flex flex-col gap-4">
-                {isCameraOpen ? (
-                  <div className="flex flex-col gap-4 items-center justify-center p-5 bg-surface-container-lowest border border-outline-variant/30 rounded-2xl">
-                    <div id="qr-reader" className="w-full max-w-sm overflow-hidden rounded-xl border-2 border-primary/30 bg-black shadow-inner"></div>
-                    <button
-                      type="button"
-                      onClick={stopCamera}
-                      className="bg-error/10 hover:bg-error/20 text-error border border-error/20 px-6 py-2.5 rounded-lg font-label-caps text-[11px] uppercase tracking-widest cursor-pointer transition-all flex items-center justify-center gap-1.5"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">videocam_off</span>
-                      Close Camera
-                    </button>
-                  </div>
-                ) : (
+            /* Camera Scanning Area */
+            <div className="flex flex-col gap-4">
+              {isCameraOpen ? (
+                <div className="flex flex-col gap-4 items-center justify-center p-5 bg-surface-container-lowest border border-outline-variant/30 rounded-2xl">
+                  <div id="qr-reader" className="w-full max-w-sm overflow-hidden rounded-xl border-2 border-primary/30 bg-black shadow-inner"></div>
                   <button
                     type="button"
-                    onClick={startCamera}
-                    className="bg-primary text-on-primary px-6 py-4 rounded-xl font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform hover:scale-[1.02] active:scale-95"
+                    onClick={stopCamera}
+                    className="bg-error/10 hover:bg-error/20 text-error border border-error/20 px-6 py-2.5 rounded-lg font-label-caps text-[11px] uppercase tracking-widest cursor-pointer transition-all flex items-center justify-center gap-1.5"
                   >
-                    <span className="material-symbols-outlined">photo_camera</span>
-                    Scan Order QR Code
+                    <span className="material-symbols-outlined text-[18px]">videocam_off</span>
+                    Close Camera
                   </button>
-                )}
-              </div>
-
-              <div className="relative flex py-2 items-center">
-                <div className="flex-grow border-t border-outline-variant/20"></div>
-                <span className="flex-shrink mx-4 text-[11px] font-label-caps text-on-surface-variant/50 uppercase tracking-widest">or enter manually</span>
-                <div className="flex-grow border-t border-outline-variant/20"></div>
-              </div>
-
-              {/* QR Payload Input Area */}
-              <div>
-                <label className="block font-label-caps text-[12px] text-on-surface-variant mb-2 uppercase tracking-widest">
-                  Scan Barcode / Paste QR Code Data
-                </label>
-                <textarea
-                  ref={inputRef}
-                  rows={3}
-                  value={qrInput}
-                  onChange={(e) => handleInputChange(e.target.value)}
-                  className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-xl px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors font-mono text-sm leading-relaxed"
-                  placeholder='Paste scanner output here (e.g. {"table":"Table 3", ...})'
-                />
-                <p className="font-body-sm text-[11px] text-on-surface-variant opacity-70 mt-1">
-                  Place cursor inside this box before scanning if using a physical scanner gun.
-                </p>
-              </div>
-            </>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={startCamera}
+                  className="bg-primary text-on-primary px-6 py-4 rounded-xl font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform hover:scale-[1.02] active:scale-95"
+                >
+                  <span className="material-symbols-outlined">photo_camera</span>
+                  Scan Order QR Code
+                </button>
+              )}
+            </div>
           )}
 
           {/* Scanned Order Summary */}
