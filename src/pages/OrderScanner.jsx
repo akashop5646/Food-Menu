@@ -80,6 +80,35 @@ export default function OrderScanner() {
     };
   }, []);
 
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setError('');
+    setSuccessMsg('');
+    setIsCameraOpen(false);
+
+    // Stop active camera stream if running
+    if (qrScannerRef.current) {
+      try {
+        await qrScannerRef.current.stop();
+        qrScannerRef.current = null;
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    try {
+      const html5QrCode = new Html5Qrcode("qr-reader-file-dummy");
+      const decodedText = await html5QrCode.scanFile(file, true);
+      handleInputChange(decodedText);
+      e.target.value = ''; // Reset file input
+    } catch (err) {
+      console.error(err);
+      setError("Failed to read QR code from image/photo. Please ensure the QR code is centered, clear, and well-lit.");
+    }
+  };
+
   // Handle parsing QR code payload
   const handleInputChange = (val) => {
     setQrInput(val);
@@ -221,14 +250,37 @@ export default function OrderScanner() {
                   </button>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={startCamera}
-                  className="bg-primary text-on-primary px-6 py-4 rounded-xl font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform hover:scale-[1.02] active:scale-95"
-                >
-                  <span className="material-symbols-outlined">photo_camera</span>
-                  Scan Order QR Code
-                </button>
+                <div className="flex flex-col gap-3">
+                  <button
+                    type="button"
+                    onClick={startCamera}
+                    className="bg-primary text-on-primary px-6 py-4 rounded-xl font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform hover:scale-[1.02] active:scale-95"
+                  >
+                    <span className="material-symbols-outlined">photo_camera</span>
+                    Scan with Live Camera
+                  </button>
+
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handleFileChange}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                      id="qr-file-input"
+                    />
+                    <button
+                      type="button"
+                      className="w-full bg-surface-container-high border border-outline-variant/50 text-on-surface hover:border-primary/50 px-6 py-4 rounded-xl font-label-caps text-[12px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined">photo_camera_back</span>
+                      Take Photo or Upload QR
+                    </button>
+                  </div>
+                  
+                  {/* Hidden dummy element required by html5-qrcode library for file scanning */}
+                  <div id="qr-reader-file-dummy" className="hidden"></div>
+                </div>
               )}
             </div>
           )}
