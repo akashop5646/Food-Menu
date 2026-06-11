@@ -135,8 +135,16 @@ function MenuPage() {
 
   const upiUrl = useMemo(() => {
     if (!gpayId || !cartTotal) return '';
-    return `upi://pay?pa=${gpayId}&pn=${encodeURIComponent("Aurum Table")}&am=${cartTotal.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Table ${selectedTable} Order`)}`;
-  }, [gpayId, cartTotal, selectedTable]);
+    // Format items as a compact summary: e.g. "2x Golden Risotto, 1x Lobster Tail"
+    const itemsSummary = cart.map(item => `${item.quantity}x ${item.name}`).join(', ');
+    const prefix = `T${selectedTable} Order: `;
+    const maxNoteLength = 80; // Standard UPI note limit
+    let note = prefix + itemsSummary;
+    if (note.length > maxNoteLength) {
+      note = note.substring(0, maxNoteLength - 3) + '...';
+    }
+    return `upi://pay?pa=${gpayId}&pn=${encodeURIComponent("Aurum Table")}&am=${cartTotal.toFixed(2)}&cu=INR&tn=${encodeURIComponent(note)}`;
+  }, [gpayId, cartTotal, selectedTable, cart]);
 
   useEffect(() => {
     if (!isCheckoutOpen || !upiUrl) {
@@ -657,6 +665,24 @@ function MenuPage() {
                 <div className="mb-6">
                   <span className="font-label-caps text-label-caps text-on-surface-variant block mb-1">Amount to Pay</span>
                   <strong className="font-price-display text-4xl text-primary font-bold">₹{cartTotal.toFixed(2)}</strong>
+                </div>
+
+                {/* Detailed Receipt Slip */}
+                <div className="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-xl p-4 mb-6 text-left max-h-40 overflow-y-auto hide-scrollbar">
+                  <h4 className="font-label-caps text-[11px] text-primary border-b border-outline-variant/10 pb-2 mb-2 uppercase tracking-wider flex justify-between items-center">
+                    <span>Receipt Slip</span>
+                    <span className="text-on-surface-variant/70">Table {selectedTable}</span>
+                  </h4>
+                  <div className="space-y-1.5 text-sm font-body-md text-on-surface-variant/90">
+                    {cart.map((item) => (
+                      <div key={item._id || item.id} className="flex justify-between items-center gap-4 text-[13px]">
+                        <span className="truncate flex-1">
+                          <span className="text-primary font-semibold font-mono">{item.quantity}x</span> {item.name}
+                        </span>
+                        <span className="font-semibold shrink-0">₹{(item.price * item.quantity).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 {/* QR Code */}
