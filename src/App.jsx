@@ -28,6 +28,7 @@ function MenuPage() {
   const [gpayId, setGpayId] = useState('');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentQrCode, setPaymentQrCode] = useState('');
+  const [isOrderVerified, setIsOrderVerified] = useState(false);
 
   // Fetch menu items and categories from API
   useEffect(() => {
@@ -158,7 +159,42 @@ function MenuPage() {
     }).then(setPaymentQrCode);
   }, [isCheckoutOpen, upiUrl]);
 
+  // Poll backend to check if the waiter has scanned/confirmed this table's order
+  useEffect(() => {
+    if (!isCheckoutOpen || !selectedTable) {
+      setIsOrderVerified(false);
+      return;
+    }
+
+    const checkVerification = async () => {
+      try {
+        const res = await fetch(`/api/orders/active?table=${encodeURIComponent(selectedTable)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.verified) {
+            setIsOrderVerified(true);
+          }
+        }
+      } catch (err) {
+        console.error('Error checking verification status:', err);
+      }
+    };
+
+    // Check once immediately
+    checkVerification();
+
+    // Poll every 2500ms
+    const interval = setInterval(checkVerification, 2500);
+
+    return () => clearInterval(interval);
+  }, [isCheckoutOpen, selectedTable]);
+
   const handlePayNow = () => {
+    if (!isOrderVerified) {
+      showNotification('Awaiting waiter verification. Please let staff scan your QR code first.');
+      return;
+    }
+
     if (!gpayId) {
       showNotification('Online payments are currently disabled. Please choose Pay Later.');
       return;
@@ -483,10 +519,37 @@ function MenuPage() {
                 <p className="font-body-md text-body-md text-on-surface-variant/70">Table number, selected items, quantity, item prices, and total.</p>
               </div>
               
+              {/* Verification Status Banner */}
+              {isOrderVerified ? (
+                <div className="w-full bg-primary/10 border border-primary/20 rounded-lg p-3.5 mb-6 text-center">
+                  <span className="font-label-caps text-[11px] text-primary font-bold flex items-center justify-center gap-1">
+                    <span className="material-symbols-outlined text-sm">check_circle</span>
+                    Order Verified by Staff
+                  </span>
+                  <p className="text-[10px] text-on-surface-variant/80 mt-1 leading-relaxed">
+                    Verification complete. You can now complete your payment.
+                  </p>
+                </div>
+              ) : (
+                <div className="w-full bg-error/10 border border-error/20 rounded-lg p-3.5 mb-6 text-center">
+                  <span className="font-label-caps text-[11px] text-error font-bold flex items-center justify-center gap-1">
+                    <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+                    Awaiting Waiter Verification
+                  </span>
+                  <p className="text-[10px] text-on-surface-variant/80 mt-1 leading-relaxed">
+                    Show the order QR code above to your waiter. Once verified, payment will unlock.
+                  </p>
+                </div>
+              )}
+              
               <div className="w-full space-y-4">
                 <button 
                   onClick={handlePayNow}
-                  className="w-full bg-gold-metallic text-on-primary py-3 rounded font-label-caps text-label-caps uppercase tracking-wider gold-glow transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  className={`w-full py-3 rounded font-label-caps text-label-caps uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                    isOrderVerified 
+                      ? 'bg-gold-metallic text-on-primary gold-glow' 
+                      : 'bg-surface-container-high border border-outline-variant/30 text-on-surface-variant/40 cursor-not-allowed'
+                  }`}
                 >
                   <span className="material-symbols-outlined">credit_card</span> Pay Now
                 </button>

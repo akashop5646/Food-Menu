@@ -6,6 +6,25 @@ import { broadcast } from '../websocket.js';
 
 const router = Router();
 
+// Check if table has an active verified order (Public endpoint)
+router.get('/active', async (req, res) => {
+  try {
+    const { table } = req.query;
+    if (!table) return res.status(400).json({ error: 'Table is required.' });
+
+    const db = await getDB();
+    const activeOrder = await db.collection('orders').findOne({
+      table: table,
+      status: { $in: ['NEW', 'PREPARING', 'READY'] }
+    });
+
+    res.json({ verified: !!activeOrder, order: activeOrder });
+  } catch (error) {
+    console.error('Failed to check active order:', error);
+    res.status(500).json({ error: 'Failed to check active order.' });
+  }
+});
+
 // Create a verified order (called by Waiter scanning page)
 router.post('/', requireAuth, async (req, res) => {
   try {
