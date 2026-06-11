@@ -3,19 +3,114 @@
 @tailwind utilities;
 
 @layer base {
+  /* ── Light Mode (default) ── */
+  :root {
+    --color-background: #F8F6F1;
+    --color-surface: #FFFFFF;
+    --color-surface-dim: #EDE9E0;
+    --color-surface-bright: #FFFFFF;
+    --color-surface-container-lowest: #FFFFFF;
+    --color-surface-container-low: #F5F2EB;
+    --color-surface-container: #F0ECE4;
+    --color-surface-container-high: #E8E4DB;
+    --color-surface-container-highest: #E0DCD3;
+    --color-surface-variant: #EDE9E0;
+    --color-on-surface: #1C1B1B;
+    --color-on-surface-variant: #4D4639;
+    --color-on-background: #1C1B1B;
+    --color-primary: #8B6914;
+    --color-primary-fixed: #FFE088;
+    --color-primary-fixed-dim: #D4AF37;
+    --color-primary-container: #D4AF37;
+    --color-on-primary: #FFFFFF;
+    --color-on-primary-container: #3C2F00;
+    --color-on-primary-fixed: #241A00;
+    --color-on-primary-fixed-variant: #574500;
+    --color-secondary: #6B6562;
+    --color-secondary-container: #E5E2E1;
+    --color-secondary-fixed: #E5E2E1;
+    --color-secondary-fixed-dim: #C8C6C5;
+    --color-on-secondary: #FFFFFF;
+    --color-on-secondary-container: #252120;
+    --color-on-secondary-fixed: #1C1B1B;
+    --color-on-secondary-fixed-variant: #474746;
+    --color-tertiary: #5E5E5E;
+    --color-tertiary-container: #E2E2E2;
+    --color-tertiary-fixed: #E2E2E2;
+    --color-tertiary-fixed-dim: #C6C6C6;
+    --color-on-tertiary: #FFFFFF;
+    --color-on-tertiary-container: #1B1B1B;
+    --color-on-tertiary-fixed: #1B1B1B;
+    --color-on-tertiary-fixed-variant: #474747;
+    --color-outline: #7F7667;
+    --color-outline-variant: #D0C5AF;
+    --color-error: #BA1A1A;
+    --color-error-container: #FFDAD6;
+    --color-on-error: #FFFFFF;
+    --color-on-error-container: #410002;
+    --color-inverse-surface: #313130;
+    --color-inverse-on-surface: #F5F0EB;
+    --color-inverse-primary: #E9C349;
+    --color-surface-tint: #8B6914;
+  }
+
+  /* ── Dark Mode ── */
+  .dark {
+    --color-background: #121317;
+    --color-surface: #121317;
+    --color-surface-dim: #121317;
+    --color-surface-bright: #38393d;
+    --color-surface-container-lowest: #0d0e12;
+    --color-surface-container-low: #1a1b1f;
+    --color-surface-container: #1e1f23;
+    --color-surface-container-high: #292a2e;
+    --color-surface-container-highest: #343539;
+    --color-surface-variant: #343539;
+    --color-on-surface: #e3e2e7;
+    --color-on-surface-variant: #d0c5af;
+    --color-on-background: #e3e2e7;
+    --color-primary: #f2ca50;
+    --color-primary-fixed: #ffe088;
+    --color-primary-fixed-dim: #e9c349;
+    --color-primary-container: #d4af37;
+    --color-on-primary: #3c2f00;
+    --color-on-primary-container: #554300;
+    --color-on-primary-fixed: #241a00;
+    --color-on-primary-fixed-variant: #574500;
+    --color-secondary: #c8c6c5;
+    --color-secondary-container: #474746;
+    --color-secondary-fixed: #e5e2e1;
+    --color-secondary-fixed-dim: #c8c6c5;
+    --color-on-secondary: #313030;
+    --color-on-secondary-container: #b7b5b4;
+    --color-on-secondary-fixed: #1c1b1b;
+    --color-on-secondary-fixed-variant: #474746;
+    --color-tertiary: #cecece;
+    --color-tertiary-container: #b3b3b3;
+    --color-tertiary-fixed: #e2e2e2;
+    --color-tertiary-fixed-dim: #c6c6c6;
+    --color-on-tertiary: #303030;
+    --color-on-tertiary-container: #454545;
+    --color-on-tertiary-fixed: #1b1b1b;
+    --color-on-tertiary-fixed-variant: #474747;
+    --color-outline: #99907c;
+    --color-outline-variant: #4d4635;
+    --color-error: #ffb4ab;
+    --color-error-container: #93000a;
+    --color-on-error: #690005;
+    --color-on-error-container: #ffdad6;
+    --color-inverse-surface: #e3e2e7;
+    --color-inverse-on-surface: #2f3034;
+    --color-inverse-primary: #735c00;
+    --color-surface-tint: #e9c349;
+  }
+
   body {
-    /* Default is Light Mode (as tailwind defaults without .dark class) */
-    background-color: #FFFFFF; 
-    color: #1c1b1b;
+    background-color: var(--color-background);
+    color: var(--color-on-surface);
     -webkit-font-smoothing: antialiased;
     min-height: max(884px, 100dvh);
     transition: background-color 0.3s ease, color 0.3s ease;
-  }
-
-  /* Dark mode root styles triggered by the .dark class on <html> */
-  .dark body {
-    background-color: #000000; /* True black background */
-    color: #e5e2e1;
   }
 }
 

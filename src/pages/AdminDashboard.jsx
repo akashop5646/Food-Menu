@@ -52,7 +52,7 @@ export default function AdminDashboard() {
     );
 
     const nextIsDark = !isDark;
-    const color = nextIsDark ? '#121317' : '#FFFFFF';
+    const color = nextIsDark ? '#121317' : '#F8F6F1';
     const rippleId = ++rippleCount.current;
 
     setRipple({ x, y, radius, color, id: rippleId });
@@ -118,7 +118,7 @@ export default function AdminDashboard() {
       </AnimatePresence>
 
       {/* SideNavBar */}
-      <nav className="hidden md:flex flex-col h-screen w-[280px] fixed left-0 top-0 bg-surface-container/60 backdrop-blur-[30px] border-r border-white/10 shadow-[0_0_20px_rgba(212,175,55,0.05)] py-margin-desktop z-50">
+      <nav className="hidden md:flex flex-col h-screen w-[280px] fixed left-0 top-0 bg-surface-container/60 backdrop-blur-[30px] border-r border-outline-variant/20 shadow-[0_0_20px_rgba(212,175,55,0.05)] py-margin-desktop z-50">
         <div className="px-6 mb-12">
           <h1 className="font-display-lg text-display-lg font-bold text-primary tracking-tight">Aurum Table</h1>
           <p className="font-body-sm text-body-sm text-on-surface-variant mt-2">Digital Concierge</p>
@@ -153,7 +153,7 @@ export default function AdminDashboard() {
             <span className="material-symbols-outlined">help_outline</span>
             <span className="font-body-lg text-body-lg">Support</span>
           </a>
-          <div className="mt-6 flex items-center gap-3 border-t border-white/10 pt-6 cursor-pointer group" onClick={async () => {
+          <div className="mt-6 flex items-center gap-3 border-t border-outline-variant/20 pt-6 cursor-pointer group" onClick={async () => {
             await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
             navigate('/admin');
           }}>
@@ -200,8 +200,8 @@ export default function AdminDashboard() {
           {activeTab === 'dashboard' && (
             <div className="flex flex-col md:flex-row gap-gutter h-auto md:h-full md:min-w-[900px]">
               {/* Column 1: New Orders */}
-              <section className="flex-1 min-h-[400px] md:min-h-0 flex flex-col bg-surface/50 rounded-xl border border-white/5 overflow-hidden stagger-1">
-                <div className="p-4 border-b border-white/5 flex justify-between items-center bg-surface-container-low">
+              <section className="flex-1 min-h-[400px] md:min-h-0 flex flex-col bg-surface/50 rounded-xl border border-outline-variant/20 overflow-hidden stagger-1">
+                <div className="p-4 border-b border-outline-variant/20 flex justify-between items-center bg-surface-container-low">
                   <h3 className="font-title-md text-title-md text-on-surface flex items-center gap-2">
                     New
                     <span className="bg-error/20 text-error font-mono-data text-mono-data px-2 py-0.5 rounded-full">3</span>
@@ -222,7 +222,7 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                     <ul className="space-y-3 mb-6 relative z-10">
-                      <li className="flex justify-between items-start border-b border-white/5 pb-2">
+                      <li className="flex justify-between items-start border-b border-outline-variant/10 pb-2">
                         <div>
                           <span className="font-title-md text-title-md text-on-surface block">2x Truffle Risotto</span>
                           <span class="font-body-sm text-body-sm text-on-surface-variant text-error block">No mushrooms</span>
@@ -267,8 +267,8 @@ export default function AdminDashboard() {
               </section>
               
               {/* Column 2: Preparing */}
-              <section className="flex-1 min-h-[400px] md:min-h-0 flex flex-col bg-surface/50 rounded-xl border border-white/5 overflow-hidden stagger-2">
-                <div className="p-4 border-b border-white/5 flex justify-between items-center bg-surface-container-low">
+              <section className="flex-1 min-h-[400px] md:min-h-0 flex flex-col bg-surface/50 rounded-xl border border-outline-variant/20 overflow-hidden stagger-2">
+                <div className="p-4 border-b border-outline-variant/20 flex justify-between items-center bg-surface-container-low">
                   <h3 className="font-title-md text-title-md text-on-surface flex items-center gap-2">
                     Preparing
                     <span className="bg-primary/20 text-primary font-mono-data text-mono-data px-2 py-0.5 rounded-full">1</span>
@@ -288,7 +288,7 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                     <ul className="space-y-3 mb-6">
-                      <li className="flex justify-between items-center border-b border-white/5 pb-2">
+                      <li className="flex justify-between items-center border-b border-outline-variant/10 pb-2">
                         <div className="flex-1">
                           <span className="font-title-md text-title-md text-on-surface line-through opacity-50 block">1x Lobster Thermidor</span>
                         </div>
@@ -309,8 +309,8 @@ export default function AdminDashboard() {
               </section>
 
               {/* Column 3: Ready */}
-              <section className="flex-1 min-h-[400px] md:min-h-0 flex flex-col bg-surface/50 rounded-xl border border-white/5 overflow-hidden stagger-3">
-                <div className="p-4 border-b border-white/5 flex justify-between items-center bg-surface-container-low">
+              <section className="flex-1 min-h-[400px] md:min-h-0 flex flex-col bg-surface/50 rounded-xl border border-outline-variant/20 overflow-hidden stagger-3">
+                <div className="p-4 border-b border-outline-variant/20 flex justify-between items-center bg-surface-container-low">
                   <h3 className="font-title-md text-title-md text-on-surface flex items-center gap-2">
                     Ready
                     <span className="bg-tertiary/20 text-tertiary font-mono-data text-mono-data px-2 py-0.5 rounded-full">0</span>

@@ -93,7 +93,7 @@ export default function AdminLogin() {
   }, [navigate]);
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
       {/* Background glow */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-primary/5 blur-[120px]" />
@@ -120,7 +120,7 @@ export default function AdminLogin() {
         </div>
 
         {/* Card */}
-        <div className="bg-[#1A1A1A] border border-[#d4af37]/20 rounded-xl overflow-hidden shadow-2xl">
+        <div className="bg-surface-container border border-primary/20 rounded-xl overflow-hidden shadow-2xl">
           {/* Tabs */}
           <div className="flex border-b border-outline-variant/20">
             <button

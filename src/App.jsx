@@ -200,7 +200,7 @@ function MenuPage() {
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.4, delay: i * 0.05 }}
                 key={item.id} 
-                className="bg-[#1A1A1A] border border-[#d4af37]/20 rounded-lg overflow-hidden group hover:border-[#d4af37]/50 transition-colors flex flex-col"
+                className="bg-surface-container border border-primary/20 rounded-lg overflow-hidden group hover:border-primary/50 transition-colors flex flex-col"
               >
                 <div className="relative overflow-hidden p-4 h-36 md:h-48">
                   <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors z-10"></div>
@@ -292,7 +292,7 @@ function MenuPage() {
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed inset-y-0 right-0 w-full md:w-96 bg-[#1A1A1A] border-l border-[#d4af37]/20 shadow-2xl z-[70] flex flex-col"
+            className="fixed inset-y-0 right-0 w-full md:w-96 bg-surface-container border-l border-primary/20 shadow-2xl z-[70] flex flex-col"
           >
             <div className="p-6 border-b border-outline-variant/20 flex justify-between items-center bg-surface-container-lowest">
               <h2 className="font-headline-sm text-headline-sm text-primary">Your Table</h2>
@@ -362,7 +362,7 @@ function MenuPage() {
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed inset-y-0 right-0 w-full md:w-96 bg-[#1A1A1A] border-l border-[#d4af37]/20 shadow-2xl z-[80] flex flex-col"
+            className="fixed inset-y-0 right-0 w-full md:w-96 bg-surface-container border-l border-primary/20 shadow-2xl z-[80] flex flex-col"
           >
             <div className="p-6 border-b border-outline-variant/20 flex items-center gap-4 bg-surface-container-lowest">
               <button onClick={() => setIsCheckoutOpen(false)} className="text-on-surface-variant hover:text-primary transition-colors">
@@ -439,7 +439,7 @@ function MenuPage() {
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed inset-x-0 bottom-0 w-full md:w-96 md:inset-y-0 md:right-0 md:left-auto md:translate-y-0 md:translate-x-[100%] bg-[#1A1A1A] border-t md:border-l md:border-t-0 border-[#d4af37]/20 shadow-2xl z-[70] flex flex-col rounded-t-2xl md:rounded-none"
+            className="fixed inset-x-0 bottom-0 w-full md:w-96 md:inset-y-0 md:right-0 md:left-auto md:translate-y-0 md:translate-x-[100%] bg-surface-container border-t md:border-l md:border-t-0 border-primary/20 shadow-2xl z-[70] flex flex-col rounded-t-2xl md:rounded-none"
           >
             <div className="p-6 border-b border-outline-variant/20 flex justify-between items-center bg-surface-container-lowest rounded-t-2xl md:rounded-none">
               <h2 className="font-headline-sm text-headline-sm text-primary flex items-center gap-2">
