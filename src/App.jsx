@@ -578,7 +578,7 @@ function MenuPage() {
             initial={{ opacity: 0, y: 50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.9 }}
-            className="fixed bottom-24 md:bottom-10 right-1/2 translate-x-1/2 md:translate-x-0 md:right-10 bg-surface-container-high border border-primary/30 text-primary px-6 py-3 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.5),0_0_20px_rgba(212,175,55,0.15)] flex items-center gap-3 z-[200] whitespace-nowrap"
+            className="fixed bottom-24 md:bottom-10 left-1/2 -translate-x-1/2 md:left-auto md:translate-x-0 md:right-10 bg-surface-container-high border border-primary/30 text-primary px-6 py-3 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.5),0_0_20px_rgba(212,175,55,0.15)] flex items-center gap-3 z-[200] whitespace-nowrap"
           >
             <span className="material-symbols-outlined text-[20px]">check_circle</span>
             <span className="font-body-md font-medium tracking-wide text-sm">{notification}</span>
