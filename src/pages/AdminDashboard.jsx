@@ -149,28 +149,31 @@ export default function AdminDashboard() {
             );
           })}
         </ul>
-        <div className="mt-auto px-6 space-y-2">
-          <a className="flex items-center gap-4 text-on-surface-variant hover:text-on-surface py-3 transition-colors duration-200" href="#">
-            <span className="material-symbols-outlined">settings</span>
-            <span className="font-body-lg text-body-lg">Settings</span>
-          </a>
-          <a className="flex items-center gap-4 text-on-surface-variant hover:text-on-surface py-3 transition-colors duration-200" href="#">
-            <span className="material-symbols-outlined">help_outline</span>
-            <span className="font-body-lg text-body-lg">Support</span>
-          </a>
-          <div className="mt-6 flex items-center gap-3 border-t border-outline-variant/20 pt-6 cursor-pointer group" onClick={async () => {
-            await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-            navigate('/admin');
-          }}>
-            <div className="w-10 h-10 rounded-full bg-surface-container-high border border-outline-variant overflow-hidden group-hover:border-primary transition-colors">
-              <div className="w-full h-full bg-gradient-to-tr from-surface-container-highest to-surface flex items-center justify-center text-primary-fixed">
-                 {user?.name?.charAt(0) || 'EC'}
+        <div className="mt-auto px-6">
+          <div className="flex items-center justify-between p-3 bg-[#f4f7f6] dark:bg-surface-container-high/40 border border-[#e3ebe8] dark:border-outline-variant/10 rounded-2xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-[#e2edea] dark:bg-teal-950/40 text-[#1b7c83] dark:text-teal-400 flex items-center justify-center font-display-md text-title-md font-bold">
+                {user?.name?.charAt(0) || 'N'}
+              </div>
+              <div className="flex flex-col">
+                <span className="font-title-sm text-[#121317] dark:text-on-surface font-semibold text-sm leading-tight">
+                  {user?.name || 'NupurStaff'}
+                </span>
+                <span className="text-[12px] text-[#6d8285] dark:text-on-surface-variant/80 mt-0.5 leading-none">
+                  {user?.role === 'ADMIN' ? 'Store Owner' : (user?.role === 'STAFF' ? 'Staff Member' : 'Store Owner')}
+                </span>
               </div>
             </div>
-            <div>
-              <p className="font-body-sm text-body-sm text-on-surface group-hover:text-primary transition-colors">Executive Chef Profile</p>
-              <p className="font-body-sm text-body-sm text-on-surface-variant text-[11px]">Logout</p>
-            </div>
+            <button 
+              onClick={async () => {
+                await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+                navigate('/admin');
+              }}
+              className="text-[#7d9093] dark:text-on-surface-variant hover:text-error dark:hover:text-error hover:bg-error/10 p-2 rounded-xl transition-all duration-200 flex items-center justify-center"
+              title="Logout"
+            >
+              <span className="material-symbols-outlined text-xl">logout</span>
+            </button>
           </div>
         </div>
       </nav>
