@@ -53,6 +53,20 @@ export default function AdminLogin() {
   };
 
   useEffect(() => {
+    // If returning from Google OAuth, do not redirect, let the OAuth handler run below
+    const hash = window.location.hash;
+    if (hash && hash.includes('id_token=')) return;
+
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(res => {
+        if (res.ok) {
+          navigate('/admin/dashboard');
+        }
+      })
+      .catch(() => {});
+  }, [navigate]);
+
+  useEffect(() => {
     // Check if returning from Google OAuth redirect with id_token in hash
     const hash = window.location.hash;
     if (hash && hash.includes('id_token=')) {
