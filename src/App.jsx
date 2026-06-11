@@ -606,22 +606,6 @@ function MenuPage() {
 
               {activeOrder ? (
                 <>
-                  <p className="font-body-md text-body-md text-on-surface-variant mb-6">
-                    {unpaidTotal > 0 
-                      ? 'Scan this QR with your payment app to pay now.'
-                      : 'All your orders are verified and preparing.'}
-                  </p>
-                  
-                  {unpaidTotal > 0 && (
-                    <div className="bg-white p-4 rounded-xl mb-6 border-4 border-primary-container/30 gold-glow shrink-0">
-                      {paymentQrCode ? (
-                        <img src={paymentQrCode} alt="Payment QR Code" className="w-48 h-48 rounded" />
-                      ) : (
-                        <div className="w-48 h-48 flex items-center justify-center text-on-primary font-label-caps">Generating QR...</div>
-                      )}
-                    </div>
-                  )}
-
                   {/* Verification Status Banner */}
                   <div className="w-full bg-primary/10 border border-primary/20 rounded-lg p-3.5 mb-6 text-center shrink-0">
                     <span className="font-label-caps text-[11px] text-primary font-bold flex items-center justify-center gap-1">
