@@ -396,13 +396,13 @@ export default function MenuManager() {
                       {isUploading && <span className="material-symbols-outlined animate-spin text-primary">progress_activity</span>}
                     </div>
                   </div>
-                  <div className="col-span-2 flex items-center gap-3 mt-2">
-                    <label className="relative inline-flex items-center cursor-pointer">
+                  <div className="col-span-2 flex items-center gap-3 mt-4">
+                    <label className="inline-flex items-center cursor-pointer group">
                       <input type="checkbox" checked={formData.chefPick} onChange={e => setFormData({...formData, chefPick: e.target.checked})} className="sr-only peer" />
-                      <div className="w-11 h-6 bg-surface-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                      <div className="ml-3 flex flex-col">
+                      <div className="relative w-11 h-6 bg-surface-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary shrink-0 transition-colors"></div>
+                      <div className="ml-3 flex flex-col group-hover:opacity-80 transition-opacity">
                         <span className="font-body-sm text-on-surface">Highlight as Main Hero Item</span>
-                        <span className="font-body-sm text-[10px] text-on-surface-variant opacity-80">Shows this item in the large black & white section at the top of the menu</span>
+                        <span className="font-body-sm text-[10px] text-on-surface-variant opacity-80 leading-tight mt-0.5">Shows this item in the large black & white section at the top of the menu</span>
                       </div>
                     </label>
                   </div>

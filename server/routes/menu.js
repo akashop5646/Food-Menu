@@ -59,6 +59,11 @@ router.post('/', async (req, res) => {
       createdAt: new Date(),
     };
 
+    // If this item is a chefPick, unset chefPick from all other items
+    if (newItem.chefPick) {
+      await db.collection('menu_items').updateMany({}, { $set: { chefPick: false } });
+    }
+
     const result = await db.collection('menu_items').insertOne(newItem);
     newItem._id = result.insertedId;
     res.status(201).json(newItem);
@@ -89,6 +94,15 @@ router.put('/:id', async (req, res) => {
     }
 
     const db = await getDB();
+    
+    // If this item is updated to be the chefPick, unset chefPick from all other items
+    if (updates.chefPick === true) {
+      await db.collection('menu_items').updateMany(
+        { _id: { $ne: new ObjectId(id) } },
+        { $set: { chefPick: false } }
+      );
+    }
+
     const result = await db.collection('menu_items').findOneAndUpdate(
       { _id: new ObjectId(id) },
       { $set: { ...updates, updatedAt: new Date() } },
