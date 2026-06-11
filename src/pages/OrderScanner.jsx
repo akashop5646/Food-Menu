@@ -1,0 +1,245 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+export default function OrderScanner() {
+  const [qrInput, setQrInput] = useState('');
+  const [parsedOrder, setParsedOrder] = useState(null);
+  const [error, setError] = useState('');
+  const [paymentType, setPaymentType] = useState('UPI'); // UPI, CASH, CARD
+  const [paymentStatus, setPaymentStatus] = useState('PENDING'); // PAID, PENDING
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
+
+  const inputRef = useRef(null);
+
+  // Focus input automatically on mount to support quick scanning guns
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [parsedOrder, successMsg]);
+
+  // Handle parsing QR code payload
+  const handleInputChange = (val) => {
+    setQrInput(val);
+    setError('');
+    setSuccessMsg('');
+
+    if (!val.trim()) {
+      setParsedOrder(null);
+      return;
+    }
+
+    try {
+      // Clean up string in case of extra spaces or weird scanner formatting
+      const cleanVal = val.trim();
+      const parsed = JSON.parse(cleanVal);
+
+      // Validation
+      if (!parsed.table) {
+        throw new Error('Missing "table" field.');
+      }
+      if (!parsed.items || !Array.isArray(parsed.items) || parsed.items.length === 0) {
+        throw new Error('Invalid or empty "items" array.');
+      }
+      if (parsed.total === undefined || parsed.total === null) {
+        throw new Error('Missing "total" amount.');
+      }
+
+      setParsedOrder(parsed);
+      setError('');
+    } catch (err) {
+      setParsedOrder(null);
+      // Only show error if input is sufficiently long (to prevent flashing errors while typing)
+      if (val.trim().length > 10) {
+        setError('Invalid QR code format. Please scan a valid Aurum Table QR.');
+      }
+    }
+  };
+
+  // Submit verified order to backend
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!parsedOrder) return;
+
+    setIsSubmitting(true);
+    setError('');
+
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          table: parsedOrder.table,
+          items: parsedOrder.items,
+          total: parsedOrder.total,
+          paymentType: paymentStatus === 'PAID' ? 'NOW' : 'LATER', // Map NOW/LATER
+          paymentStatus: paymentStatus
+        }),
+        credentials: 'include'
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to submit order.');
+      }
+
+      setSuccessMsg(`Order for Table ${parsedOrder.table} verified and sent to Live KDS!`);
+      // Reset states
+      setQrInput('');
+      setParsedOrder(null);
+      setPaymentStatus('PENDING');
+      setPaymentType('UPI');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto py-8 px-margin-mobile md:px-0 flex flex-col gap-6">
+      <div className="bg-surface-container rounded-2xl border border-outline-variant/20 shadow-lg overflow-hidden">
+        {/* Header */}
+        <div className="p-6 md:p-8 border-b border-outline-variant/10">
+          <h2 className="font-headline-md text-2xl text-on-surface flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary">qr_code_scanner</span>
+            Verify Customer Order
+          </h2>
+          <p className="font-body-md text-on-surface-variant mt-1">
+            Scan the checkout QR code on the customer's device or paste the payload below to confirm order items and verify payments.
+          </p>
+        </div>
+
+        <div className="p-6 md:p-8 flex flex-col gap-6">
+          {successMsg && (
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-primary/10 text-primary px-4 py-4 rounded-xl border border-primary/20 text-sm font-medium flex items-center gap-3"
+            >
+              <span className="material-symbols-outlined text-xl">check_circle</span>
+              <div>
+                <strong className="block text-primary">Order Confirmed</strong>
+                <span className="text-[12px] opacity-90">{successMsg}</span>
+              </div>
+            </motion.div>
+          )}
+
+          {error && (
+            <div className="bg-error/10 text-error px-4 py-3 rounded-xl border border-error/20 text-sm font-medium">
+              {error}
+            </div>
+          )}
+
+          {/* QR Payload Input Area */}
+          <div>
+            <label className="block font-label-caps text-[12px] text-on-surface-variant mb-2 uppercase tracking-widest">
+              Scan Barcode / Paste QR Code Data
+            </label>
+            <textarea
+              ref={inputRef}
+              rows={3}
+              value={qrInput}
+              onChange={(e) => handleInputChange(e.target.value)}
+              className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-xl px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors font-mono text-sm leading-relaxed"
+              placeholder='Paste scanner output here (e.g. {"table":"Table 3", ...})'
+            />
+            <p className="font-body-sm text-[11px] text-on-surface-variant opacity-70 mt-1">
+              Place cursor inside this box before scanning if using a physical scanner gun.
+            </p>
+          </div>
+
+          {/* Scanned Order Summary */}
+          <AnimatePresence>
+            {parsedOrder && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="border border-outline-variant/30 rounded-xl bg-surface-container-lowest overflow-hidden">
+                  {/* Summary Slip */}
+                  <div className="p-5 border-b border-outline-variant/20 bg-surface-container-low flex justify-between items-center">
+                    <div>
+                      <span className="font-label-caps text-[10px] text-primary uppercase tracking-widest block">Scanned Order</span>
+                      <strong className="font-headline-sm text-lg text-on-surface">{parsedOrder.table}</strong>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest block">Total Price</span>
+                      <strong className="font-price-display text-lg text-primary">₹{Number(parsedOrder.total).toFixed(2)}</strong>
+                    </div>
+                  </div>
+
+                  <div className="p-5 flex flex-col gap-4">
+                    {/* Items List */}
+                    <div className="space-y-3">
+                      <label className="block font-label-caps text-[11px] text-on-surface-variant uppercase tracking-widest">Ordered Items</label>
+                      <div className="divide-y divide-outline-variant/10">
+                        {parsedOrder.items.map((item, idx) => (
+                          <div key={item.id || idx} className="py-2.5 flex justify-between items-center text-sm">
+                            <span className="text-on-surface">
+                              <span className="text-primary font-bold mr-1">{item.quantity}x</span> {item.name}
+                            </span>
+                            <span className="text-on-surface-variant font-medium">₹{(Number(item.price) * Number(item.quantity)).toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <form onSubmit={handleSubmit} className="border-t border-outline-variant/10 pt-4 mt-2 flex flex-col gap-4">
+                      <h4 className="font-label-caps text-[11px] text-on-surface-variant uppercase tracking-widest">Verification Details</h4>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Payment Type */}
+                        <div>
+                          <label className="block font-label-caps text-[11px] text-on-surface-variant mb-1.5 uppercase tracking-wider">Payment Method</label>
+                          <select
+                            value={paymentType}
+                            onChange={(e) => setPaymentType(e.target.value)}
+                            className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-3 py-2.5 focus:border-primary outline-none text-sm"
+                          >
+                            <option value="UPI">Google Pay / UPI</option>
+                            <option value="CASH">Cash Payment</option>
+                            <option value="CARD">Credit/Debit Card</option>
+                          </select>
+                        </div>
+
+                        {/* Payment Status */}
+                        <div>
+                          <label className="block font-label-caps text-[11px] text-on-surface-variant mb-1.5 uppercase tracking-wider">Payment Status</label>
+                          <select
+                            value={paymentStatus}
+                            onChange={(e) => setPaymentStatus(e.target.value)}
+                            className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-3 py-2.5 focus:border-primary outline-none text-sm"
+                          >
+                            <option value="PENDING">Pending (Pay Later)</option>
+                            <option value="PAID">Paid (Manually Verified)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="w-full bg-gold-metallic text-on-primary py-3.5 mt-3 rounded-xl font-label-caps text-[13px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
+                      >
+                        {isSubmitting ? (
+                          <span className="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
+                        ) : (
+                          <span className="material-symbols-outlined text-[18px]">done_all</span>
+                        )}
+                        Confirm Order & Send to KDS
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+    </div>
+  );
+}
