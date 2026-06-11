@@ -51,8 +51,22 @@ export default function OrderScanner() {
           // ignore scanner loop feedback
         }
       ).catch(err => {
-        console.error("Camera start error:", err);
-        setError("Could not access camera. Ensure camera permissions are granted and you are using HTTPS/localhost.");
+        console.warn("Camera start failed with ideal constraints, trying simple facingMode:", err);
+        // Fallback to simple environment camera constraint without custom resolution
+        return html5QrCode.start(
+          { facingMode: "environment" },
+          config,
+          (decodedText) => {
+            handleInputChange(decodedText);
+            stopCamera();
+          },
+          (errorMessage) => {
+            // ignore scanner loop feedback
+          }
+        );
+      }).catch(err => {
+        console.error("Camera start fallback error:", err);
+        setError("Could not access camera. Ensure camera permissions are granted. (Note: If inside an In-App Browser or Vercel Preview Toolbar, tap the three dots at the top-right and select 'Open in Browser' / 'Open in Chrome')");
         setIsCameraOpen(false);
       });
     }, 150);
