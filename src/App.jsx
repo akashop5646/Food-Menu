@@ -94,6 +94,12 @@ function MenuPage() {
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
+  const ordersList = activeOrders.length > 0 ? activeOrders : (activeOrder ? [activeOrder] : []);
+  const sessionTotal = ordersList.reduce((sum, o) => sum + o.total, 0);
+  const sessionItemsCount = ordersList.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.quantity, 0), 0);
+  const unpaidOrders = ordersList.filter(o => o.paymentStatus !== 'PAID');
+  const unpaidTotal = unpaidOrders.reduce((sum, o) => sum + o.total, 0);
+
   const heroItem = useMemo(() => {
     return menuItems.find(item => item.chefPick) || menuItems[0] || null;
   }, [menuItems]);
@@ -174,8 +180,8 @@ function MenuPage() {
     if (!gpayId) return '';
     
     // Check if we have verified unpaid orders to charge.
-    const unpaidList = activeOrders.filter(o => o.paymentStatus !== 'PAID');
-    const unpaidTotalAmt = unpaidList.reduce((sum, o) => sum + o.total, 0);
+    const unpaidList = unpaidOrders;
+    const unpaidTotalAmt = unpaidTotal;
     
     const activeTotal = unpaidTotalAmt > 0 ? unpaidTotalAmt : (activeOrder ? activeOrder.total : cartTotal);
     if (!activeTotal) return '';
@@ -292,11 +298,6 @@ function MenuPage() {
     }
     showNotification('Thank you! Your order has been placed. You can pay later at the counter.');
   };
-
-  const sessionTotal = activeOrders.reduce((sum, o) => sum + o.total, 0);
-  const sessionItemsCount = activeOrders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.quantity, 0), 0);
-  const unpaidOrders = activeOrders.filter(o => o.paymentStatus !== 'PAID');
-  const unpaidTotal = unpaidOrders.reduce((sum, o) => sum + o.total, 0);
 
   return (
     <div className="bg-background text-on-surface pb-32 min-h-screen">
@@ -630,7 +631,7 @@ function MenuPage() {
                       {unpaidTotal === 0 ? 'All Orders Paid & Confirmed' : 'Orders Verified by Waiter'}
                     </span>
                     <p className="text-[10px] text-on-surface-variant/80 mt-1 leading-relaxed">
-                      Session Orders: {activeOrders.length} | Pending Payment: ₹{unpaidTotal.toFixed(2)}
+                      Session Orders: {ordersList.length} | Pending Payment: ₹{unpaidTotal.toFixed(2)}
                     </p>
                   </div>
                 </>
@@ -667,15 +668,15 @@ function MenuPage() {
               )}
               
               {/* Session Order History List (renders if they have any active verified orders) */}
-              {activeOrders.length > 0 && (
+              {ordersList.length > 0 && (
                 <div className="w-full flex flex-col gap-3 text-left mt-2 mb-6 flex-1 min-h-0">
                   <h3 className="font-label-caps text-[11px] text-primary border-b border-outline-variant/15 pb-2 uppercase tracking-widest font-bold flex justify-between items-center shrink-0">
-                    <span>Order History ({activeOrders.length})</span>
+                    <span>Order History ({ordersList.length})</span>
                     <span className="font-mono text-on-surface-variant text-[11px] lowercase tracking-normal">Total: ₹{sessionTotal.toFixed(2)}</span>
                   </h3>
                   
                   <div className="space-y-3 w-full overflow-y-auto pr-1 hide-scrollbar flex-1 min-h-[120px]">
-                    {activeOrders.map((order, idx) => (
+                    {ordersList.map((order, idx) => (
                       <div key={order._id || idx} className="bg-surface-container-high border border-outline-variant/15 rounded-xl p-3.5 flex flex-col gap-2 shadow-sm">
                         {/* Header */}
                         <div className="flex justify-between items-center text-[11px] font-semibold border-b border-outline-variant/10 pb-1.5 font-sans">

@@ -20,15 +20,28 @@ router.get('/active', async (req, res) => {
     if (deviceId) {
       query.deviceId = deviceId;
     }
-    if (checkoutSessionId) {
-      query.checkoutSessionId = checkoutSessionId;
-    }
-    const activeOrder = await db.collection('orders').findOne(query, { sort: { createdAt: -1 } });
 
-    res.json({ verified: !!activeOrder, order: activeOrder });
+    // Fetch all active orders sorted by newest first
+    const activeOrders = await db.collection('orders').find(query).sort({ createdAt: -1 }).toArray();
+
+    let targetOrderVerified = false;
+    let targetOrder = null;
+    if (checkoutSessionId) {
+      targetOrder = activeOrders.find(o => o.checkoutSessionId === checkoutSessionId) || null;
+      targetOrderVerified = !!targetOrder;
+    } else {
+      targetOrder = activeOrders[0] || null;
+      targetOrderVerified = !!targetOrder;
+    }
+
+    res.json({ 
+      verified: targetOrderVerified, 
+      order: targetOrder,
+      orders: activeOrders
+    });
   } catch (error) {
-    console.error('Failed to check active order:', error);
-    res.status(500).json({ error: 'Failed to check active order.' });
+    console.error('Failed to check active orders:', error);
+    res.status(500).json({ error: 'Failed to check active orders.' });
   }
 });
 
