@@ -128,7 +128,9 @@ export default function OrderScanner() {
           items: parsedOrder.items,
           total: parsedOrder.total,
           paymentType: paymentStatus === 'PAID' ? 'NOW' : 'LATER', // Map NOW/LATER
-          paymentStatus: paymentStatus
+          paymentStatus: paymentStatus,
+          deviceId: parsedOrder.deviceId || null,
+          customerIp: parsedOrder.customerIp || null
         }),
         credentials: 'include'
       });
@@ -255,6 +257,16 @@ export default function OrderScanner() {
                     <div className="text-right">
                       <span className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest block">Total Price</span>
                       <strong className="font-price-display text-lg text-primary">₹{Number(parsedOrder.total).toFixed(2)}</strong>
+                    </div>
+                  </div>
+
+                  {/* Device & Network verification details */}
+                  <div className="px-5 py-3 border-b border-outline-variant/15 bg-surface-container-lowest flex flex-col sm:flex-row justify-between text-xs text-on-surface-variant/70 gap-2 font-mono">
+                    <div>
+                      <span className="font-semibold text-primary font-sans">Customer IP:</span> {parsedOrder.customerIp || 'N/A'}
+                    </div>
+                    <div>
+                      <span className="font-semibold text-primary font-sans">Device ID:</span> {parsedOrder.deviceId ? parsedOrder.deviceId.substring(0, 16) + '...' : 'N/A'}
                     </div>
                   </div>
 

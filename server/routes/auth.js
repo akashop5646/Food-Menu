@@ -125,6 +125,15 @@ router.get('/me', async (req, res) => {
   }
 });
 
+// ---------- Get Client IP (Public) ----------
+router.get('/ip', (req, res) => {
+  let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  if (ip && ip.includes(',')) {
+    ip = ip.split(',')[0].trim();
+  }
+  res.json({ ip });
+});
+
 // ---------- Logout ----------
 router.post('/logout', (req, res) => {
   res.clearCookie('token', COOKIE_OPTIONS);

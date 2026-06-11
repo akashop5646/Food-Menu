@@ -29,15 +29,26 @@ function MenuPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentQrCode, setPaymentQrCode] = useState('');
   const [isOrderVerified, setIsOrderVerified] = useState(false);
+  const [deviceId, setDeviceId] = useState('');
+  const [customerIp, setCustomerIp] = useState('');
 
   // Fetch menu items and categories from API
   useEffect(() => {
+    // Generate/get deviceId
+    let id = localStorage.getItem('aurum_device_id');
+    if (!id) {
+      id = 'dev_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('aurum_device_id', id);
+    }
+    setDeviceId(id);
+
     const fetchMenu = async () => {
       try {
-        const [itemsRes, catsRes, gpayRes] = await Promise.all([
+        const [itemsRes, catsRes, gpayRes, ipRes] = await Promise.all([
           fetch('/api/menu'),
           fetch('/api/categories'),
           fetch('/api/settings/gpay'),
+          fetch('/api/auth/ip').catch(() => null)
         ]);
         const items = await itemsRes.json();
         const cats = await catsRes.json();
@@ -50,6 +61,11 @@ function MenuPage() {
         setMenuItems(Array.isArray(items) ? items : []);
         setCategories(['All', ...(Array.isArray(cats) ? cats.map(c => c.name) : [])]);
         setGpayId(gpayData.gpayId || '');
+
+        if (ipRes && ipRes.ok) {
+          const ipData = await ipRes.json();
+          setCustomerIp(ipData.ip || '');
+        }
       } catch (err) {
         console.error('Failed to fetch initial page data:', err);
       } finally {
@@ -119,8 +135,10 @@ function MenuPage() {
       total: cartTotal,
       items: cart.map(item => ({ id: item._id, name: item.name, price: item.price, quantity: item.quantity })),
       createdAt: new Date().toISOString(),
+      deviceId,
+      customerIp,
     };
-  }, [cart, cartCount, cartTotal, selectedTable]);
+  }, [cart, cartCount, cartTotal, selectedTable, deviceId, customerIp]);
 
   useEffect(() => {
     if (!isCheckoutOpen || !orderPayload) {
@@ -161,19 +179,17 @@ function MenuPage() {
 
   // Poll backend to check if the waiter has scanned/confirmed this table's order
   useEffect(() => {
-    if (!isCheckoutOpen || !selectedTable) {
+    if (!isCheckoutOpen || !selectedTable || !deviceId) {
       setIsOrderVerified(false);
       return;
     }
 
     const checkVerification = async () => {
       try {
-        const res = await fetch(`/api/orders/active?table=${encodeURIComponent(selectedTable)}`);
+        const res = await fetch(`/api/orders/active?table=${encodeURIComponent(selectedTable)}&deviceId=${encodeURIComponent(deviceId)}`);
         if (res.ok) {
           const data = await res.json();
-          if (data.verified) {
-            setIsOrderVerified(true);
-          }
+          setIsOrderVerified(!!data.verified);
         }
       } catch (err) {
         console.error('Error checking verification status:', err);
@@ -187,7 +203,7 @@ function MenuPage() {
     const interval = setInterval(checkVerification, 2500);
 
     return () => clearInterval(interval);
-  }, [isCheckoutOpen, selectedTable]);
+  }, [isCheckoutOpen, selectedTable, deviceId]);
 
   const handlePayNow = () => {
     if (!isOrderVerified) {
