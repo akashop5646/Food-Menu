@@ -292,7 +292,16 @@ export default function MenuManager() {
                     <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">Image Upload</label>
                     <div className="flex items-center gap-4">
                       {formData.image && (
-                        <img src={formData.image} alt="Preview" className="w-16 h-16 object-cover rounded border border-outline-variant/50" />
+                        <div className="relative group">
+                          <img src={formData.image} alt="Preview" className="w-16 h-16 object-cover rounded border border-outline-variant/50" />
+                          <button 
+                            type="button" 
+                            onClick={() => setFormData({...formData, image: ''})} 
+                            className="absolute -top-2 -right-2 bg-error text-white rounded-full p-0.5 shadow hover:scale-110 transition-transform"
+                          >
+                            <span className="material-symbols-outlined text-[14px] block">close</span>
+                          </button>
+                        </div>
                       )}
                       <input 
                         type="file" 

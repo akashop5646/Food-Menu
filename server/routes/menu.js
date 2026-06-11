@@ -1,7 +1,16 @@
 import express from 'express';
 import { getDB } from '../db.js';
 import { ObjectId } from 'mongodb';
+import { v2 as cloudinary } from 'cloudinary';
+import dotenv from 'dotenv';
 
+dotenv.config();
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
 const router = express.Router();
 
 // GET all menu items (public)
@@ -94,10 +103,25 @@ router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const db = await getDB();
-    const result = await db.collection('menu_items').deleteOne({ _id: new ObjectId(id) });
-    if (result.deletedCount === 0) {
+    
+    const item = await db.collection('menu_items').findOne({ _id: new ObjectId(id) });
+    if (!item) {
       return res.status(404).json({ error: 'Menu item not found' });
     }
+
+    if (item.image && item.image.includes('cloudinary.com')) {
+      const parts = item.image.split('/');
+      const filename = parts[parts.length - 1];
+      const folder = parts[parts.length - 2];
+      const publicId = `${folder}/${filename.split('.')[0]}`;
+      try {
+        await cloudinary.uploader.destroy(publicId);
+      } catch (cloudinaryErr) {
+        console.error('Failed to delete image from Cloudinary:', cloudinaryErr);
+      }
+    }
+
+    const result = await db.collection('menu_items').deleteOne({ _id: new ObjectId(id) });
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting menu item:', error);
