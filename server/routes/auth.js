@@ -149,7 +149,7 @@ router.get('/me', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, getSecret());
-    res.json({ user: { id: decoded.id, name: decoded.name, email: decoded.email, role: decoded.role } });
+    res.json({ user: { id: decoded.id, name: decoded.name, email: decoded.email, role: decoded.role || 'ADMIN' } });
   } catch (err) {
     res.status(401).json({ error: 'Invalid or expired token.' });
   }
