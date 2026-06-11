@@ -13,11 +13,23 @@ function MenuPage() {
   const [menuItems, setMenuItems] = useState([]);
   const [categories, setCategories] = useState(['All']);
   const [menuLoading, setMenuLoading] = useState(true);
-  const [cart, setCart] = useState([]);
+  const [cart, setCart] = useState(() => {
+    try {
+      const saved = localStorage.getItem('aurum_cart');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTable] = useState(tableParam);
   const [selectedLocation] = useState(locationParam);
+  const [activeOrder, setActiveOrder] = useState(null);
+
+  useEffect(() => {
+    localStorage.setItem('aurum_cart', JSON.stringify(cart));
+  }, [cart]);
   
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
@@ -156,17 +168,21 @@ function MenuPage() {
   }, [isCheckoutOpen, orderPayload]);
 
   const upiUrl = useMemo(() => {
-    if (!gpayId || !cartTotal) return '';
+    if (!gpayId) return '';
+    const activeTotal = activeOrder ? activeOrder.total : cartTotal;
+    const activeItems = activeOrder ? activeOrder.items : cart;
+    if (!activeTotal) return '';
+
     // Format items as a compact summary: e.g. "2x Golden Risotto, 1x Lobster Tail"
-    const itemsSummary = cart.map(item => `${item.quantity}x ${item.name}`).join(', ');
+    const itemsSummary = activeItems.map(item => `${item.quantity}x ${item.name}`).join(', ');
     const prefix = `T${selectedTable} Order: `;
     const maxNoteLength = 80; // Standard UPI note limit
     let note = prefix + itemsSummary;
     if (note.length > maxNoteLength) {
       note = note.substring(0, maxNoteLength - 3) + '...';
     }
-    return `upi://pay?pa=${gpayId}&pn=${encodeURIComponent("Aurum Table")}&am=${cartTotal.toFixed(2)}&cu=INR&tn=${encodeURIComponent(note)}`;
-  }, [gpayId, cartTotal, selectedTable, cart]);
+    return `upi://pay?pa=${gpayId}&pn=${encodeURIComponent("Aurum Table")}&am=${activeTotal.toFixed(2)}&cu=INR&tn=${encodeURIComponent(note)}`;
+  }, [gpayId, cartTotal, selectedTable, cart, activeOrder]);
 
   useEffect(() => {
     if (!isCheckoutOpen || !upiUrl) {
@@ -182,7 +198,7 @@ function MenuPage() {
 
   // Poll backend to check if the waiter has scanned/confirmed this table's order
   useEffect(() => {
-    if (!isCheckoutOpen || !selectedTable || !deviceId) {
+    if (!selectedTable || !deviceId) {
       setIsOrderVerified(false);
       return;
     }
@@ -192,7 +208,21 @@ function MenuPage() {
         const res = await fetch(`/api/orders/active?table=${encodeURIComponent(selectedTable)}&deviceId=${encodeURIComponent(deviceId)}`);
         if (res.ok) {
           const data = await res.json();
-          setIsOrderVerified(!!data.verified);
+          if (data.verified && data.order) {
+            setActiveOrder(data.order);
+            setIsOrderVerified(true);
+            // Clear cart if the order was just placed/verified
+            setCart(prev => {
+              if (prev.length > 0) {
+                localStorage.removeItem('aurum_cart');
+                return [];
+              }
+              return prev;
+            });
+          } else {
+            setActiveOrder(null);
+            setIsOrderVerified(false);
+          }
         }
       } catch (err) {
         console.error('Error checking verification status:', err);
@@ -202,14 +232,14 @@ function MenuPage() {
     // Check once immediately
     checkVerification();
 
-    // Poll every 2500ms
-    const interval = setInterval(checkVerification, 2500);
+    // Poll every 3000ms
+    const interval = setInterval(checkVerification, 3000);
 
     return () => clearInterval(interval);
-  }, [isCheckoutOpen, selectedTable, deviceId]);
+  }, [selectedTable, deviceId]);
 
   const handlePayNow = () => {
-    if (!isOrderVerified) {
+    if (!isOrderVerified && !activeOrder) {
       showNotification('Awaiting waiter verification. Please let staff scan your QR code first.');
       return;
     }
@@ -224,7 +254,10 @@ function MenuPage() {
       window.location.href = upiUrl;
       setTimeout(() => {
         setIsCheckoutOpen(false);
-        setCart([]);
+        if (!activeOrder) {
+          setCart([]);
+          localStorage.removeItem('aurum_cart');
+        }
         showNotification('Initiating payment... Thank you for your order!');
       }, 1000);
     } else {
@@ -234,7 +267,10 @@ function MenuPage() {
 
   const handlePayLater = () => {
     setIsCheckoutOpen(false);
-    setCart([]);
+    if (!activeOrder) {
+      setCart([]);
+      localStorage.removeItem('aurum_cart');
+    }
     showNotification('Thank you! Your order has been placed. You can pay later at the counter.');
   };
 
@@ -489,7 +525,7 @@ function MenuPage() {
 
       {/* Checkout Drawer (Overlays Cart) */}
       <AnimatePresence>
-        {isCheckoutOpen && isCartOpen && (
+        {isCheckoutOpen && (isCartOpen || activeOrder) && (
           <motion.div 
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
@@ -501,7 +537,7 @@ function MenuPage() {
               <button onClick={() => setIsCheckoutOpen(false)} className="text-on-surface-variant hover:text-primary transition-colors">
                 <span className="material-symbols-outlined">arrow_back</span>
               </button>
-              <h2 className="font-headline-sm text-headline-sm text-primary">Checkout</h2>
+              <h2 className="font-headline-sm text-headline-sm text-primary">{activeOrder ? 'Active Order' : 'Checkout'}</h2>
             </div>
             
             <div className="flex-1 p-8 flex flex-col items-center justify-center text-center overflow-y-auto">
@@ -513,71 +549,129 @@ function MenuPage() {
                 </div>
                 <div className="bg-surface-container-high border border-outline-variant/20 rounded-lg p-3">
                   <span className="font-label-caps text-label-caps text-on-surface-variant block mb-1">Items</span>
-                  <strong className="font-price-display text-price-display text-primary">{cartCount}</strong>
+                  <strong className="font-price-display text-price-display text-primary">
+                    {activeOrder 
+                      ? activeOrder.items.reduce((sum, i) => sum + i.quantity, 0)
+                      : cartCount}
+                  </strong>
                 </div>
                 <div className="bg-surface-container-high border border-outline-variant/20 rounded-lg p-3">
                   <span className="font-label-caps text-label-caps text-on-surface-variant block mb-1">Total</span>
-                  <strong className="font-price-display text-price-display text-primary">₹{cartTotal.toFixed(2)}</strong>
+                  <strong className="font-price-display text-price-display text-primary">
+                    ₹{(activeOrder ? activeOrder.total : cartTotal).toFixed(2)}
+                  </strong>
                 </div>
               </div>
 
-              <p className="font-body-md text-body-md text-on-surface-variant mb-6">Scan the QR code to confirm your order.</p>
-              
-              {/* QR Code */}
-              <div className="bg-white p-4 rounded-xl mb-6 border-4 border-primary-container/30 gold-glow">
-                {qrCode ? (
-                  <img src={qrCode} alt="Order QR Code" className="w-48 h-48 rounded" />
-                ) : (
-                  <div className="w-48 h-48 flex items-center justify-center text-on-primary font-label-caps">Generating QR...</div>
-                )}
-              </div>
-
-              {/* QR Details */}
-              <div className="w-full bg-surface-container-high border border-outline-variant/20 rounded-lg p-4 mb-6 text-left">
-                <h4 className="font-body-md text-on-surface font-medium mb-1">QR includes</h4>
-                <p className="font-body-md text-body-md text-on-surface-variant/70">Table number, selected items, quantity, item prices, and total.</p>
-              </div>
-              
-              {/* Verification Status Banner */}
-              {isOrderVerified ? (
-                <div className="w-full bg-primary/10 border border-primary/20 rounded-lg p-3.5 mb-6 text-center">
-                  <span className="font-label-caps text-[11px] text-primary font-bold flex items-center justify-center gap-1">
-                    <span className="material-symbols-outlined text-sm">check_circle</span>
-                    Order Verified by Staff
-                  </span>
-                  <p className="text-[10px] text-on-surface-variant/80 mt-1 leading-relaxed">
-                    Verification complete. You can now complete your payment.
+              {activeOrder ? (
+                <>
+                  <p className="font-body-md text-body-md text-on-surface-variant mb-6">
+                    {activeOrder.paymentStatus === 'PAID' 
+                      ? 'Your payment is verified and preparing.' 
+                      : 'Scan this QR with your payment app to pay now.'}
                   </p>
-                </div>
+                  
+                  {activeOrder.paymentStatus !== 'PAID' && (
+                    <div className="bg-white p-4 rounded-xl mb-6 border-4 border-primary-container/30 gold-glow">
+                      {paymentQrCode ? (
+                        <img src={paymentQrCode} alt="Payment QR Code" className="w-48 h-48 rounded" />
+                      ) : (
+                        <div className="w-48 h-48 flex items-center justify-center text-on-primary font-label-caps">Generating QR...</div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Receipt Slip View */}
+                  <div className="w-full bg-surface-container-high border border-outline-variant/20 rounded-lg p-4 mb-6 text-left max-h-40 overflow-y-auto hide-scrollbar">
+                    <h4 className="font-body-sm text-primary font-medium mb-2 uppercase tracking-wide border-b border-outline-variant/10 pb-1 flex justify-between">
+                      <span>Ordered Receipt</span>
+                      <span className="text-[10px] text-on-surface-variant font-mono">#{activeOrder._id.toString().substring(18)}</span>
+                    </h4>
+                    <div className="space-y-1.5 text-sm font-body-md text-on-surface-variant/90 font-sans">
+                      {activeOrder.items.map((item, idx) => (
+                        <div key={item.id || item._id || idx} className="flex justify-between items-center text-[12px] gap-2">
+                          <span className="truncate flex-1 text-on-surface">
+                            <span className="text-primary font-semibold font-mono">{item.quantity}x</span> {item.name}
+                          </span>
+                          <span className="font-semibold shrink-0 text-on-surface-variant">₹{(item.price * item.quantity).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Verification Status Banner */}
+                  <div className="w-full bg-primary/10 border border-primary/20 rounded-lg p-3.5 mb-6 text-center">
+                    <span className="font-label-caps text-[11px] text-primary font-bold flex items-center justify-center gap-1">
+                      <span className="material-symbols-outlined text-sm">
+                        {activeOrder.paymentStatus === 'PAID' ? 'verified' : 'check_circle'}
+                      </span>
+                      {activeOrder.paymentStatus === 'PAID' ? 'Order Paid & Confirmed' : 'Order Verified by Waiter'}
+                    </span>
+                    <p className="text-[10px] text-on-surface-variant/80 mt-1 leading-relaxed">
+                      Kitchen: {activeOrder.status} | Payment: {activeOrder.paymentStatus}
+                    </p>
+                  </div>
+                </>
               ) : (
-                <div className="w-full bg-error/10 border border-error/20 rounded-lg p-3.5 mb-6 text-center">
-                  <span className="font-label-caps text-[11px] text-error font-bold flex items-center justify-center gap-1">
-                    <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
-                    Awaiting Waiter Verification
-                  </span>
-                  <p className="text-[10px] text-on-surface-variant/80 mt-1 leading-relaxed">
-                    Show the order QR code above to your waiter. Once verified, payment will unlock.
-                  </p>
-                </div>
+                <>
+                  <p className="font-body-md text-body-md text-on-surface-variant mb-6">Scan the QR code to confirm your order.</p>
+                  
+                  {/* QR Code */}
+                  <div className="bg-white p-4 rounded-xl mb-6 border-4 border-primary-container/30 gold-glow">
+                    {qrCode ? (
+                      <img src={qrCode} alt="Order QR Code" className="w-48 h-48 rounded" />
+                    ) : (
+                      <div className="w-48 h-48 flex items-center justify-center text-on-primary font-label-caps">Generating QR...</div>
+                    )}
+                  </div>
+
+                  {/* QR Details */}
+                  <div className="w-full bg-surface-container-high border border-outline-variant/20 rounded-lg p-4 mb-6 text-left">
+                    <h4 className="font-body-md text-on-surface font-medium mb-1">QR includes</h4>
+                    <p className="font-body-md text-body-md text-on-surface-variant/70">Table number, selected items, quantity, item prices, and total.</p>
+                  </div>
+                  
+                  {/* Verification Status Banner */}
+                  <div className="w-full bg-error/10 border border-error/20 rounded-lg p-3.5 mb-6 text-center">
+                    <span className="font-label-caps text-[11px] text-error font-bold flex items-center justify-center gap-1">
+                      <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+                      Awaiting Waiter Verification
+                    </span>
+                    <p className="text-[10px] text-on-surface-variant/80 mt-1 leading-relaxed">
+                      Show the order QR code above to your waiter. Once verified, payment will unlock.
+                    </p>
+                  </div>
+                </>
               )}
               
               <div className="w-full space-y-4">
-                <button 
-                  onClick={handlePayNow}
-                  className={`w-full py-3 rounded font-label-caps text-label-caps uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all ${
-                    isOrderVerified 
-                      ? 'bg-gold-metallic text-on-primary gold-glow' 
-                      : 'bg-surface-container-high border border-outline-variant/30 text-on-surface-variant/40 cursor-not-allowed'
-                  }`}
-                >
-                  <span className="material-symbols-outlined">credit_card</span> Pay Now
-                </button>
-                <button 
-                  onClick={handlePayLater}
-                  className="w-full bg-surface-container-high border border-outline-variant/50 text-on-surface py-3 rounded font-body-md text-body-md hover:border-primary/50 transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <span className="material-symbols-outlined">schedule</span> Pay Later
-                </button>
+                {(!activeOrder || activeOrder.paymentStatus !== 'PAID') ? (
+                  <>
+                    <button 
+                      onClick={handlePayNow}
+                      className={`w-full py-3 rounded font-label-caps text-label-caps uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                        (isOrderVerified || (activeOrder && activeOrder.paymentStatus !== 'PAID'))
+                          ? 'bg-gold-metallic text-on-primary gold-glow' 
+                          : 'bg-surface-container-high border border-outline-variant/30 text-on-surface-variant/40 cursor-not-allowed'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined">credit_card</span> Pay Now
+                    </button>
+                    <button 
+                      onClick={handlePayLater}
+                      className="w-full bg-surface-container-high border border-outline-variant/50 text-on-surface py-3 rounded font-body-md text-body-md hover:border-primary/50 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined">schedule</span> Pay Later
+                    </button>
+                  </>
+                ) : (
+                  <button 
+                    onClick={() => setIsCheckoutOpen(false)}
+                    className="w-full bg-primary text-on-primary py-3 rounded font-label-caps text-label-caps uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all"
+                  >
+                    Close Receipt
+                  </button>
+                )}
               </div>
             </div>
           </motion.div>
@@ -746,7 +840,9 @@ function MenuPage() {
                 {/* Order Summary */}
                 <div className="mb-6">
                   <span className="font-label-caps text-label-caps text-on-surface-variant block mb-1">Amount to Pay</span>
-                  <strong className="font-price-display text-4xl text-primary font-bold">₹{cartTotal.toFixed(2)}</strong>
+                  <strong className="font-price-display text-4xl text-primary font-bold">
+                    ₹{(activeOrder ? activeOrder.total : cartTotal).toFixed(2)}
+                  </strong>
                 </div>
 
                 {/* Detailed Receipt Slip */}
@@ -756,8 +852,8 @@ function MenuPage() {
                     <span className="text-on-surface-variant/70">Table {selectedTable}</span>
                   </h4>
                   <div className="space-y-1.5 text-sm font-body-md text-on-surface-variant/90">
-                    {cart.map((item) => (
-                      <div key={item._id || item.id} className="flex justify-between items-center gap-4 text-[13px]">
+                    {(activeOrder ? activeOrder.items : cart).map((item, idx) => (
+                      <div key={item._id || item.id || idx} className="flex justify-between items-center gap-4 text-[13px]">
                         <span className="truncate flex-1">
                           <span className="text-primary font-semibold font-mono">{item.quantity}x</span> {item.name}
                         </span>
@@ -799,7 +895,10 @@ function MenuPage() {
                     onClick={() => {
                       setShowPaymentModal(false);
                       setIsCheckoutOpen(false);
-                      setCart([]);
+                      if (!activeOrder) {
+                        setCart([]);
+                        localStorage.removeItem('aurum_cart');
+                      }
                       showNotification('Thank you! Your order has been placed and payment is initiated.');
                     }}
                     className="flex-1 bg-gold-metallic text-on-primary py-3 rounded font-label-caps text-[12px] uppercase tracking-widest gold-glow cursor-pointer"
@@ -810,6 +909,41 @@ function MenuPage() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Active Order floating banner */}
+      <AnimatePresence>
+        {activeOrder && (
+          <motion.div
+            initial={{ opacity: 0, y: 100 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 100 }}
+            className="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-lg bg-surface-container-high/95 backdrop-blur-md border border-primary/40 text-on-surface px-4 py-3.5 rounded-2xl shadow-[0_12px_48px_rgba(0,0,0,0.6),0_0_20px_rgba(212,175,55,0.15)] flex justify-between items-center z-[50]"
+          >
+            <div className="flex items-center gap-3">
+              <span className="material-symbols-outlined text-primary text-[28px] animate-pulse">
+                {activeOrder.status === 'READY' ? 'notifications_active' : 'restaurant'}
+              </span>
+              <div>
+                <strong className="block text-sm font-semibold tracking-wide text-primary">
+                  {activeOrder.status === 'NEW' && '🍳 Order Placed'}
+                  {activeOrder.status === 'PREPARING' && '🍳 Preparing Food'}
+                  {activeOrder.status === 'READY' && '🛎️ Ready for Pickup'}
+                  {activeOrder.status === 'COMPLETED' && '✅ Completed'}
+                </strong>
+                <span className="text-xs text-on-surface-variant/80 text-left block">
+                  {activeOrder.items.reduce((sum, item) => sum + item.quantity, 0)} items • ₹{activeOrder.total.toFixed(2)} • {activeOrder.paymentStatus === 'PAID' ? 'Paid' : 'Pay Later'}
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsCheckoutOpen(true)}
+              className="bg-gold-metallic text-on-primary font-label-caps text-[11px] uppercase tracking-wider px-4 py-2 rounded-lg gold-glow cursor-pointer hover:scale-105 active:scale-95 transition-transform shrink-0"
+            >
+              View Receipt
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
 
