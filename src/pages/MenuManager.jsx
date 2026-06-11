@@ -208,7 +208,7 @@ export default function MenuManager() {
                         {item.category}
                       </span>
                     </td>
-                    <td className="px-6 py-3 font-price-display text-on-surface">${item.price}</td>
+                    <td className="px-6 py-3 font-price-display text-on-surface">₹{item.price}</td>
                     <td className="px-6 py-3">
                       <button 
                         onClick={() => toggleStatus(item)}
@@ -269,7 +269,7 @@ export default function MenuManager() {
                     <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none" />
                   </div>
                   <div className="col-span-2 sm:col-span-1">
-                    <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">Price ($)</label>
+                    <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">Price (₹)</label>
                     <input required type="number" step="0.01" min="0" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none" />
                   </div>
                   <div className="col-span-2">

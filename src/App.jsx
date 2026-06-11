@@ -157,7 +157,7 @@ function MenuPage() {
                 {heroItem.description}
               </p>
               <div className="flex items-center gap-4">
-                <span className="font-price-display text-price-display text-primary-fixed-dim">${heroItem.price}</span>
+                <span className="font-price-display text-price-display text-primary-fixed-dim">₹{heroItem.price}</span>
                 <button 
                   onClick={() => handleOrderNow(heroItem)}
                   className="bg-gold-metallic text-on-primary font-label-caps text-label-caps px-6 py-3 rounded uppercase tracking-wider gold-glow transition-all"
@@ -237,7 +237,7 @@ function MenuPage() {
                   <div>
                     <div className="flex justify-between items-start mb-2">
                       <h3 className="font-headline-sm text-headline-sm text-primary group-hover:text-primary-fixed transition-colors mb-1">{item.name}</h3>
-                      <span className="font-price-display text-price-display text-on-surface">${item.price}</span>
+                      <span className="font-price-display text-price-display text-on-surface">₹{item.price}</span>
                     </div>
                     <p className="font-body-md text-body-md text-on-surface-variant/70 line-clamp-3 mb-3">
                       {item.description}
@@ -337,7 +337,7 @@ function MenuPage() {
                     >
                       <div className="flex-1 pr-4">
                         <h4 className="font-body-md text-on-surface font-medium">{item.name}</h4>
-                        <span className="font-price-display text-[14px] text-primary-fixed-dim">${item.price}</span>
+                        <span className="font-price-display text-[14px] text-primary-fixed-dim">₹{item.price}</span>
                       </div>
                       <div className="flex items-center gap-3 bg-surface-container-high rounded border border-outline-variant/30 px-2 py-1">
                         <button onClick={() => updateQuantity(item._id, -1)} className="text-on-surface-variant hover:text-primary">
@@ -357,7 +357,7 @@ function MenuPage() {
             <div className="p-6 border-t border-outline-variant/20 bg-surface-container-lowest">
               <div className="flex justify-between items-center mb-4">
                 <span className="font-body-lg text-body-lg text-on-surface">Subtotal</span>
-                <span className="font-price-display text-price-display text-primary">${cartTotal.toFixed(2)}</span>
+                <span className="font-price-display text-price-display text-primary">₹{cartTotal.toFixed(2)}</span>
               </div>
               <button 
                 onClick={() => setIsCheckoutOpen(true)}
@@ -401,7 +401,7 @@ function MenuPage() {
                 </div>
                 <div className="bg-surface-container-high border border-outline-variant/20 rounded-lg p-3">
                   <span className="font-label-caps text-label-caps text-on-surface-variant block mb-1">Total</span>
-                  <strong className="font-price-display text-price-display text-primary">${cartTotal.toFixed(2)}</strong>
+                  <strong className="font-price-display text-price-display text-primary">₹{cartTotal.toFixed(2)}</strong>
                 </div>
               </div>
 
