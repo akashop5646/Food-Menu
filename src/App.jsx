@@ -5,42 +5,13 @@ import QRCode from 'qrcode';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 
-const MOCK_ITEMS = [
-  {
-    id: '1',
-    category: 'Signature',
-    name: 'Wagyu Tartare',
-    price: 32,
-    description: 'Hand-cut A5 Wagyu, cured egg yolk, caper dust, and house-made brioche toast points.',
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBx0Ol3RYYWpF18-XaCwRHQ4ShEX7Vr9RWv5Qwe6idMfuQA5KG9LLNzl4QnQMsk6niw09RFqBQtgK9Eaf4AGbE7VAX93POtMMTjrNrYXGY19emxfui6TFlg_Cax_1eAU_ZrA-qupPebLJPa2cci6OZ5p5xn1H3Pj2XfFfq9HnJb0DfNe7rdmjG2YJzmGd6y2X7giwcpUnotQgr39gW0_mTPmi4D8HQSdOHg3cmbStsehCiXGbb4EfAxKtvr_hKxqGhD6bfHmMmcEnQ',
-    chefPick: true,
-  },
-  {
-    id: '2',
-    category: 'Mains',
-    name: 'Truffle Risotto',
-    price: 42,
-    description: 'Aquerello rice, 24-month Parmigiano-Reggiano, finished with fresh seasonal black truffle shavings.',
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAZ09dG-17uv6JgzqLuBDDnjAF5XZh-0rcEswei7nkmAJeWyvQCNi0Stb-ve6kIw3sMoyI_U-889NYiMUI31DF6i6jW3f6bnGOFZsHJddWKA4t2oj9TBrRjU6HflajtUdIbUYBQh2Cqj1HCfeYw_8mqhW69MGeRlQ8jgPWfPwPFPB4dzCeOKTmJ4nA1KuULsa4uEhDcPscSCrgTvAdiBnK0BhlIIlrS3o06nfLlkDBw74wNe1AeOP8qFK_C6nHkQdCTmLaFnwCCjN0',
-    chefPick: false,
-  },
-  {
-    id: '3',
-    category: 'Signature',
-    name: 'Black Garlic Chicken',
-    price: 48,
-    description: 'Charcoal-roasted heritage breed chicken, infused with aged black garlic, served with wild mushrooms and a rich truffle jus.',
-    image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCwrfpdpMeBRwq46s09MloGBE5BZuhdZfHkwOMD8U5erkHTJUgGc87L5m29O3wcoItAA6BIoGqtZtvADpP1nfyzxSzI1JpV2L5SG4nF-mfilkwQVKFiFGfNrge5N5Wyihebjt5TeQUUEHyf2xYMDNUxNSkO_vrkHcj6LN9bSBN3czHnFqy1507jUTsP3j9hWrdg0pvvuomdbpY2llJz87g4NpSIGMOdvZQ0NGBl2rjCON6clcmnG1X6JXsTciuHa2eTXXQv1bqSeNo',
-    chefPick: true,
-  }
-];
-
-const CATEGORIES = ['All', 'Signature', 'Small Plates', 'Mains', 'Desserts', 'Beverages'];
-
 function MenuPage() {
   const [searchParams] = useSearchParams();
   const tableParam = searchParams.get('table') || 'Walk-in';
 
+  const [menuItems, setMenuItems] = useState([]);
+  const [categories, setCategories] = useState(['All']);
+  const [menuLoading, setMenuLoading] = useState(true);
   const [cart, setCart] = useState([]);
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -51,23 +22,48 @@ function MenuPage() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [qrCode, setQrCode] = useState('');
 
+  // Fetch menu items and categories from API
+  useEffect(() => {
+    const fetchMenu = async () => {
+      try {
+        const [itemsRes, catsRes] = await Promise.all([
+          fetch('/api/menu'),
+          fetch('/api/menu/categories'),
+        ]);
+        const items = await itemsRes.json();
+        const cats = await catsRes.json();
+        setMenuItems(Array.isArray(items) ? items : []);
+        setCategories(['All', ...(Array.isArray(cats) ? cats : [])]);
+      } catch (err) {
+        console.error('Failed to fetch menu:', err);
+      } finally {
+        setMenuLoading(false);
+      }
+    };
+    fetchMenu();
+  }, []);
+
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
+  const heroItem = useMemo(() => {
+    return menuItems.find(item => item.chefPick) || menuItems[0] || null;
+  }, [menuItems]);
+
   const filteredItems = useMemo(() => {
-    return MOCK_ITEMS.filter(item => {
+    return menuItems.filter(item => {
       const matchCat = activeCategory === 'All' || item.category === activeCategory;
       const matchSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          item.description.toLowerCase().includes(searchQuery.toLowerCase());
+                          (item.description || '').toLowerCase().includes(searchQuery.toLowerCase());
       return matchCat && matchSearch;
     });
-  }, [activeCategory, searchQuery]);
+  }, [activeCategory, searchQuery, menuItems]);
 
   const addToCart = (dish) => {
     setCart(prev => {
-      const existing = prev.find(i => i.id === dish.id);
+      const existing = prev.find(i => i._id === dish._id);
       if (existing) {
-        return prev.map(i => i.id === dish.id ? { ...i, quantity: i.quantity + 1 } : i);
+        return prev.map(i => i._id === dish._id ? { ...i, quantity: i.quantity + 1 } : i);
       }
       return [...prev, { ...dish, quantity: 1 }];
     });
@@ -75,7 +71,7 @@ function MenuPage() {
 
   const updateQuantity = (id, change) => {
     setCart(prev => prev.map(item => {
-      if (item.id === id) {
+      if (item._id === id) {
         return { ...item, quantity: Math.max(0, item.quantity + change) };
       }
       return item;
@@ -98,7 +94,7 @@ function MenuPage() {
       table: selectedTable,
       itemCount: cartCount,
       total: cartTotal,
-      items: cart.map(item => ({ id: item.id, name: item.name, price: item.price, quantity: item.quantity })),
+      items: cart.map(item => ({ id: item._id, name: item.name, price: item.price, quantity: item.quantity })),
       createdAt: new Date().toISOString(),
     };
   }, [cart, cartCount, cartTotal, selectedTable]);
@@ -137,33 +133,48 @@ function MenuPage() {
       <main className="pt-16 max-w-[1200px] mx-auto">
         
         {/* Hero Section */}
-        <section className="relative h-[530px] md:h-[618px] flex flex-col justify-end p-margin-mobile md:p-margin-desktop bg-surface-container overflow-hidden">
-          <div 
-            className="absolute inset-0 bg-center bg-cover bg-no-repeat opacity-40 mix-blend-luminosity" 
-            style={{ backgroundImage: `url('https://lh3.googleusercontent.com/aida-public/AB6AXuCwrfpdpMeBRwq46s09MloGBE5BZuhdZfHkwOMD8U5erkHTJUgGc87L5m29O3wcoItAA6BIoGqtZtvADpP1nfyzxSzI1JpV2L5SG4nF-mfilkwQVKFiFGfNrge5N5Wyihebjt5TeQUUEHyf2xYMDNUxNSkO_vrkHcj6LN9bSBN3czHnFqy1507jUTsP3j9hWrdg0pvvuomdbpY2llJz87g4NpSIGMOdvZQ0NGBl2rjCON6clcmnG1X6JXsTciuHa2eTXXQv1bqSeNo')` }}
-          />
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
-            className="relative z-10 w-full md:w-2/3"
-          >
-            <span className="font-label-caps text-label-caps text-primary tracking-widest uppercase mb-4 block">Signature Tasting</span>
-            <h1 className="font-display-lg-mobile text-display-lg-mobile md:font-display-lg md:text-display-lg text-primary mb-2 leading-tight">Black Garlic Chicken</h1>
-            <p className="font-body-lg text-body-lg text-on-surface-variant max-w-lg mb-6 line-clamp-3">
-              Charcoal-roasted heritage breed chicken, infused with aged black garlic, served with wild mushrooms and a rich truffle jus.
-            </p>
-            <div className="flex items-center gap-4">
-              <span className="font-price-display text-price-display text-primary-fixed-dim">$48</span>
-              <button 
-                onClick={() => handleOrderNow(MOCK_ITEMS[2])}
-                className="bg-gold-metallic text-on-primary font-label-caps text-label-caps px-6 py-3 rounded uppercase tracking-wider gold-glow transition-all"
-              >
-                Order Now
-              </button>
+        {menuLoading ? (
+          <section className="h-[530px] md:h-[618px] flex items-center justify-center">
+            <span className="material-symbols-outlined text-primary text-4xl animate-spin">progress_activity</span>
+          </section>
+        ) : heroItem ? (
+          <section className="relative h-[530px] md:h-[618px] flex flex-col justify-end p-margin-mobile md:p-margin-desktop bg-surface-container overflow-hidden">
+            {heroItem.image && (
+              <div 
+                className="absolute inset-0 bg-center bg-cover bg-no-repeat opacity-40 mix-blend-luminosity" 
+                style={{ backgroundImage: `url('${heroItem.image}')` }}
+              />
+            )}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, ease: "easeOut" }}
+              className="relative z-10 w-full md:w-2/3"
+            >
+              <span className="font-label-caps text-label-caps text-primary tracking-widest uppercase mb-4 block">Signature Tasting</span>
+              <h1 className="font-display-lg-mobile text-display-lg-mobile md:font-display-lg md:text-display-lg text-primary mb-2 leading-tight">{heroItem.name}</h1>
+              <p className="font-body-lg text-body-lg text-on-surface-variant max-w-lg mb-6 line-clamp-3">
+                {heroItem.description}
+              </p>
+              <div className="flex items-center gap-4">
+                <span className="font-price-display text-price-display text-primary-fixed-dim">${heroItem.price}</span>
+                <button 
+                  onClick={() => handleOrderNow(heroItem)}
+                  className="bg-gold-metallic text-on-primary font-label-caps text-label-caps px-6 py-3 rounded uppercase tracking-wider gold-glow transition-all"
+                >
+                  Order Now
+                </button>
+              </div>
+            </motion.div>
+          </section>
+        ) : (
+          <section className="h-[530px] md:h-[618px] flex items-center justify-center bg-surface-container text-on-surface-variant">
+            <div className="text-center">
+              <span className="material-symbols-outlined text-6xl mb-4 opacity-50">restaurant_menu</span>
+              <h2 className="font-headline-md text-headline-md">Menu Coming Soon</h2>
             </div>
-          </motion.div>
-        </section>
+          </section>
+        )}
 
         {/* Sticky Search & Filters */}
         <section className="sticky top-[64px] md:top-0 z-40 bg-background/95 backdrop-blur-xl border-b border-outline-variant/30 py-4 px-margin-mobile md:px-margin-desktop flex flex-col gap-4">
@@ -199,16 +210,22 @@ function MenuPage() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.4, delay: i * 0.05 }}
-                key={item.id} 
+                key={item._id} 
                 className="bg-surface-container border border-primary/20 rounded-lg overflow-hidden group hover:border-primary/50 transition-colors flex flex-col"
               >
                 <div className="relative overflow-hidden p-4 h-36 md:h-48">
                   <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors z-10"></div>
-                  <img 
-                    src={item.image} 
-                    alt={item.name} 
-                    className="w-full h-full object-cover rounded-md group-hover:scale-105 transition-transform duration-700" 
-                  />
+                  {item.image ? (
+                    <img 
+                      src={item.image} 
+                      alt={item.name} 
+                      className="w-full h-full object-cover rounded-md group-hover:scale-105 transition-transform duration-700" 
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-surface-variant flex items-center justify-center">
+                      <span className="material-symbols-outlined text-4xl opacity-20">restaurant</span>
+                    </div>
+                  )}
                   {item.chefPick && (
                     <div className="absolute z-20 bg-primary/90 backdrop-blur text-on-primary px-2 py-1 text-[10px] font-label-caps uppercase tracking-widest rounded-sm flex items-center gap-1 top-4 left-4">
                       <span className="material-symbols-outlined text-[12px]">star</span> Chef Pick
@@ -311,7 +328,7 @@ function MenuPage() {
                 <AnimatePresence>
                   {cart.map(item => (
                     <motion.div 
-                      key={item.id}
+                      key={item._id}
                       layout
                       initial={{ opacity: 0, scale: 0.95 }}
                       animate={{ opacity: 1, scale: 1 }}
@@ -323,11 +340,11 @@ function MenuPage() {
                         <span className="font-price-display text-[14px] text-primary-fixed-dim">${item.price}</span>
                       </div>
                       <div className="flex items-center gap-3 bg-surface-container-high rounded border border-outline-variant/30 px-2 py-1">
-                        <button onClick={() => updateQuantity(item.id, -1)} className="text-on-surface-variant hover:text-primary">
+                        <button onClick={() => updateQuantity(item._id, -1)} className="text-on-surface-variant hover:text-primary">
                           <span className="material-symbols-outlined text-[18px]">remove</span>
                         </button>
                         <span className="font-body-md text-on-surface w-4 text-center">{item.quantity}</span>
-                        <button onClick={() => updateQuantity(item.id, 1)} className="text-on-surface-variant hover:text-primary">
+                        <button onClick={() => updateQuantity(item._id, 1)} className="text-on-surface-variant hover:text-primary">
                           <span className="material-symbols-outlined text-[18px]">add</span>
                         </button>
                       </div>
@@ -454,7 +471,7 @@ function MenuPage() {
               <div>
                 <label className="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest block mb-3">Categories</label>
                 <div className="flex flex-wrap gap-2">
-                  {CATEGORIES.map(cat => (
+                  {categories.map(cat => (
                     <button 
                       key={cat}
                       onClick={() => setActiveCategory(cat)}

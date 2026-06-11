@@ -6,6 +6,7 @@ import { connectDB } from './db.js';
 import authRoutes from './routes/auth.js';
 import tablesRoutes from './routes/tables.js';
 import locationsRoutes from './routes/locations.js';
+import menuRoutes from './routes/menu.js';
 dotenv.config();
 
 const app = express();
@@ -23,6 +24,7 @@ app.use(cookieParser());
 app.use('/api/auth', authRoutes);
 app.use('/api/tables', tablesRoutes);
 app.use('/api/locations', locationsRoutes);
+app.use('/api/menu', menuRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
