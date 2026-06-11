@@ -205,6 +205,8 @@ export default function AdminDashboard() {
                   <h3 className="font-title-md text-title-md text-on-surface flex items-center gap-2">
                     New
                     <span className="bg-error/20 text-error font-mono-data text-mono-data px-2 py-0.5 rounded-full">0</span>
+                  </h3>
+                </div>
                 <div className="flex-1 overflow-y-auto p-4 flex flex-col items-center justify-center text-center opacity-50">
                   <span className="material-symbols-outlined text-4xl mb-2">receipt_long</span>
                   <p className="font-body-sm text-body-sm">No new orders</p>
