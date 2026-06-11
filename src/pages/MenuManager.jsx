@@ -12,6 +12,27 @@ export default function MenuManager() {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [notification, setNotification] = useState('');
   
+  // Search & Filter States
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedStatus, setSelectedStatus] = useState('All');
+
+  const filteredItems = items.filter(item => {
+    const matchesSearch = 
+      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    const itemCats = item.categories || (item.category ? [item.category] : []);
+    const matchesCategory = selectedCategory === 'All' || itemCats.includes(selectedCategory);
+
+    const matchesStatus = 
+      selectedStatus === 'All' ||
+      (selectedStatus === 'In Stock' && item.available !== false) ||
+      (selectedStatus === 'Out of Stock' && item.available === false);
+
+    return matchesSearch && matchesCategory && matchesStatus;
+  });
+
   const [formData, setFormData] = useState({
     name: '',
     categories: [],
@@ -229,6 +250,69 @@ export default function MenuManager() {
         </div>
       </div>
 
+      {/* Search & Filter Controls */}
+      {!loading && items.length > 0 && (
+        <div className="flex flex-col md:flex-row gap-4 mb-6 animate-[fadeUp_0.7s_ease-out_forwards]">
+          {/* Search Bar */}
+          <div className="relative flex-1">
+            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60 text-[20px]">
+              search
+            </span>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search items by name or description..."
+              className="w-full bg-surface-container border border-outline-variant/20 text-on-surface pl-10 pr-10 py-2.5 rounded-xl focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all placeholder:text-on-surface-variant/40 font-body-md text-sm"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60 hover:text-primary transition-colors flex items-center justify-center"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            )}
+          </div>
+
+          {/* Category Filter */}
+          <div className="relative min-w-[160px]">
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="w-full bg-surface-container border border-outline-variant/20 text-on-surface px-4 py-2.5 pr-10 rounded-xl focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all cursor-pointer font-body-md text-sm appearance-none"
+            >
+              <option value="All">All Categories</option>
+              {categories.map((cat) => (
+                <option key={cat._id} value={cat.name}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+            <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant/60 text-[20px]">
+              unfold_more
+            </span>
+          </div>
+
+          {/* Status Filter */}
+          <div className="relative min-w-[150px]">
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="w-full bg-surface-container border border-outline-variant/20 text-on-surface px-4 py-2.5 pr-10 rounded-xl focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all cursor-pointer font-body-md text-sm appearance-none"
+            >
+              <option value="All">All Statuses</option>
+              <option value="In Stock">In Stock</option>
+              <option value="Out of Stock">Out of Stock</option>
+            </select>
+            <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant/60 text-[20px]">
+              unfold_more
+            </span>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex justify-center items-center py-20">
           <span className="material-symbols-outlined text-primary text-4xl animate-spin">progress_activity</span>
@@ -237,6 +321,17 @@ export default function MenuManager() {
         <div className="flex flex-col items-center justify-center py-20 opacity-50 bg-surface-container-low rounded-xl border border-outline-variant/20">
           <span className="material-symbols-outlined text-6xl mb-4">restaurant_menu</span>
           <p className="font-body-lg text-[16px]">No menu items found. Add one to get started.</p>
+        </div>
+      ) : filteredItems.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 opacity-50 bg-surface-container-low rounded-xl border border-outline-variant/20">
+          <span className="material-symbols-outlined text-5xl mb-3">search_off</span>
+          <p className="font-body-lg text-[16px] font-medium">No items match your search filters.</p>
+          <button 
+            onClick={() => { setSearchQuery(''); setSelectedCategory('All'); setSelectedStatus('All'); }} 
+            className="mt-3 text-primary text-xs font-label-caps uppercase tracking-wider hover:underline"
+          >
+            Reset Filters
+          </button>
         </div>
       ) : (
         <div className="bg-surface-container-low rounded-xl border border-outline-variant/20 overflow-hidden shadow-lg animate-[fadeUp_0.8s_ease-out_forwards]">
@@ -253,7 +348,7 @@ export default function MenuManager() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((item, idx) => (
+                {filteredItems.map((item, idx) => (
                   <tr key={item._id} className="border-b border-outline-variant/10 hover:bg-surface-container-highest/50 transition-colors">
                     <td className="px-6 py-3">
                       {item.image ? (
