@@ -21,6 +21,7 @@ function MenuPage() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [notification, setNotification] = useState('');
+  const [selectedItem, setSelectedItem] = useState(null);
   const [qrCode, setQrCode] = useState('');
 
   // Fetch menu items and categories from API
@@ -53,10 +54,11 @@ function MenuPage() {
 
   const filteredItems = useMemo(() => {
     return menuItems.filter(item => {
-      const matchCat = activeCategory === 'All' || item.category === activeCategory;
-      const matchSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          (item.description || '').toLowerCase().includes(searchQuery.toLowerCase());
-      return matchCat && matchSearch;
+      const itemCats = item.categories || (item.category ? [item.category] : []);
+      const matchesCategory = activeCategory === 'All' || itemCats.includes(activeCategory);
+      const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                           item.description.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCategory && matchesSearch;
     });
   }, [activeCategory, searchQuery, menuItems]);
 
@@ -218,7 +220,8 @@ function MenuPage() {
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.4, delay: i * 0.05 }}
                 key={item._id} 
-                className="bg-surface-container border border-primary/20 rounded-lg overflow-hidden group hover:border-primary/50 transition-colors flex flex-col"
+                onClick={() => setSelectedItem(item)}
+                className="bg-surface-container border border-primary/20 rounded-lg overflow-hidden group hover:border-primary/50 transition-colors flex flex-col cursor-pointer"
               >
                 <div className="relative overflow-hidden aspect-[4/3] w-full border-b border-primary/10">
                   {item.image ? (
@@ -248,25 +251,9 @@ function MenuPage() {
                       <h3 className="font-headline-sm text-[16px] md:text-headline-sm text-primary group-hover:text-primary-fixed transition-colors line-clamp-1">{item.name}</h3>
                       <span className="font-price-display text-[14px] md:text-price-display text-on-surface">₹{item.price}</span>
                     </div>
-                    <p className="font-body-md text-[12px] md:text-body-md text-on-surface-variant/70 line-clamp-2 mb-2 md:mb-3">
+                    <p className="font-body-md text-[12px] md:text-body-md text-on-surface-variant/70 line-clamp-2">
                       {item.description}
                     </p>
-                  </div>
-                  
-                  <div className="flex flex-col xl:flex-row gap-2 mt-auto border-t border-outline-variant/10 pt-3">
-                    <button 
-                      onClick={() => addToCart(item)}
-                      className="flex-1 bg-surface-container-highest hover:bg-surface-bright text-on-surface border border-outline-variant/30 font-label-caps text-[10px] md:text-label-caps py-1.5 md:py-2 rounded uppercase tracking-wider transition-colors"
-                    >
-                      <span className="hidden xl:inline">Add to Cart</span>
-                      <span className="xl:hidden">+ Add</span>
-                    </button>
-                    <button 
-                      onClick={() => handleOrderNow(item)}
-                      className="flex-1 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 font-label-caps text-[10px] md:text-label-caps py-1.5 md:py-2 rounded uppercase tracking-wider transition-colors"
-                    >
-                      Order
-                    </button>
                   </div>
                 </div>
               </motion.article>
@@ -506,6 +493,80 @@ function MenuPage() {
                 Apply Filters
               </button>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Item Detail Modal */}
+      <AnimatePresence>
+        {selectedItem && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 md:p-8"
+            onClick={() => setSelectedItem(null)}
+          >
+            <motion.div 
+              initial={{ opacity: 0, y: 50, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 50, scale: 0.95 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-surface-container w-full max-w-2xl rounded-2xl overflow-hidden flex flex-col max-h-[90vh] shadow-2xl border border-primary/20"
+            >
+              <div className="relative w-full h-64 md:h-80 shrink-0">
+                {selectedItem.image ? (
+                  <img src={selectedItem.image} alt={selectedItem.name} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-surface-variant flex items-center justify-center">
+                    <span className="material-symbols-outlined text-6xl opacity-20">restaurant</span>
+                  </div>
+                )}
+                <button 
+                  onClick={() => setSelectedItem(null)}
+                  className="absolute top-4 right-4 bg-black/50 hover:bg-black/80 text-white p-2 rounded-full backdrop-blur-md transition-colors"
+                >
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+              
+              <div className="p-6 md:p-8 flex-1 overflow-y-auto hide-scrollbar">
+                <div className="flex justify-between items-start mb-4 gap-4">
+                  <h2 className="font-headline-md text-primary text-2xl md:text-3xl">{selectedItem.name}</h2>
+                  <span className="font-price-display text-on-surface text-xl md:text-2xl shrink-0">₹{selectedItem.price}</span>
+                </div>
+                
+                <div className="flex flex-wrap gap-2 mb-6">
+                  {(selectedItem.categories || (selectedItem.category ? [selectedItem.category] : [])).map(cat => (
+                    <span key={cat} className="bg-surface-variant text-on-surface-variant px-3 py-1 rounded-full text-[12px] font-label-caps uppercase tracking-widest">{cat}</span>
+                  ))}
+                  {selectedItem.chefPick && (
+                    <span className="bg-primary/20 text-primary border border-primary/30 px-3 py-1 rounded-full text-[12px] font-label-caps uppercase tracking-widest flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[14px]">star</span> Chef's Pick
+                    </span>
+                  )}
+                </div>
+                
+                <p className="font-body-md text-on-surface-variant/90 leading-relaxed whitespace-pre-wrap">
+                  {selectedItem.description}
+                </p>
+              </div>
+              
+              <div className="p-6 border-t border-outline-variant/10 bg-surface-container-lowest flex gap-4 shrink-0">
+                <button 
+                  onClick={() => { addToCart(selectedItem); setSelectedItem(null); }}
+                  className="flex-1 bg-surface-container-highest hover:bg-surface-bright text-on-surface border border-outline-variant/30 font-label-caps text-[14px] py-3 md:py-4 rounded uppercase tracking-wider transition-colors"
+                >
+                  Add to Cart
+                </button>
+                <button 
+                  onClick={() => { handleOrderNow(selectedItem); setSelectedItem(null); }}
+                  className="flex-1 bg-primary text-on-primary font-label-caps text-[14px] py-3 md:py-4 rounded uppercase tracking-wider gold-glow transition-all"
+                >
+                  Order Now
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -14,7 +14,7 @@ export default function MenuManager() {
   
   const [formData, setFormData] = useState({
     name: '',
-    category: 'Starter',
+    categories: [],
     price: '',
     description: '',
     image: '',
@@ -28,8 +28,8 @@ export default function MenuManager() {
       setCategories(Array.isArray(data) ? data : []);
       
       // Update form default category if categories exist and form is empty
-      if (data.length > 0 && formData.category === 'Starter') {
-        setFormData(prev => ({ ...prev, category: data[0].name }));
+      if (data.length > 0 && formData.categories.length === 0) {
+        setFormData(prev => ({ ...prev, categories: [data[0].name] }));
       }
     } catch (err) {
       console.error('Failed to fetch categories:', err);
@@ -68,7 +68,7 @@ export default function MenuManager() {
       setEditingItem(item);
       setFormData({
         name: item.name,
-        category: item.category,
+        categories: item.categories || (item.category ? [item.category] : []),
         price: item.price,
         description: item.description || '',
         image: item.image || '',
@@ -78,7 +78,7 @@ export default function MenuManager() {
       setEditingItem(null);
       setFormData({
         name: '',
-        category: categories.length > 0 ? categories[0].name : '',
+        categories: categories.length > 0 ? [categories[0].name] : [],
         price: '',
         description: '',
         image: '',
@@ -270,10 +270,12 @@ export default function MenuManager() {
                       <div className="font-title-md text-on-surface">{item.name}</div>
                       {item.chefPick && <div className="text-[10px] font-label-caps text-primary uppercase tracking-widest mt-1">Chef Pick</div>}
                     </td>
-                    <td className="px-6 py-3">
-                      <span className="bg-surface-variant text-on-surface-variant px-2 py-1 rounded text-[12px] font-mono-data tracking-wider">
-                        {item.category}
-                      </span>
+                    <td className="p-4 align-middle">
+                      <div className="flex flex-wrap gap-1">
+                        {(item.categories || (item.category ? [item.category] : [])).map(cat => (
+                          <span key={cat} className="bg-surface-variant text-on-surface-variant px-2 py-0.5 rounded-full text-[12px] font-label-caps uppercase tracking-widest">{cat}</span>
+                        ))}
+                      </div>
                     </td>
                     <td className="px-6 py-3 font-price-display text-on-surface">₹{item.price}</td>
                     <td className="px-6 py-3">
@@ -340,17 +342,31 @@ export default function MenuManager() {
                     <input required type="number" step="0.01" min="0" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none" />
                   </div>
                   <div className="col-span-2">
-                    <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">Category</label>
-                    <select 
-                      value={formData.category} 
-                      onChange={e => setFormData({...formData, category: e.target.value})}
-                      className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none cursor-pointer"
-                    >
-                      {categories.map(cat => (
-                        <option key={cat._id} value={cat.name}>{cat.name}</option>
-                      ))}
-                      {categories.length === 0 && <option value="" disabled>No categories available</option>}
-                    </select>
+                    <label className="block font-label-caps text-[12px] uppercase tracking-widest text-on-surface-variant mb-2">Categories</label>
+                    <div className="flex flex-wrap gap-2 max-h-[100px] overflow-y-auto p-2 bg-surface-container-highest border border-outline-variant/50 rounded">
+                      {categories.map(cat => {
+                        const isSelected = formData.categories.includes(cat.name);
+                        return (
+                          <label key={cat._id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full cursor-pointer transition-colors text-sm ${isSelected ? 'bg-primary/20 text-primary border border-primary/50' : 'bg-surface-container text-on-surface border border-outline-variant/30 hover:border-outline-variant'}`}>
+                            <input 
+                              type="checkbox"
+                              className="hidden"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  categories: e.target.checked 
+                                    ? [...prev.categories, cat.name]
+                                    : prev.categories.filter(c => c !== cat.name)
+                                }));
+                              }}
+                            />
+                            {cat.name}
+                          </label>
+                        );
+                      })}
+                      {categories.length === 0 && <span className="text-sm text-on-surface-variant opacity-70 italic">No categories available</span>}
+                    </div>
                   </div>
                   <div className="col-span-2">
                     <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">Description</label>

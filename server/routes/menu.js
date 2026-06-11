@@ -17,10 +17,19 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const db = await getDB();
-    const items = await db.collection('menu_items')
+    let items = await db.collection('menu_items')
       .find({ available: { $ne: false } })
       .sort({ chefPick: -1, createdAt: -1 })
       .toArray();
+      
+    // Migration for legacy data
+    items = items.map(item => {
+      if (!item.categories && item.category) {
+        item.categories = [item.category];
+      }
+      return item;
+    });
+    
     res.json(items);
   } catch (error) {
     console.error('Error fetching menu items:', error);
@@ -31,15 +40,17 @@ router.get('/', async (req, res) => {
 // POST create a new menu item
 router.post('/', async (req, res) => {
   try {
-    const { name, category, price, description, image, chefPick } = req.body;
-    if (!name || !category || price == null) {
-      return res.status(400).json({ error: 'Name, category, and price are required.' });
+    const { name, categories, price, description, image, chefPick } = req.body;
+    
+    // Validation
+    if (!name || price == null) {
+      return res.status(400).json({ error: 'Name and price are required.' });
     }
 
     const db = await getDB();
     const newItem = {
       name,
-      category,
+      categories: Array.isArray(categories) ? categories : [],
       price: Number(price),
       description: description || '',
       image: image || '',
@@ -61,11 +72,19 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const { name, categories, price, description, image, chefPick, available } = req.body;
     const updates = {};
-    const allowed = ['name', 'category', 'price', 'description', 'image', 'chefPick', 'available'];
+    const allowed = ['name', 'categories', 'price', 'description', 'image', 'chefPick', 'available'];
+    
     for (const key of allowed) {
       if (req.body[key] !== undefined) {
-        updates[key] = key === 'price' ? Number(req.body[key]) : req.body[key];
+        if (key === 'price') {
+          updates[key] = Number(req.body[key]);
+        } else if (key === 'categories') {
+          updates[key] = Array.isArray(req.body[key]) ? req.body[key] : [];
+        } else {
+          updates[key] = req.body[key];
+        }
       }
     }
 
