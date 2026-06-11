@@ -186,19 +186,12 @@ export default function AdminDashboard() {
             <h2 className="font-headline-lg text-headline-lg text-primary tracking-tight">Aurum OS</h2>
           </div>
           <div className="flex items-center gap-2 sm:gap-6">
-            <div className="relative group">
-              <input className="bg-transparent border-0 border-b border-surface-variant focus:border-primary text-on-surface font-body-sm text-body-sm pb-1 w-28 sm:w-48 focus:w-40 sm:focus:w-64 transition-all duration-300 focus:ring-0 placeholder:text-on-surface-variant/50 outline-none" placeholder="Search orders..." type="text"/>
-              <span className="material-symbols-outlined absolute right-0 bottom-2 text-on-surface-variant group-focus-within:text-primary transition-colors text-sm">search</span>
-            </div>
             <button onClick={handleThemeToggle} className="text-on-surface-variant hover:text-primary transition-all ripple-effect cursor-pointer">
               <span className="material-symbols-outlined">{isDark ? 'light_mode' : 'dark_mode'}</span>
             </button>
             <button className="text-on-surface-variant hover:text-primary transition-all ripple-effect cursor-pointer relative">
               <span className="material-symbols-outlined">notifications</span>
               <span className="absolute top-0 right-0 w-2 h-2 bg-error rounded-full"></span>
-            </button>
-            <button className="text-on-surface-variant hover:text-primary transition-all ripple-effect cursor-pointer">
-              <span className="material-symbols-outlined">account_circle</span>
             </button>
           </div>
         </header>
