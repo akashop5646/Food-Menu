@@ -26,6 +26,7 @@ function MenuPage() {
   const [selectedTable] = useState(tableParam);
   const [selectedLocation] = useState(locationParam);
   const [activeOrder, setActiveOrder] = useState(null);
+  const [activeOrders, setActiveOrders] = useState([]);
 
   useEffect(() => {
     localStorage.setItem('aurum_cart', JSON.stringify(cart));
@@ -171,12 +172,25 @@ function MenuPage() {
 
   const upiUrl = useMemo(() => {
     if (!gpayId) return '';
-    const activeTotal = activeOrder ? activeOrder.total : cartTotal;
-    const activeItems = activeOrder ? activeOrder.items : cart;
+    
+    // Check if we have verified unpaid orders to charge.
+    const unpaidList = activeOrders.filter(o => o.paymentStatus !== 'PAID');
+    const unpaidTotalAmt = unpaidList.reduce((sum, o) => sum + o.total, 0);
+    
+    const activeTotal = unpaidTotalAmt > 0 ? unpaidTotalAmt : (activeOrder ? activeOrder.total : cartTotal);
     if (!activeTotal) return '';
 
-    // Format items as a compact summary: e.g. "2x Golden Risotto, 1x Lobster Tail"
-    const itemsSummary = activeItems.map(item => `${item.quantity}x ${item.name}`).join(', ');
+    const activeItems = unpaidList.length > 0 
+      ? unpaidList.flatMap(o => o.items) 
+      : (activeOrder ? activeOrder.items : cart);
+
+    // Group items by name to avoid duplicate lines in compact note
+    const groupedItems = {};
+    activeItems.forEach(item => {
+      groupedItems[item.name] = (groupedItems[item.name] || 0) + item.quantity;
+    });
+
+    const itemsSummary = Object.entries(groupedItems).map(([name, qty]) => `${qty}x ${name}`).join(', ');
     const prefix = `T${selectedTable} Order: `;
     const maxNoteLength = 80; // Standard UPI note limit
     let note = prefix + itemsSummary;
@@ -184,7 +198,7 @@ function MenuPage() {
       note = note.substring(0, maxNoteLength - 3) + '...';
     }
     return `upi://pay?pa=${gpayId}&pn=${encodeURIComponent("Aurum Table")}&am=${activeTotal.toFixed(2)}&cu=INR&tn=${encodeURIComponent(note)}`;
-  }, [gpayId, cartTotal, selectedTable, cart, activeOrder]);
+  }, [gpayId, cartTotal, selectedTable, cart, activeOrder, activeOrders]);
 
   useEffect(() => {
     if (!isCheckoutOpen || !upiUrl) {
@@ -227,6 +241,7 @@ function MenuPage() {
             setActiveOrder(null);
             setIsOrderVerified(false);
           }
+          setActiveOrders(data.orders || []);
         }
       } catch (err) {
         console.error('Error checking verification status:', err);
@@ -277,6 +292,11 @@ function MenuPage() {
     }
     showNotification('Thank you! Your order has been placed. You can pay later at the counter.');
   };
+
+  const sessionTotal = activeOrders.reduce((sum, o) => sum + o.total, 0);
+  const sessionItemsCount = activeOrders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.quantity, 0), 0);
+  const unpaidOrders = activeOrders.filter(o => o.paymentStatus !== 'PAID');
+  const unpaidTotal = unpaidOrders.reduce((sum, o) => sum + o.total, 0);
 
   return (
     <div className="bg-background text-on-surface pb-32 min-h-screen">
@@ -562,7 +582,7 @@ function MenuPage() {
             
             <div className="flex-1 p-8 flex flex-col items-center justify-center text-center overflow-y-auto">
               {/* Order Summary */}
-              <div className="grid grid-cols-3 gap-3 w-full mb-8">
+              <div className="grid grid-cols-3 gap-3 w-full mb-8 shrink-0">
                 <div className="bg-surface-container-high border border-outline-variant/20 rounded-lg p-3">
                   <span className="font-label-caps text-label-caps text-on-surface-variant block mb-1">Table</span>
                   <strong className="font-price-display text-price-display text-primary">{selectedTable}</strong>
@@ -571,14 +591,14 @@ function MenuPage() {
                   <span className="font-label-caps text-label-caps text-on-surface-variant block mb-1">Items</span>
                   <strong className="font-price-display text-price-display text-primary">
                     {activeOrder 
-                      ? activeOrder.items.reduce((sum, i) => sum + i.quantity, 0)
+                      ? sessionItemsCount
                       : cartCount}
                   </strong>
                 </div>
                 <div className="bg-surface-container-high border border-outline-variant/20 rounded-lg p-3">
                   <span className="font-label-caps text-label-caps text-on-surface-variant block mb-1">Total</span>
                   <strong className="font-price-display text-price-display text-primary">
-                    ₹{(activeOrder ? activeOrder.total : cartTotal).toFixed(2)}
+                    ₹{(activeOrder ? sessionTotal : cartTotal).toFixed(2)}
                   </strong>
                 </div>
               </div>
@@ -586,13 +606,13 @@ function MenuPage() {
               {activeOrder ? (
                 <>
                   <p className="font-body-md text-body-md text-on-surface-variant mb-6">
-                    {activeOrder.paymentStatus === 'PAID' 
-                      ? 'Your payment is verified and preparing.' 
-                      : 'Scan this QR with your payment app to pay now.'}
+                    {unpaidTotal > 0 
+                      ? 'Scan this QR with your payment app to pay now.'
+                      : 'All your orders are verified and preparing.'}
                   </p>
                   
-                  {activeOrder.paymentStatus !== 'PAID' && (
-                    <div className="bg-white p-4 rounded-xl mb-6 border-4 border-primary-container/30 gold-glow">
+                  {unpaidTotal > 0 && (
+                    <div className="bg-white p-4 rounded-xl mb-6 border-4 border-primary-container/30 gold-glow shrink-0">
                       {paymentQrCode ? (
                         <img src={paymentQrCode} alt="Payment QR Code" className="w-48 h-48 rounded" />
                       ) : (
@@ -601,34 +621,16 @@ function MenuPage() {
                     </div>
                   )}
 
-                  {/* Receipt Slip View */}
-                  <div className="w-full bg-surface-container-high border border-outline-variant/20 rounded-lg p-4 mb-6 text-left max-h-40 overflow-y-auto hide-scrollbar">
-                    <h4 className="font-body-sm text-primary font-medium mb-2 uppercase tracking-wide border-b border-outline-variant/10 pb-1 flex justify-between">
-                      <span>Ordered Receipt</span>
-                      <span className="text-[10px] text-on-surface-variant font-mono">#{activeOrder._id.toString().substring(18)}</span>
-                    </h4>
-                    <div className="space-y-1.5 text-sm font-body-md text-on-surface-variant/90 font-sans">
-                      {activeOrder.items.map((item, idx) => (
-                        <div key={item.id || item._id || idx} className="flex justify-between items-center text-[12px] gap-2">
-                          <span className="truncate flex-1 text-on-surface">
-                            <span className="text-primary font-semibold font-mono">{item.quantity}x</span> {item.name}
-                          </span>
-                          <span className="font-semibold shrink-0 text-on-surface-variant">₹{(item.price * item.quantity).toFixed(2)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
                   {/* Verification Status Banner */}
-                  <div className="w-full bg-primary/10 border border-primary/20 rounded-lg p-3.5 mb-6 text-center">
+                  <div className="w-full bg-primary/10 border border-primary/20 rounded-lg p-3.5 mb-6 text-center shrink-0">
                     <span className="font-label-caps text-[11px] text-primary font-bold flex items-center justify-center gap-1">
                       <span className="material-symbols-outlined text-sm">
-                        {activeOrder.paymentStatus === 'PAID' ? 'verified' : 'check_circle'}
+                        {unpaidTotal === 0 ? 'verified' : 'check_circle'}
                       </span>
-                      {activeOrder.paymentStatus === 'PAID' ? 'Order Paid & Confirmed' : 'Order Verified by Waiter'}
+                      {unpaidTotal === 0 ? 'All Orders Paid & Confirmed' : 'Orders Verified by Waiter'}
                     </span>
                     <p className="text-[10px] text-on-surface-variant/80 mt-1 leading-relaxed">
-                      Kitchen: {activeOrder.status} | Payment: {activeOrder.paymentStatus}
+                      Session Orders: {activeOrders.length} | Pending Payment: ₹{unpaidTotal.toFixed(2)}
                     </p>
                   </div>
                 </>
@@ -637,7 +639,7 @@ function MenuPage() {
                   <p className="font-body-md text-body-md text-on-surface-variant mb-6">Scan the QR code to confirm your order.</p>
                   
                   {/* QR Code */}
-                  <div className="bg-white p-4 rounded-xl mb-6 border-4 border-primary-container/30 gold-glow">
+                  <div className="bg-white p-4 rounded-xl mb-6 border-4 border-primary-container/30 gold-glow shrink-0">
                     {qrCode ? (
                       <img src={qrCode} alt="Order QR Code" className="w-48 h-48 rounded" />
                     ) : (
@@ -646,13 +648,13 @@ function MenuPage() {
                   </div>
 
                   {/* QR Details */}
-                  <div className="w-full bg-surface-container-high border border-outline-variant/20 rounded-lg p-4 mb-6 text-left">
+                  <div className="w-full bg-surface-container-high border border-outline-variant/20 rounded-lg p-4 mb-6 text-left shrink-0">
                     <h4 className="font-body-md text-on-surface font-medium mb-1">QR includes</h4>
                     <p className="font-body-md text-body-md text-on-surface-variant/70">Table number, selected items, quantity, item prices, and total.</p>
                   </div>
                   
                   {/* Verification Status Banner */}
-                  <div className="w-full bg-error/10 border border-error/20 rounded-lg p-3.5 mb-6 text-center">
+                  <div className="w-full bg-error/10 border border-error/20 rounded-lg p-3.5 mb-6 text-center shrink-0">
                     <span className="font-label-caps text-[11px] text-error font-bold flex items-center justify-center gap-1">
                       <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
                       Awaiting Waiter Verification
@@ -664,18 +666,71 @@ function MenuPage() {
                 </>
               )}
               
-              <div className="w-full space-y-4">
-                {(!activeOrder || activeOrder.paymentStatus !== 'PAID') ? (
+              {/* Session Order History List (renders if they have any active verified orders) */}
+              {activeOrders.length > 0 && (
+                <div className="w-full flex flex-col gap-3 text-left mt-2 mb-6 flex-1 min-h-0">
+                  <h3 className="font-label-caps text-[11px] text-primary border-b border-outline-variant/15 pb-2 uppercase tracking-widest font-bold flex justify-between items-center shrink-0">
+                    <span>Order History ({activeOrders.length})</span>
+                    <span className="font-mono text-on-surface-variant text-[11px] lowercase tracking-normal">Total: ₹{sessionTotal.toFixed(2)}</span>
+                  </h3>
+                  
+                  <div className="space-y-3 w-full overflow-y-auto pr-1 hide-scrollbar flex-1 min-h-[120px]">
+                    {activeOrders.map((order, idx) => (
+                      <div key={order._id || idx} className="bg-surface-container-high border border-outline-variant/15 rounded-xl p-3.5 flex flex-col gap-2 shadow-sm">
+                        {/* Header */}
+                        <div className="flex justify-between items-center text-[11px] font-semibold border-b border-outline-variant/10 pb-1.5 font-sans">
+                          <span className="text-primary font-mono">Order #{order._id.toString().substring(18)}</span>
+                          <span className="text-on-surface-variant/80 font-normal">
+                            {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        
+                        {/* Items */}
+                        <div className="space-y-1">
+                          {order.items.map((item, itemIdx) => (
+                            <div key={item.id || itemIdx} className="flex justify-between items-center text-[12px]">
+                              <span className="text-on-surface-variant truncate">
+                                <span className="text-primary font-semibold font-mono mr-1">{item.quantity}x</span> {item.name}
+                              </span>
+                              <span className="text-on-surface font-medium">₹{(item.price * item.quantity).toFixed(2)}</span>
+                            </div>
+                          ))}
+                        </div>
+                        
+                        {/* Status Footer */}
+                        <div className="flex justify-between items-center text-[11px] font-medium border-t border-outline-variant/10 pt-1.5 mt-1 font-sans">
+                          <span className="flex items-center gap-1">
+                            {order.paymentStatus === 'PAID' ? (
+                              <span className="text-green-500 font-bold flex items-center gap-0.5">
+                                <span className="material-symbols-outlined text-[13px]">verified</span> Paid
+                              </span>
+                            ) : (
+                              <span className="text-amber-500 font-bold flex items-center gap-0.5">
+                                <span className="material-symbols-outlined text-[13px]">pending</span> Unpaid
+                              </span>
+                            )}
+                            <span className="text-on-surface-variant/50 font-normal">| {order.status}</span>
+                          </span>
+                          <span className="text-primary font-bold font-price-display">₹{order.total.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="w-full space-y-4 shrink-0">
+                {(!activeOrder || unpaidTotal > 0) ? (
                   <>
                     <button 
                       onClick={handlePayNow}
                       className={`w-full py-3 rounded font-label-caps text-label-caps uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all ${
-                        (isOrderVerified || (activeOrder && activeOrder.paymentStatus !== 'PAID'))
+                        (isOrderVerified || unpaidTotal > 0)
                           ? 'bg-gold-metallic text-on-primary gold-glow' 
                           : 'bg-surface-container-high border border-outline-variant/30 text-on-surface-variant/40 cursor-not-allowed'
                       }`}
                     >
-                      <span className="material-symbols-outlined">credit_card</span> Pay Now
+                      <span className="material-symbols-outlined">credit_card</span> Pay Now (₹{unpaidTotal > 0 ? unpaidTotal.toFixed(2) : cartTotal.toFixed(2)})
                     </button>
                     <button 
                       onClick={handlePayLater}
