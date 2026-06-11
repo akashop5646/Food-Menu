@@ -213,27 +213,29 @@ function MenuPage() {
                 key={item._id} 
                 className="bg-surface-container border border-primary/20 rounded-lg overflow-hidden group hover:border-primary/50 transition-colors flex flex-col"
               >
-                <div className="relative overflow-hidden p-4 h-36 md:h-48">
-                  <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors z-10"></div>
+                <div className="relative overflow-hidden aspect-[4/3] w-full border-b border-primary/10">
                   {item.image ? (
                     <img 
                       src={item.image} 
                       alt={item.name} 
-                      className="w-full h-full object-cover rounded-md group-hover:scale-105 transition-transform duration-700" 
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" 
                     />
                   ) : (
                     <div className="w-full h-full bg-surface-variant flex items-center justify-center">
                       <span className="material-symbols-outlined text-4xl opacity-20">restaurant</span>
                     </div>
                   )}
+                  {/* Subtle gradient overlay on hover for a premium feel */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+                  
                   {item.chefPick && (
-                    <div className="absolute z-20 bg-primary/90 backdrop-blur text-on-primary px-2 py-1 text-[10px] font-label-caps uppercase tracking-widest rounded-sm flex items-center gap-1 top-4 left-4">
-                      <span className="material-symbols-outlined text-[12px]">star</span> Chef Pick
+                    <div className="absolute z-20 bg-surface-container/80 backdrop-blur-md border border-primary/30 text-primary px-3 py-1.5 text-[10px] font-label-caps uppercase tracking-widest rounded-full flex items-center gap-1 top-3 right-3 shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
+                      <span className="material-symbols-outlined text-[14px] font-bold">star</span> Chef's Pick
                     </div>
                   )}
                 </div>
                 
-                <div className="flex-1 flex flex-col justify-between p-4">
+                <div className="flex-1 flex flex-col justify-between p-5">
                   <div>
                     <div className="flex justify-between items-start mb-2">
                       <h3 className="font-headline-sm text-headline-sm text-primary group-hover:text-primary-fixed transition-colors mb-1">{item.name}</h3>
