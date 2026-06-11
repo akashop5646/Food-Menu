@@ -35,11 +35,7 @@ export default function OrderScanner() {
     };
     
     html5QrCode.start(
-      { 
-        facingMode: "environment",
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
-      },
+      { facingMode: "environment" },
       config,
       (decodedText) => {
         handleInputChange(decodedText);
@@ -49,23 +45,10 @@ export default function OrderScanner() {
         // ignore scanner loop feedback
       }
     ).catch(err => {
-      console.warn("Camera start failed with ideal constraints, trying simple facingMode:", err);
-      // Fallback to simple environment camera constraint without custom resolution
-      return html5QrCode.start(
-        { facingMode: "environment" },
-        config,
-        (decodedText) => {
-          handleInputChange(decodedText);
-          stopCamera();
-        },
-        (errorMessage) => {
-          // ignore scanner loop feedback
-        }
-      );
-    }).catch(err => {
-      console.error("Camera start fallback error:", err);
-      setError("Could not access camera. Ensure camera permissions are granted. (Note: If inside an In-App Browser or Vercel Preview Toolbar, tap the three dots at the top-right and select 'Open in Browser' / 'Open in Chrome')");
+      console.error("Camera start error:", err);
+      qrScannerRef.current = null;
       setIsCameraOpen(false);
+      setError("Could not access camera. Ensure camera permissions are granted. (Note: Tap the lock icon next to the URL in your browser's address bar, set Camera permission to 'Allow', and reload. If inside an In-App Browser like Vercel Preview/WhatsApp, select 'Open in Browser' / 'Open in Chrome')");
     });
   };
 
