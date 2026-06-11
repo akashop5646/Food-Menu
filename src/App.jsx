@@ -20,6 +20,7 @@ function MenuPage() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [notification, setNotification] = useState('');
   const [qrCode, setQrCode] = useState('');
 
   // Fetch menu items and categories from API
@@ -59,6 +60,11 @@ function MenuPage() {
     });
   }, [activeCategory, searchQuery, menuItems]);
 
+  const showNotification = (msg) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(''), 3000);
+  };
+
   const addToCart = (dish) => {
     setCart(prev => {
       const existing = prev.find(i => i._id === dish._id);
@@ -67,6 +73,7 @@ function MenuPage() {
       }
       return [...prev, { ...dish, quantity: 1 }];
     });
+    showNotification(`${dish.name} added to cart`);
   };
 
   const updateQuantity = (id, change) => {
@@ -201,7 +208,7 @@ function MenuPage() {
         </section>
 
         {/* Menu Grid */}
-        <motion.section layout className="p-margin-mobile md:p-margin-desktop grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-gutter mt-8">
+        <motion.section layout className="p-margin-mobile md:p-margin-desktop grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-gutter mt-8">
           <AnimatePresence mode="popLayout">
             {filteredItems.map((item, i) => (
               <motion.article 
@@ -235,29 +242,30 @@ function MenuPage() {
                   )}
                 </div>
                 
-                <div className="flex-1 flex flex-col justify-between p-5">
+                <div className="flex-1 flex flex-col justify-between p-3 md:p-5">
                   <div>
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-headline-sm text-headline-sm text-primary group-hover:text-primary-fixed transition-colors mb-1">{item.name}</h3>
-                      <span className="font-price-display text-price-display text-on-surface">₹{item.price}</span>
+                    <div className="flex flex-col md:flex-row justify-between items-start mb-1 md:mb-2 gap-1">
+                      <h3 className="font-headline-sm text-[16px] md:text-headline-sm text-primary group-hover:text-primary-fixed transition-colors line-clamp-1">{item.name}</h3>
+                      <span className="font-price-display text-[14px] md:text-price-display text-on-surface">₹{item.price}</span>
                     </div>
-                    <p className="font-body-md text-body-md text-on-surface-variant/70 line-clamp-3 mb-3">
+                    <p className="font-body-md text-[12px] md:text-body-md text-on-surface-variant/70 line-clamp-2 mb-2 md:mb-3">
                       {item.description}
                     </p>
                   </div>
                   
-                  <div className="flex gap-3 mt-auto border-t border-outline-variant/10 pt-3">
+                  <div className="flex flex-col xl:flex-row gap-2 mt-auto border-t border-outline-variant/10 pt-3">
                     <button 
                       onClick={() => addToCart(item)}
-                      className="flex-1 bg-surface-container-highest hover:bg-surface-bright text-on-surface border border-outline-variant/30 font-label-caps text-label-caps py-2 rounded uppercase tracking-wider transition-colors"
+                      className="flex-1 bg-surface-container-highest hover:bg-surface-bright text-on-surface border border-outline-variant/30 font-label-caps text-[10px] md:text-label-caps py-1.5 md:py-2 rounded uppercase tracking-wider transition-colors"
                     >
-                      Add to Cart
+                      <span className="hidden xl:inline">Add to Cart</span>
+                      <span className="xl:hidden">+ Add</span>
                     </button>
                     <button 
                       onClick={() => handleOrderNow(item)}
-                      className="flex-1 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 font-label-caps text-label-caps py-2 rounded uppercase tracking-wider transition-colors"
+                      className="flex-1 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 font-label-caps text-[10px] md:text-label-caps py-1.5 md:py-2 rounded uppercase tracking-wider transition-colors"
                     >
-                      Order Now
+                      Order
                     </button>
                   </div>
                 </div>
@@ -502,6 +510,20 @@ function MenuPage() {
         )}
       </AnimatePresence>
 
+      {/* Global Toast Notification */}
+      <AnimatePresence>
+        {notification && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.9 }}
+            className="fixed bottom-24 md:bottom-10 right-1/2 translate-x-1/2 md:translate-x-0 md:right-10 bg-surface-container-high border border-primary/30 text-primary px-6 py-3 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.5),0_0_20px_rgba(212,175,55,0.15)] flex items-center gap-3 z-[200] whitespace-nowrap"
+          >
+            <span className="material-symbols-outlined text-[20px]">check_circle</span>
+            <span className="font-body-md font-medium tracking-wide text-sm">{notification}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
