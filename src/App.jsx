@@ -124,11 +124,9 @@ function MenuPage() {
     <div className="bg-background text-on-surface pb-32 min-h-screen">
       {/* TopAppBar */}
       <header className="bg-surface/90 backdrop-blur-md fixed top-0 w-full z-50 border-b border-outline-variant/20 flex justify-between items-center px-margin-mobile h-16 md:hidden">
-        <button className="text-primary hover:text-primary transition-colors hover:scale-95 duration-200">
-          <span className="material-symbols-outlined">menu</span>
-        </button>
-        <div className="font-display-lg-mobile text-display-lg-mobile text-primary tracking-tighter text-center w-full">Aurum Table</div>
-        <button className="text-primary hover:text-primary transition-colors hover:scale-95 duration-200 relative" onClick={toggleCart}>
+        <div className="w-8"></div>
+        <div className="font-display-lg-mobile text-display-lg-mobile text-primary tracking-tighter text-center">Aurum Table</div>
+        <button className="text-primary hover:text-primary transition-colors hover:scale-95 duration-200 relative w-8 flex justify-end" onClick={toggleCart}>
           <span className="material-symbols-outlined">shopping_bag</span>
           {cartCount > 0 && (
             <span className="absolute -top-1 -right-1 bg-error text-on-error-container text-[10px] rounded-full h-4 w-4 flex items-center justify-center font-bold">
@@ -139,7 +137,7 @@ function MenuPage() {
       </header>
 
       {/* Main Content Area */}
-      <main className="pt-16 max-w-[1200px] mx-auto">
+      <main className="pt-16 md:pt-0 w-full">
         
         {/* Hero Section */}
         {menuLoading ? (
@@ -147,19 +145,20 @@ function MenuPage() {
             <span className="material-symbols-outlined text-primary text-4xl animate-spin">progress_activity</span>
           </section>
         ) : heroItem ? (
-          <section className="relative h-[530px] md:h-[618px] flex flex-col justify-end p-margin-mobile md:p-margin-desktop bg-surface-container overflow-hidden">
+          <section className="relative h-[530px] md:h-[618px] flex flex-col justify-end bg-surface-container overflow-hidden">
             {heroItem.image && (
               <div 
                 className="absolute inset-0 bg-center bg-cover bg-no-repeat opacity-40 mix-blend-luminosity" 
                 style={{ backgroundImage: `url('${heroItem.image}')` }}
               />
             )}
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
-              className="relative z-10 w-full md:w-2/3"
-            >
+            <div className="max-w-[1200px] mx-auto w-full p-margin-mobile md:p-margin-desktop relative z-10">
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, ease: "easeOut" }}
+                className="w-full md:w-2/3"
+              >
               <span className="font-label-caps text-label-caps text-primary tracking-widest uppercase mb-4 block">Signature Tasting</span>
               <h1 className="font-display-lg-mobile text-display-lg-mobile md:font-display-lg md:text-display-lg text-primary mb-2 leading-tight">{heroItem.name}</h1>
               <p className="font-body-lg text-body-lg text-on-surface-variant max-w-lg mb-6 line-clamp-3">
@@ -175,6 +174,7 @@ function MenuPage() {
                 </button>
               </div>
             </motion.div>
+            </div>
           </section>
         ) : (
           <section className="h-[530px] md:h-[618px] flex items-center justify-center bg-surface-container text-on-surface-variant">
@@ -186,8 +186,8 @@ function MenuPage() {
         )}
 
         {/* Sticky Search & Filters */}
-        <section className="sticky top-[64px] md:top-0 z-40 bg-background/95 backdrop-blur-xl border-b border-outline-variant/30 py-4 px-margin-mobile md:px-margin-desktop flex flex-col gap-4">
-          <div className="flex gap-4 items-center justify-between w-full">
+        <section className="sticky top-[64px] md:top-0 z-40 bg-background/95 backdrop-blur-xl border-b border-outline-variant/30 py-4 w-full">
+          <div className="max-w-[1200px] mx-auto px-margin-mobile md:px-margin-desktop flex gap-4 items-center justify-between w-full">
             <div className="relative flex-1 max-w-md">
               <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
               <input 
@@ -210,8 +210,9 @@ function MenuPage() {
         </section>
 
         {/* Menu Grid */}
-        <motion.section layout className="p-margin-mobile md:p-margin-desktop grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-gutter mt-8">
-          <AnimatePresence mode="popLayout">
+        <div className="max-w-[1200px] mx-auto w-full">
+          <motion.section layout className="p-margin-mobile md:p-margin-desktop grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-gutter mt-8">
+            <AnimatePresence mode="popLayout">
             {filteredItems.map((item, i) => (
               <motion.article 
                 layout
@@ -260,7 +261,7 @@ function MenuPage() {
             ))}
           </AnimatePresence>
         </motion.section>
-
+        </div>
       </main>
 
       {/* BottomNavBar (Mobile Only) */}
