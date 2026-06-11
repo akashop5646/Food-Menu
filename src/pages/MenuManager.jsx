@@ -400,7 +400,10 @@ export default function MenuManager() {
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input type="checkbox" checked={formData.chefPick} onChange={e => setFormData({...formData, chefPick: e.target.checked})} className="sr-only peer" />
                       <div className="w-11 h-6 bg-surface-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                      <span className="ml-3 font-body-sm text-on-surface">Chef's Pick Feature</span>
+                      <div className="ml-3 flex flex-col">
+                        <span className="font-body-sm text-on-surface">Highlight as Main Hero Item</span>
+                        <span className="font-body-sm text-[10px] text-on-surface-variant opacity-80">Shows this item in the large black & white section at the top of the menu</span>
+                      </div>
                     </label>
                   </div>
                 </div>
