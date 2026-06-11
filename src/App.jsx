@@ -45,6 +45,7 @@ function MenuPage() {
   const [isOrderVerified, setIsOrderVerified] = useState(false);
   const [deviceId, setDeviceId] = useState('');
   const [customerIp, setCustomerIp] = useState('');
+  const [checkoutSessionId, setCheckoutSessionId] = useState('');
 
   // Fetch menu items and categories from API
   useEffect(() => {
@@ -152,8 +153,9 @@ function MenuPage() {
       createdAt: new Date().toISOString(),
       deviceId,
       customerIp,
+      checkoutSessionId,
     };
-  }, [cart, cartCount, cartTotal, selectedTable, selectedLocation, deviceId, customerIp]);
+  }, [cart, cartCount, cartTotal, selectedTable, selectedLocation, deviceId, customerIp, checkoutSessionId]);
 
   useEffect(() => {
     if (!isCheckoutOpen || !orderPayload) {
@@ -205,20 +207,22 @@ function MenuPage() {
 
     const checkVerification = async () => {
       try {
-        const res = await fetch(`/api/orders/active?table=${encodeURIComponent(selectedTable)}&deviceId=${encodeURIComponent(deviceId)}`);
+        let url = `/api/orders/active?table=${encodeURIComponent(selectedTable)}&deviceId=${encodeURIComponent(deviceId)}`;
+        if (cart.length > 0 && checkoutSessionId) {
+          url += `&checkoutSessionId=${encodeURIComponent(checkoutSessionId)}`;
+        }
+        const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
           if (data.verified && data.order) {
             setActiveOrder(data.order);
             setIsOrderVerified(true);
-            // Clear cart if the order was just placed/verified
-            setCart(prev => {
-              if (prev.length > 0) {
-                localStorage.removeItem('aurum_cart');
-                return [];
-              }
-              return prev;
-            });
+            // Clear cart & session ID if the order was just placed/verified
+            if (cart.length > 0) {
+              setCart([]);
+              localStorage.removeItem('aurum_cart');
+              setCheckoutSessionId('');
+            }
           } else {
             setActiveOrder(null);
             setIsOrderVerified(false);
@@ -236,7 +240,7 @@ function MenuPage() {
     const interval = setInterval(checkVerification, 3000);
 
     return () => clearInterval(interval);
-  }, [selectedTable, deviceId]);
+  }, [selectedTable, deviceId, cart.length, checkoutSessionId]);
 
   const handlePayNow = () => {
     if (!isOrderVerified && !activeOrder) {
@@ -278,7 +282,17 @@ function MenuPage() {
     <div className="bg-background text-on-surface pb-32 min-h-screen">
       {/* TopAppBar */}
       <header className="bg-surface/90 backdrop-blur-md fixed top-0 w-full z-50 border-b border-outline-variant/20 flex justify-between items-center px-margin-mobile h-16 md:hidden">
-        <div className="w-8"></div>
+        <div className="w-8 flex items-center justify-start">
+          {activeOrder && cart.length === 0 && (
+            <button 
+              onClick={() => setIsCheckoutOpen(true)}
+              className="text-primary hover:text-primary transition-colors hover:scale-95 duration-200"
+              title="View active receipt"
+            >
+              <span className="material-symbols-outlined text-[24px]">receipt_long</span>
+            </button>
+          )}
+        </div>
         <div className="font-display-lg-mobile text-display-lg-mobile text-primary tracking-tighter text-center">Aurum Table</div>
         <button className="text-primary hover:text-primary transition-colors hover:scale-95 duration-200 relative w-8 flex justify-end" onClick={toggleCart}>
           <span className="material-symbols-outlined">shopping_bag</span>
@@ -512,7 +526,13 @@ function MenuPage() {
                 <span className="font-price-display text-price-display text-primary">₹{cartTotal.toFixed(2)}</span>
               </div>
               <button 
-                onClick={() => setIsCheckoutOpen(true)}
+                onClick={() => {
+                  if (!checkoutSessionId) {
+                    const newSessId = 'sess_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+                    setCheckoutSessionId(newSessId);
+                  }
+                  setIsCheckoutOpen(true);
+                }}
                 disabled={cart.length === 0}
                 className="w-full bg-gold-metallic text-on-primary font-label-caps text-label-caps py-4 rounded uppercase tracking-wider gold-glow transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -912,40 +932,7 @@ function MenuPage() {
         )}
       </AnimatePresence>
 
-      {/* Active Order floating banner */}
-      <AnimatePresence>
-        {activeOrder && (
-          <motion.div
-            initial={{ opacity: 0, y: 100 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 100 }}
-            className="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-lg bg-surface-container-high/95 backdrop-blur-md border border-primary/40 text-on-surface px-4 py-3.5 rounded-2xl shadow-[0_12px_48px_rgba(0,0,0,0.6),0_0_20px_rgba(212,175,55,0.15)] flex justify-between items-center z-[50]"
-          >
-            <div className="flex items-center gap-3">
-              <span className="material-symbols-outlined text-primary text-[28px] animate-pulse">
-                {activeOrder.status === 'READY' ? 'notifications_active' : 'restaurant'}
-              </span>
-              <div>
-                <strong className="block text-sm font-semibold tracking-wide text-primary">
-                  {activeOrder.status === 'NEW' && '🍳 Order Placed'}
-                  {activeOrder.status === 'PREPARING' && '🍳 Preparing Food'}
-                  {activeOrder.status === 'READY' && '🛎️ Ready for Pickup'}
-                  {activeOrder.status === 'COMPLETED' && '✅ Completed'}
-                </strong>
-                <span className="text-xs text-on-surface-variant/80 text-left block">
-                  {activeOrder.items.reduce((sum, item) => sum + item.quantity, 0)} items • ₹{activeOrder.total.toFixed(2)} • {activeOrder.paymentStatus === 'PAID' ? 'Paid' : 'Pay Later'}
-                </span>
-              </div>
-            </div>
-            <button
-              onClick={() => setIsCheckoutOpen(true)}
-              className="bg-gold-metallic text-on-primary font-label-caps text-[11px] uppercase tracking-wider px-4 py-2 rounded-lg gold-glow cursor-pointer hover:scale-105 active:scale-95 transition-transform shrink-0"
-            >
-              View Receipt
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
 
       {/* Global Toast Notification */}
       <AnimatePresence>

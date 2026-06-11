@@ -123,7 +123,8 @@ export default function OrderScanner() {
           paymentType: paymentStatus === 'PAID' ? 'NOW' : 'LATER', // Map NOW/LATER
           paymentStatus: paymentStatus,
           deviceId: parsedOrder.deviceId || null,
-          customerIp: parsedOrder.customerIp || null
+          customerIp: parsedOrder.customerIp || null,
+          checkoutSessionId: parsedOrder.checkoutSessionId || null
         }),
         credentials: 'include'
       });

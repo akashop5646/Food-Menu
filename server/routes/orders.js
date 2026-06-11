@@ -9,7 +9,7 @@ const router = Router();
 // Check if table has an active verified order (Public endpoint)
 router.get('/active', async (req, res) => {
   try {
-    const { table, deviceId } = req.query;
+    const { table, deviceId, checkoutSessionId } = req.query;
     if (!table) return res.status(400).json({ error: 'Table is required.' });
 
     const db = await getDB();
@@ -20,7 +20,10 @@ router.get('/active', async (req, res) => {
     if (deviceId) {
       query.deviceId = deviceId;
     }
-    const activeOrder = await db.collection('orders').findOne(query);
+    if (checkoutSessionId) {
+      query.checkoutSessionId = checkoutSessionId;
+    }
+    const activeOrder = await db.collection('orders').findOne(query, { sort: { createdAt: -1 } });
 
     res.json({ verified: !!activeOrder, order: activeOrder });
   } catch (error) {
@@ -32,7 +35,7 @@ router.get('/active', async (req, res) => {
 // Create a verified order (called by Waiter scanning page)
 router.post('/', requireAuth, async (req, res) => {
   try {
-    const { table, location, items, total, paymentType, paymentStatus, deviceId, customerIp } = req.body;
+    const { table, location, items, total, paymentType, paymentStatus, deviceId, customerIp, checkoutSessionId } = req.body;
 
     // Validation checks
     if (!table) return res.status(400).json({ error: 'Table is required.' });
@@ -65,7 +68,8 @@ router.post('/', requireAuth, async (req, res) => {
       confirmedBy: req.user.name || req.user.email,
       createdAt: new Date(),
       deviceId: deviceId || null,
-      customerIp: customerIp || null
+      customerIp: customerIp || null,
+      checkoutSessionId: checkoutSessionId || null
     };
 
     const db = await getDB();
