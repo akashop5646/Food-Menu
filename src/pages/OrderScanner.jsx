@@ -23,10 +23,25 @@ export default function OrderScanner() {
     setTimeout(() => {
       const html5QrCode = new Html5Qrcode("qr-reader");
       qrScannerRef.current = html5QrCode;
-      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+      
+      const config = { 
+        fps: 15, // Smooth video stream and faster capture cycles
+        qrbox: (viewfinderWidth, viewfinderHeight) => {
+          const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+          const size = Math.floor(minEdge * 0.75); // Dynamic size to fit nicely
+          return { width: size, height: size };
+        },
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true // Fast native hardware scanning on supported mobile browsers
+        }
+      };
       
       html5QrCode.start(
-        { facingMode: "environment" },
+        { 
+          facingMode: "environment",
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
         config,
         (decodedText) => {
           handleInputChange(decodedText);

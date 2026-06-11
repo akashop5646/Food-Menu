@@ -165,7 +165,7 @@ function MenuPage() {
     QRCode.toDataURL(JSON.stringify(orderPayload), {
       margin: 1,
       width: 280,
-      color: { dark: '#10110e', light: '#f7f1e8' },
+      color: { dark: '#000000', light: '#ffffff' },
     }).then(setQrCode);
   }, [isCheckoutOpen, orderPayload]);
 
@@ -194,7 +194,7 @@ function MenuPage() {
     QRCode.toDataURL(upiUrl, {
       margin: 1,
       width: 280,
-      color: { dark: '#10110e', light: '#f7f1e8' },
+      color: { dark: '#000000', light: '#ffffff' },
     }).then(setPaymentQrCode);
   }, [isCheckoutOpen, upiUrl]);
 
