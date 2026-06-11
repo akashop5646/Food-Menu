@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Html5Qrcode } from 'html5-qrcode';
 
 export default function OrderScanner() {
   const [qrInput, setQrInput] = useState('');
@@ -9,8 +10,61 @@ export default function OrderScanner() {
   const [paymentStatus, setPaymentStatus] = useState('PENDING'); // PAID, PENDING
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
 
   const inputRef = useRef(null);
+  const qrScannerRef = useRef(null);
+
+  const startCamera = () => {
+    setIsCameraOpen(true);
+    setSuccessMsg('');
+    setError('');
+    
+    // Slight delay to allow DOM to mount container div
+    setTimeout(() => {
+      const html5QrCode = new Html5Qrcode("qr-reader");
+      qrScannerRef.current = html5QrCode;
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+      
+      html5QrCode.start(
+        { facingMode: "environment" },
+        config,
+        (decodedText) => {
+          handleInputChange(decodedText);
+          stopCamera();
+        },
+        (errorMessage) => {
+          // ignore scanner loop feedback
+        }
+      ).catch(err => {
+        console.error("Camera start error:", err);
+        setError("Could not access camera. Ensure camera permissions are granted and you are using HTTPS/localhost.");
+        setIsCameraOpen(false);
+      });
+    }, 150);
+  };
+
+  const stopCamera = () => {
+    if (qrScannerRef.current) {
+      qrScannerRef.current.stop().then(() => {
+        setIsCameraOpen(false);
+        qrScannerRef.current = null;
+      }).catch(err => {
+        console.error("Camera stop error:", err);
+        setIsCameraOpen(false);
+      });
+    } else {
+      setIsCameraOpen(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (qrScannerRef.current) {
+        qrScannerRef.current.stop().catch(console.error);
+      }
+    };
+  }, []);
 
   // Focus input automatically on mount to support quick scanning guns
   useEffect(() => {
@@ -131,6 +185,38 @@ export default function OrderScanner() {
               {error}
             </div>
           )}
+
+          {/* Camera Scanning Area */}
+          <div className="flex flex-col gap-4">
+            {isCameraOpen ? (
+              <div className="flex flex-col gap-4 items-center justify-center p-5 bg-surface-container-lowest border border-outline-variant/30 rounded-2xl">
+                <div id="qr-reader" className="w-full max-w-sm overflow-hidden rounded-xl border-2 border-primary/30 bg-black shadow-inner"></div>
+                <button
+                  type="button"
+                  onClick={stopCamera}
+                  className="bg-error/10 hover:bg-error/20 text-error border border-error/20 px-6 py-2.5 rounded-lg font-label-caps text-[11px] uppercase tracking-widest cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-[18px]">videocam_off</span>
+                  Close Camera
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={startCamera}
+                className="bg-primary text-on-primary px-6 py-4 rounded-xl font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform hover:scale-[1.02] active:scale-95"
+              >
+                <span className="material-symbols-outlined">photo_camera</span>
+                Scan Order QR Code
+              </button>
+            )}
+          </div>
+
+          <div className="relative flex py-2 items-center">
+            <div className="flex-grow border-t border-outline-variant/20"></div>
+            <span className="flex-shrink mx-4 text-[11px] font-label-caps text-on-surface-variant/50 uppercase tracking-widest">or enter manually</span>
+            <div className="flex-grow border-t border-outline-variant/20"></div>
+          </div>
 
           {/* QR Payload Input Area */}
           <div>
