@@ -19,29 +19,40 @@ export default function OrderScanner() {
     setSuccessMsg('');
     setError('');
     
-    // Slight delay to allow DOM to mount container div
-    setTimeout(() => {
-      const html5QrCode = new Html5Qrcode("qr-reader");
-      qrScannerRef.current = html5QrCode;
-      
-      const config = { 
-        fps: 15, // Smooth video stream and faster capture cycles
-        qrbox: (viewfinderWidth, viewfinderHeight) => {
-          const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-          const size = Math.floor(minEdge * 0.75); // Dynamic size to fit nicely
-          return { width: size, height: size };
-        },
-        experimentalFeatures: {
-          useBarCodeDetectorIfSupported: true // Fast native hardware scanning on supported mobile browsers
-        }
-      };
-      
-      html5QrCode.start(
-        { 
-          facingMode: "environment",
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        },
+    const html5QrCode = new Html5Qrcode("qr-reader");
+    qrScannerRef.current = html5QrCode;
+    
+    const config = { 
+      fps: 15, // Smooth video stream and faster capture cycles
+      qrbox: (viewfinderWidth, viewfinderHeight) => {
+        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+        const size = Math.floor(minEdge * 0.75); // Dynamic size to fit nicely
+        return { width: size, height: size };
+      },
+      experimentalFeatures: {
+        useBarCodeDetectorIfSupported: true // Fast native hardware scanning on supported mobile browsers
+      }
+    };
+    
+    html5QrCode.start(
+      { 
+        facingMode: "environment",
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      },
+      config,
+      (decodedText) => {
+        handleInputChange(decodedText);
+        stopCamera();
+      },
+      (errorMessage) => {
+        // ignore scanner loop feedback
+      }
+    ).catch(err => {
+      console.warn("Camera start failed with ideal constraints, trying simple facingMode:", err);
+      // Fallback to simple environment camera constraint without custom resolution
+      return html5QrCode.start(
+        { facingMode: "environment" },
         config,
         (decodedText) => {
           handleInputChange(decodedText);
@@ -50,26 +61,12 @@ export default function OrderScanner() {
         (errorMessage) => {
           // ignore scanner loop feedback
         }
-      ).catch(err => {
-        console.warn("Camera start failed with ideal constraints, trying simple facingMode:", err);
-        // Fallback to simple environment camera constraint without custom resolution
-        return html5QrCode.start(
-          { facingMode: "environment" },
-          config,
-          (decodedText) => {
-            handleInputChange(decodedText);
-            stopCamera();
-          },
-          (errorMessage) => {
-            // ignore scanner loop feedback
-          }
-        );
-      }).catch(err => {
-        console.error("Camera start fallback error:", err);
-        setError("Could not access camera. Ensure camera permissions are granted. (Note: If inside an In-App Browser or Vercel Preview Toolbar, tap the three dots at the top-right and select 'Open in Browser' / 'Open in Chrome')");
-        setIsCameraOpen(false);
-      });
-    }, 150);
+      );
+    }).catch(err => {
+      console.error("Camera start fallback error:", err);
+      setError("Could not access camera. Ensure camera permissions are granted. (Note: If inside an In-App Browser or Vercel Preview Toolbar, tap the three dots at the top-right and select 'Open in Browser' / 'Open in Chrome')");
+      setIsCameraOpen(false);
+    });
   };
 
   const stopCamera = () => {
@@ -251,51 +248,51 @@ export default function OrderScanner() {
           {!parsedOrder && (
             /* Camera Scanning Area */
             <div className="flex flex-col gap-4">
-              {isCameraOpen ? (
-                <div className="flex flex-col gap-4 items-center justify-center p-5 bg-surface-container-lowest border border-outline-variant/30 rounded-2xl">
-                  <div id="qr-reader" className="w-full max-w-sm overflow-hidden rounded-xl border-2 border-primary/30 bg-black shadow-inner"></div>
-                  <button
-                    type="button"
-                    onClick={stopCamera}
-                    className="bg-error/10 hover:bg-error/20 text-error border border-error/20 px-6 py-2.5 rounded-lg font-label-caps text-[11px] uppercase tracking-widest cursor-pointer transition-all flex items-center justify-center gap-1.5"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">videocam_off</span>
-                    Close Camera
-                  </button>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  <button
-                    type="button"
-                    onClick={startCamera}
-                    className="bg-primary text-on-primary px-6 py-4 rounded-xl font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform hover:scale-[1.02] active:scale-95"
-                  >
-                    <span className="material-symbols-outlined">photo_camera</span>
-                    Scan with Live Camera
-                  </button>
+              {/* Camera view container - always in DOM to avoid race conditions during startCamera */}
+              <div className={`${isCameraOpen ? 'flex' : 'hidden'} flex-col gap-4 items-center justify-center p-5 bg-surface-container-lowest border border-outline-variant/30 rounded-2xl`}>
+                <div id="qr-reader" className="w-full max-w-sm overflow-hidden rounded-xl border-2 border-primary/30 bg-black shadow-inner"></div>
+                <button
+                  type="button"
+                  onClick={stopCamera}
+                  className="bg-error/10 hover:bg-error/20 text-error border border-error/20 px-6 py-2.5 rounded-lg font-label-caps text-[11px] uppercase tracking-widest cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-[18px]">videocam_off</span>
+                  Close Camera
+                </button>
+              </div>
 
-                  <div className="relative">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      onChange={handleFileChange}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                      id="qr-file-input"
-                    />
-                    <button
-                      type="button"
-                      className="w-full bg-surface-container-high border border-outline-variant/50 text-on-surface hover:border-primary/50 px-6 py-4 rounded-xl font-label-caps text-[12px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all cursor-pointer"
-                    >
-                      <span className="material-symbols-outlined">photo_camera_back</span>
-                      Take Photo or Upload QR
-                    </button>
-                  </div>
-                  
-                  {/* Hidden dummy element required by html5-qrcode library for file scanning */}
-                  <div id="qr-reader-file-dummy" className="hidden"></div>
+              {/* Action buttons (when camera is closed) */}
+              <div className={`${!isCameraOpen ? 'flex' : 'hidden'} flex-col gap-3`}>
+                <button
+                  type="button"
+                  onClick={startCamera}
+                  className="bg-primary text-on-primary px-6 py-4 rounded-xl font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform hover:scale-[1.02] active:scale-95"
+                >
+                  <span className="material-symbols-outlined">photo_camera</span>
+                  Scan with Live Camera
+                </button>
+
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleFileChange}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                    id="qr-file-input"
+                  />
+                  <button
+                    type="button"
+                    className="w-full bg-surface-container-high border border-outline-variant/50 text-on-surface hover:border-primary/50 px-6 py-4 rounded-xl font-label-caps text-[12px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined">photo_camera_back</span>
+                    Take Photo or Upload QR
+                  </button>
                 </div>
-              )}
+              </div>
+              
+              {/* Hidden dummy element required by html5-qrcode library for file scanning */}
+              <div id="qr-reader-file-dummy" className="hidden"></div>
             </div>
           )}
 
