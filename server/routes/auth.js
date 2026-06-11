@@ -23,40 +23,9 @@ function signToken(user) {
   );
 }
 
-// ---------- Register (Email + Password) ----------
-router.post('/register', async (req, res) => {
-  try {
-    const { name, email, password } = req.body;
-    if (!email || !password || !name) {
-      return res.status(400).json({ error: 'Name, email, and password are required.' });
-    }
-
-    const db = await getDB();
-    const admins = db.collection('admins');
-
-    const existing = await admins.findOne({ email: email.toLowerCase() });
-    if (existing) {
-      return res.status(409).json({ error: 'An account with this email already exists.' });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 12);
-    const result = await admins.insertOne({
-      name,
-      email: email.toLowerCase(),
-      password: hashedPassword,
-      provider: 'email',
-      role: 'ADMIN', // First user via form is ADMIN, or restrict this entirely? The user already has one.
-      createdAt: new Date(),
-    });
-
-    const user = { _id: result.insertedId, name, email: email.toLowerCase(), role: 'ADMIN' };
-    const token = signToken(user);
-    res.cookie('token', token, COOKIE_OPTIONS);
-    res.json({ user: { id: user._id, name: user.name, email: user.email, role: user.role } });
-  } catch (err) {
-    console.error('Register error:', err);
-    res.status(500).json({ error: 'Server error during registration.' });
-  }
+// ---------- Register (Email + Password) [DISABLED] ----------
+router.post('/register', (req, res) => {
+  res.status(403).json({ error: 'Public registration is disabled. Please contact an administrator.' });
 });
 
 // ---------- Login (Email + Password) ----------

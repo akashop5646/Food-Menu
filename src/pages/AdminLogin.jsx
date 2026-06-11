@@ -4,8 +4,6 @@ import { useNavigate } from 'react-router-dom';
 
 export default function AdminLogin() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState('login'); // 'login' or 'register'
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -17,8 +15,8 @@ export default function AdminLogin() {
     setError('');
     setLoading(true);
 
-    const endpoint = mode === 'register' ? '/api/auth/register' : '/api/auth/login';
-    const body = mode === 'register' ? { name, email, password } : { email, password };
+    const endpoint = '/api/auth/login';
+    const body = { email, password };
 
     try {
       const res = await fetch(endpoint, {
@@ -121,30 +119,6 @@ export default function AdminLogin() {
 
         {/* Card */}
         <div className="bg-surface-container border border-primary/20 rounded-xl overflow-hidden shadow-2xl">
-          {/* Tabs */}
-          <div className="flex border-b border-outline-variant/20">
-            <button
-              onClick={() => { setMode('login'); setError(''); }}
-              className={`flex-1 py-4 font-label-caps text-label-caps uppercase tracking-widest transition-all ${
-                mode === 'login'
-                  ? 'text-primary border-b-2 border-primary bg-primary/5'
-                  : 'text-on-surface-variant hover:text-on-surface'
-              }`}
-            >
-              Sign In
-            </button>
-            <button
-              onClick={() => { setMode('register'); setError(''); }}
-              className={`flex-1 py-4 font-label-caps text-label-caps uppercase tracking-widest transition-all ${
-                mode === 'register'
-                  ? 'text-primary border-b-2 border-primary bg-primary/5'
-                  : 'text-on-surface-variant hover:text-on-surface'
-              }`}
-            >
-              Register
-            </button>
-          </div>
-
           <div className="p-6">
             {/* Google Sign-In */}
             <div className="w-full flex justify-center mb-6">
@@ -172,27 +146,6 @@ export default function AdminLogin() {
 
             {/* Email/Password Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
-              {mode === 'register' && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                >
-                  <label className="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest block mb-2">Full Name</label>
-                  <div className="relative">
-                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">person</span>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="John Doe"
-                      required
-                      className="w-full bg-surface-container-high border border-outline-variant text-on-surface pl-10 pr-4 py-3 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors font-body-md text-body-md placeholder-on-surface-variant/40"
-                    />
-                  </div>
-                </motion.div>
-              )}
-
               <div>
                 <label className="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest block mb-2">Email</label>
                 <div className="relative">
@@ -255,7 +208,7 @@ export default function AdminLogin() {
                   <span className="material-symbols-outlined animate-spin text-[20px]">progress_activity</span>
                 ) : (
                   <>
-                    {mode === 'register' ? 'Create Account' : 'Sign In'}
+                    Sign In
                     <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
                   </>
                 )}
