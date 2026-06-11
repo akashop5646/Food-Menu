@@ -233,7 +233,12 @@ export default function AdminDashboard() {
       <div key={order._id} className="bg-surface-container-low border border-outline-variant/30 hover:border-primary/40 rounded-xl p-4 flex flex-col gap-3 transition-all text-left">
         <div className="flex justify-between items-start gap-2">
           <div>
-            <span className="font-headline-sm text-base text-on-surface font-semibold">{order.table}</span>
+            <span className="font-headline-sm text-base text-on-surface font-semibold">
+              {order.table}
+              {order.location && (
+                <span className="text-[12px] text-on-surface-variant font-normal ml-1.5">({order.location})</span>
+              )}
+            </span>
             <span className="text-[11px] text-on-surface-variant/70 block mt-0.5">{minsAgo} mins ago • by {order.confirmedBy.split('@')[0]}</span>
           </div>
           
@@ -332,7 +337,12 @@ export default function AdminDashboard() {
                   return (
                     <tr key={order._id} className="hover:bg-surface-container-lowest/30 transition-colors">
                       <td className="py-3.5 px-4 font-body-sm text-on-surface-variant whitespace-nowrap">{dateStr}</td>
-                      <td className="py-3.5 px-4 font-semibold text-on-surface">{order.table}</td>
+                      <td className="py-3.5 px-4 font-semibold text-on-surface">
+                        {order.table}
+                        {order.location && (
+                          <span className="text-[11px] text-on-surface-variant font-normal block mt-0.5">({order.location})</span>
+                        )}
+                      </td>
                       <td className="py-3.5 px-4 max-w-xs truncate text-on-surface-variant" title={itemsText}>{itemsText}</td>
                       <td className="py-3.5 px-4 font-price-display text-primary font-semibold">₹{order.total.toFixed(2)}</td>
                       <td className="py-3.5 px-4 font-body-sm text-on-surface-variant">

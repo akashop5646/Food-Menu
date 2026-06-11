@@ -30,11 +30,12 @@ router.post('/', async (req, res) => {
     const number = (maxTable.length > 0 ? maxTable[0].number : 0) + 1;
     
     const tableName = name || `Table ${number}`;
+    const loc = location || 'Main Dining Room';
     
     // Unique URL for the table ordering system
     // Use frontend's baseUrl if provided, so mobile devices on the same network get the correct IP link
     const base = baseUrl || 'http://localhost:3000';
-    const orderUrl = `${base}/?table=${encodeURIComponent(tableName)}`;
+    const orderUrl = `${base}/?table=${encodeURIComponent(tableName)}&location=${encodeURIComponent(loc)}`;
     
     // Generate high-resolution QR Code data URI
     // For high resolution, scale factor can be adjusted

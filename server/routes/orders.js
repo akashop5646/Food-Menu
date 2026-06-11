@@ -32,7 +32,7 @@ router.get('/active', async (req, res) => {
 // Create a verified order (called by Waiter scanning page)
 router.post('/', requireAuth, async (req, res) => {
   try {
-    const { table, items, total, paymentType, paymentStatus, deviceId, customerIp } = req.body;
+    const { table, location, items, total, paymentType, paymentStatus, deviceId, customerIp } = req.body;
 
     // Validation checks
     if (!table) return res.status(400).json({ error: 'Table is required.' });
@@ -51,6 +51,7 @@ router.post('/', requireAuth, async (req, res) => {
 
     const newOrder = {
       table,
+      location: location || null,
       items: items.map(item => ({
         id: item.id || item._id,
         name: item.name,

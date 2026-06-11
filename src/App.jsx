@@ -8,6 +8,7 @@ import AdminDashboard from './pages/AdminDashboard';
 function MenuPage() {
   const [searchParams] = useSearchParams();
   const tableParam = searchParams.get('table') || 'Walk-in';
+  const locationParam = searchParams.get('location') || '';
 
   const [menuItems, setMenuItems] = useState([]);
   const [categories, setCategories] = useState(['All']);
@@ -16,6 +17,7 @@ function MenuPage() {
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTable] = useState(tableParam);
+  const [selectedLocation] = useState(locationParam);
   
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
@@ -131,6 +133,7 @@ function MenuPage() {
     if (!cart.length) return null;
     return {
       table: selectedTable,
+      location: selectedLocation,
       itemCount: cartCount,
       total: cartTotal,
       items: cart.map(item => ({ id: item._id, name: item.name, price: item.price, quantity: item.quantity })),
@@ -138,7 +141,7 @@ function MenuPage() {
       deviceId,
       customerIp,
     };
-  }, [cart, cartCount, cartTotal, selectedTable, deviceId, customerIp]);
+  }, [cart, cartCount, cartTotal, selectedTable, selectedLocation, deviceId, customerIp]);
 
   useEffect(() => {
     if (!isCheckoutOpen || !orderPayload) {
