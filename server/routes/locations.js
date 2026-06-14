@@ -1,9 +1,10 @@
 import express from 'express';
 import { getDB } from '../db.js';
+import { requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// GET all locations
+// GET all locations (public — needed for customer-facing features)
 router.get('/', async (req, res) => {
   try {
     const db = await getDB();
@@ -15,14 +16,18 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST to create a new location
-router.post('/', async (req, res) => {
+// POST to create a new location (H1 fix: requireAdmin added)
+router.post('/', requireAdmin, async (req, res) => {
   try {
     const { name } = req.body;
-    if (!name) return res.status(400).json({ error: 'Name is required' });
+    // M3 fix: validate type and sanitize
+    if (!name || typeof name !== 'string') return res.status(400).json({ error: 'Name is required' });
+
+    const sanitizedName = name.replace(/<[^>]*>/g, '').trim().slice(0, 200);
+    if (!sanitizedName) return res.status(400).json({ error: 'Invalid location name' });
 
     const db = await getDB();
-    const newLocation = { name, createdAt: new Date() };
+    const newLocation = { name: sanitizedName, createdAt: new Date() };
     const result = await db.collection('locations').insertOne(newLocation);
     newLocation._id = result.insertedId;
     

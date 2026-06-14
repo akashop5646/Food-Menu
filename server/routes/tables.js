@@ -2,16 +2,15 @@ import express from 'express';
 import { getDB } from '../db.js';
 import QRCode from 'qrcode';
 import { ObjectId } from 'mongodb';
+import { requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// GET all tables
+// GET all tables (public — needed for customer-facing features)
 router.get('/', async (req, res) => {
   try {
     const db = await getDB();
     const tables = await db.collection('tables').find({}).sort({ number: 1 }).toArray();
-    // Return tables with base64 QR codes mapped (or we can return raw data and generate on frontend)
-    // The requirement says: generate and download high-resolution QR codes, so saving them in the DB or returning them as data URI is good.
     res.json(tables);
   } catch (error) {
     console.error('Error fetching tables:', error);
@@ -19,8 +18,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST to create a new table
-router.post('/', async (req, res) => {
+// POST to create a new table (H1 fix: requireAdmin added)
+router.post('/', requireAdmin, async (req, res) => {
   try {
     const { name, location, seats, baseUrl } = req.body;
     const db = await getDB();
@@ -38,7 +37,6 @@ router.post('/', async (req, res) => {
     const orderUrl = `${base}/?table=${encodeURIComponent(tableName)}&location=${encodeURIComponent(loc)}`;
     
     // Generate high-resolution QR Code data URI
-    // For high resolution, scale factor can be adjusted
     const qrUrl = await QRCode.toDataURL(orderUrl, {
       width: 800,
       margin: 2,
@@ -69,8 +67,8 @@ router.post('/', async (req, res) => {
   }
 });
 
-// DELETE table by ID
-router.delete('/:id', async (req, res) => {
+// DELETE table by ID (H1 fix: requireAdmin added)
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const db = await getDB();

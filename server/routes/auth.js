@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import rateLimit from 'express-rate-limit';
 import { getDB } from '../db.js';
 
 const router = Router();
@@ -12,6 +13,24 @@ const COOKIE_OPTIONS = {
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 };
 
+// Rate limiter for login endpoint (M1 fix)
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15-minute window
+  max: 10, // Max 10 attempts per IP per window
+  message: { error: 'Too many login attempts. Please try again after 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Rate limiter for Google auth
+const googleLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'Too many authentication attempts. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 function getSecret() {
   return process.env.JWT_SECRET;
 }
@@ -20,7 +39,7 @@ function signToken(user) {
   return jwt.sign(
     { id: user._id.toString(), email: user.email, name: user.name, role: user.role || 'ADMIN' },
     getSecret(),
-    { expiresIn: '7d' }
+    { expiresIn: '24h' } // M4 fix: reduced from 7d to 24h
   );
 }
 
@@ -30,11 +49,19 @@ router.post('/register', (req, res) => {
 });
 
 // ---------- Login (Email + Password) ----------
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required.' });
+    }
+
+    // Input validation
+    if (typeof email !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ error: 'Invalid input.' });
+    }
+    if (email.length > 254 || password.length > 128) {
+      return res.status(400).json({ error: 'Invalid input.' });
     }
 
     const db = await getDB();
@@ -60,7 +87,7 @@ router.post('/login', async (req, res) => {
 });
 
 // ---------- Google Sign-In ----------
-router.post('/google', async (req, res) => {
+router.post('/google', googleLimiter, async (req, res) => {
   try {
     const { credential } = req.body;
     if (!credential) {

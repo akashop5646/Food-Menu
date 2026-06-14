@@ -1,10 +1,11 @@
 import express from 'express';
 import { getDB } from '../db.js';
 import { ObjectId } from 'mongodb';
+import { requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// GET all categories
+// GET all categories (public — needed for customer menu display)
 router.get('/', async (req, res) => {
   try {
     const db = await getDB();
@@ -16,22 +17,28 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST add a new category
-router.post('/', async (req, res) => {
+// POST add a new category (H1 fix: requireAdmin added)
+router.post('/', requireAdmin, async (req, res) => {
   try {
     const { name } = req.body;
-    if (!name || name.trim() === '') {
+    // M3 fix: validate type and sanitize
+    if (!name || typeof name !== 'string' || name.trim() === '') {
       return res.status(400).json({ error: 'Category name is required' });
+    }
+
+    const sanitizedName = name.replace(/<[^>]*>/g, '').trim().slice(0, 100);
+    if (!sanitizedName) {
+      return res.status(400).json({ error: 'Invalid category name' });
     }
 
     const db = await getDB();
     // Check if it already exists
-    const existing = await db.collection('categories').findOne({ name: name.trim() });
+    const existing = await db.collection('categories').findOne({ name: sanitizedName });
     if (existing) {
       return res.status(400).json({ error: 'Category already exists' });
     }
 
-    const newCategory = { name: name.trim() };
+    const newCategory = { name: sanitizedName };
     const result = await db.collection('categories').insertOne(newCategory);
     newCategory._id = result.insertedId;
     res.status(201).json(newCategory);
@@ -41,8 +48,8 @@ router.post('/', async (req, res) => {
   }
 });
 
-// DELETE a category
-router.delete('/:id', async (req, res) => {
+// DELETE a category (H1 fix: requireAdmin added)
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const db = await getDB();

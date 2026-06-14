@@ -3,6 +3,7 @@ import { getDB } from '../db.js';
 import { ObjectId } from 'mongodb';
 import { v2 as cloudinary } from 'cloudinary';
 import dotenv from 'dotenv';
+import { requireAdmin } from '../middleware/auth.js';
 
 dotenv.config();
 
@@ -12,6 +13,12 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 const router = express.Router();
+
+// Sanitize string input — strip HTML tags and limit length
+function sanitizeString(input, maxLength = 500) {
+  if (typeof input !== 'string') return '';
+  return input.replace(/<[^>]*>/g, '').trim().slice(0, maxLength);
+}
 
 // GET all menu items (public)
 router.get('/', async (req, res) => {
@@ -37,8 +44,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST create a new menu item
-router.post('/', async (req, res) => {
+// POST create a new menu item (H1 fix: requireAdmin added)
+router.post('/', requireAdmin, async (req, res) => {
   try {
     const { name, categories, price, description, image, chefPick } = req.body;
     
@@ -47,13 +54,20 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Name and price are required.' });
     }
 
+    // Input sanitization (M3 fix)
+    const sanitizedName = sanitizeString(name, 200);
+    const sanitizedDesc = sanitizeString(description, 1000);
+    if (!sanitizedName) {
+      return res.status(400).json({ error: 'Invalid item name.' });
+    }
+
     const db = await getDB();
     const newItem = {
-      name,
-      categories: Array.isArray(categories) ? categories : [],
+      name: sanitizedName,
+      categories: Array.isArray(categories) ? categories.map(c => sanitizeString(c, 100)) : [],
       price: Number(price),
-      description: description || '',
-      image: image || '',
+      description: sanitizedDesc,
+      image: typeof image === 'string' ? image.slice(0, 2000) : '',
       chefPick: Boolean(chefPick),
       available: true,
       createdAt: new Date(),
@@ -73,8 +87,8 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT update a menu item
-router.put('/:id', async (req, res) => {
+// PUT update a menu item (H1 fix: requireAdmin added)
+router.put('/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, categories, price, description, image, chefPick, available } = req.body;
@@ -86,7 +100,13 @@ router.put('/:id', async (req, res) => {
         if (key === 'price') {
           updates[key] = Number(req.body[key]);
         } else if (key === 'categories') {
-          updates[key] = Array.isArray(req.body[key]) ? req.body[key] : [];
+          updates[key] = Array.isArray(req.body[key]) ? req.body[key].map(c => sanitizeString(c, 100)) : [];
+        } else if (key === 'name') {
+          updates[key] = sanitizeString(req.body[key], 200);
+        } else if (key === 'description') {
+          updates[key] = sanitizeString(req.body[key], 1000);
+        } else if (key === 'image') {
+          updates[key] = typeof req.body[key] === 'string' ? req.body[key].slice(0, 2000) : '';
         } else {
           updates[key] = req.body[key];
         }
@@ -119,8 +139,8 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE a menu item
-router.delete('/:id', async (req, res) => {
+// DELETE a menu item (H1 fix: requireAdmin added)
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const db = await getDB();

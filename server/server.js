@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { connectDB } from './db.js';
 import authRoutes from './routes/auth.js';
@@ -18,12 +19,34 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
+// Allowed origins for CORS — add your production domain here
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5000',
+  process.env.FRONTEND_URL, // Set this in .env for production
+].filter(Boolean);
+
+// Security Middleware
+app.use(helmet({
+  contentSecurityPolicy: false, // Disable CSP for now (frontend serves inline scripts)
+  crossOriginEmbedderPolicy: false,
+}));
+
 app.use(cors({
-  origin: true,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, server-to-server)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
 }));
-app.use(express.json());
+
+// Body parsing with size limits (M5 fix)
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 app.use(cookieParser());
 
 // Routes
