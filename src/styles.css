@@ -174,8 +174,20 @@
 
   /* Metallic Gradient for Primary Buttons */
   .bg-gold-metallic {
-    background: linear-gradient(135deg, #f2ca50 0%, #d4af37 50%, #e9c349 100%);
+    background: linear-gradient(135deg, #f2ca50 0%, #d4af37 25%, #fff1b0 50%, #d4af37 75%, #f2ca50 100%);
+    background-size: 200% auto;
     color: #3c2f00;
+    transition: background-position 0.5s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .bg-gold-metallic:hover {
+    background-position: right center;
+  }
+
+  /* Accessibility Focus Ring styling */
+  .focus-ring-gold:focus-visible {
+      outline: 2px solid rgb(var(--color-primary-fixed-dim));
+      outline-offset: 3px;
+      box-shadow: 0 0 12px rgba(212, 175, 55, 0.4);
   }
 
   /* From User HTML */
@@ -220,4 +232,27 @@
       opacity: 1;
       transition: 0s;
   }
+
+
+
+  /* Smooth horizontal scrolling utility */
+  .scroll-smooth-horizontal {
+      scroll-behavior: smooth;
+      -webkit-overflow-scrolling: touch;
+  }
+
+  /* Premium Card Shadows */
+  .premium-card-shadow {
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+      transition: box-shadow 0.3s ease, transform 0.3s ease, border-color 0.3s ease;
+  }
+  .dark .premium-card-shadow {
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  }
+
+  /* Global page transition styles for theme toggling */
+  .theme-transition * {
+      transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+  }
 }
+
