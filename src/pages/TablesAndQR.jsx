@@ -137,7 +137,7 @@ export default function TablesAndQR() {
   });
 
   return (
-    <div className="flex flex-col h-full w-full pb-10">
+    <div className="flex flex-col min-h-full w-full pb-10">
       {/* Top Actions */}
       <div className="flex justify-between items-center mb-8 animate-[fadeUp_0.6s_ease-out_forwards]">
         <div className="flex gap-4 items-center">
