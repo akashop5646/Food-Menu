@@ -2,7 +2,11 @@ import { MongoClient } from 'mongodb';
 import dns from 'dns';
 
 // Force Google DNS — Reliance ISP blocks SRV record lookups
-dns.setServers(['8.8.8.8', '8.8.4.4']);
+try {
+  dns.setServers(['8.8.8.8', '8.8.4.4']);
+} catch (err) {
+  console.warn('Failed to set DNS servers (expected in some serverless environments):', err.message);
+}
 
 let client;
 let db;
