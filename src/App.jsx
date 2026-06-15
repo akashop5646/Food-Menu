@@ -424,46 +424,91 @@ function MenuPage() {
         
         {/* Hero Section */}
         {menuLoading ? (
-          <section className="h-[530px] md:h-[618px] flex items-center justify-center">
+          <section className="h-[500px] flex items-center justify-center">
             <span className="material-symbols-outlined text-primary text-4xl animate-spin">progress_activity</span>
           </section>
         ) : heroItem ? (
-          <section className="relative h-[530px] md:h-[618px] flex flex-col justify-end bg-surface-container overflow-hidden">
-            {heroItem.image && (
-              <>
-                <div 
-                  className="absolute inset-0 bg-center bg-cover bg-no-repeat opacity-65" 
-                  style={{ backgroundImage: `url('${heroItem.image}')` }}
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent pointer-events-none" />
-              </>
-            )}
-            <div className="max-w-[1200px] mx-auto w-full p-margin-mobile md:p-margin-desktop relative z-10">
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, ease: "easeOut" }}
-                className="w-full md:w-2/3"
-              >
-              <span className="font-label-caps text-label-caps text-primary tracking-widest uppercase mb-4 block">Signature Tasting</span>
-              <h1 className="font-display-lg-mobile text-display-lg-mobile md:font-display-lg md:text-display-lg text-primary mb-2 leading-tight">{heroItem.name}</h1>
-              <p className="font-body-lg text-body-lg text-on-surface-variant max-w-lg mb-6 line-clamp-3">
-                {heroItem.description}
-              </p>
-              <div className="flex items-center gap-4">
-                <span className="font-price-display text-price-display text-primary-fixed-dim">₹{heroItem.price}</span>
-                <button 
-                  onClick={() => handleOrderNow(heroItem)}
-                  className="bg-gold-metallic text-on-primary font-label-caps text-label-caps px-6 py-3 rounded uppercase tracking-wider gold-glow transition-all"
+          <section className="relative bg-surface-container-lowest overflow-hidden py-12 md:py-20 border-b border-outline-variant/10">
+            {/* Background atmospheric glows */}
+            <div className="absolute top-0 right-0 w-[500px] h-[500px] rounded-full bg-primary/5 blur-[120px] pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-[300px] h-[300px] rounded-full bg-primary/3 blur-[100px] pointer-events-none" />
+
+            <div className="max-w-[1200px] mx-auto px-margin-mobile md:px-margin-desktop relative z-10">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
+                {/* Text Info */}
+                <motion.div 
+                  initial={{ opacity: 0, x: -30 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.8, ease: "easeOut" }}
+                  className="md:col-span-7 flex flex-col items-start text-left order-2 md:order-1"
                 >
-                  Order Now
-                </button>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold font-label-caps uppercase tracking-widest bg-primary/10 border border-primary/20 text-primary rounded-full mb-4 shadow-sm">
+                    <span className="material-symbols-outlined text-[12px] font-bold">restaurant</span>
+                    Signature Tasting
+                  </span>
+                  <h1 className="font-display-lg text-4xl md:text-5xl lg:text-6xl text-primary mb-4 leading-tight font-semibold">
+                    {heroItem.name}
+                  </h1>
+                  <p className="font-body-lg text-[15px] md:text-body-lg text-on-surface-variant/80 max-w-xl mb-8 leading-relaxed">
+                    {heroItem.description && heroItem.description.toLowerCase() !== heroItem.name.toLowerCase() 
+                      ? heroItem.description 
+                      : "Indulge in our masterfully crafted signature dish, prepared with premium local ingredients, authentic spices, and absolute culinary devotion."
+                    }
+                  </p>
+                  <div className="flex items-center gap-6">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-label-caps text-on-surface-variant/50 uppercase tracking-widest">Price</span>
+                      <span className="font-price-display text-3xl text-on-surface font-bold">₹{heroItem.price}</span>
+                    </div>
+                    <button 
+                      onClick={() => handleOrderNow(heroItem)}
+                      className="bg-gold-metallic text-on-primary font-label-caps text-[12px] px-8 py-4 rounded-xl uppercase tracking-widest gold-glow transition-all font-bold flex items-center gap-2"
+                    >
+                      Order Now <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                    </button>
+                  </div>
+                </motion.div>
+
+                {/* Image Container */}
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
+                  className="md:col-span-5 flex justify-center order-1 md:order-2 w-full"
+                >
+                  <div className="relative group w-full max-w-[340px] md:max-w-none aspect-square">
+                    {/* Decorative background gold glow */}
+                    <div className="absolute inset-0 bg-primary/15 rounded-[2.5rem] blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
+                    
+                    <div className="w-full h-full rounded-[2rem] overflow-hidden border border-primary/20 shadow-2xl bg-surface-container-high relative">
+                      {heroItem.image ? (
+                        <img 
+                          src={heroItem.image} 
+                          alt={heroItem.name} 
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-surface-container">
+                          <span className="material-symbols-outlined text-6xl opacity-25 text-primary">restaurant</span>
+                        </div>
+                      )}
+                      
+                      {/* Subtle inner overlay for luxury feel */}
+                      <div className="absolute inset-0 border border-white/10 rounded-[2rem] pointer-events-none" />
+                    </div>
+                    
+                    {/* Floating Badge */}
+                    <div className="absolute -bottom-3 -right-3 bg-surface-container border border-primary/30 text-primary px-4 py-2 text-[10px] font-label-caps uppercase tracking-widest rounded-xl flex items-center gap-1 shadow-xl">
+                      <span className="material-symbols-outlined text-[14px] font-bold">award_star</span>
+                      Chef's Pick
+                    </div>
+                  </div>
+                </motion.div>
               </div>
-            </motion.div>
             </div>
           </section>
         ) : (
-          <section className="h-[530px] md:h-[618px] flex items-center justify-center bg-surface-container text-on-surface-variant">
+          <section className="h-[400px] flex items-center justify-center bg-surface-container text-on-surface-variant">
             <div className="text-center">
               <span className="material-symbols-outlined text-6xl mb-4 opacity-50">restaurant_menu</span>
               <h2 className="font-headline-md text-headline-md">Menu Coming Soon</h2>
