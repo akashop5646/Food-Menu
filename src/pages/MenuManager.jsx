@@ -245,14 +245,14 @@ export default function MenuManager() {
         <div className="flex items-center gap-3">
           <button 
             onClick={() => setIsCategoryModalOpen(true)}
-            className="bg-surface-container text-on-surface hover:text-primary font-title-md text-[14px] sm:text-[16px] font-semibold px-4 py-2 rounded-DEFAULT border border-outline-variant/30 hover:border-primary/50 transition-all flex items-center gap-2"
+            className="bg-surface-container text-on-surface hover:text-primary font-title-md text-[14px] sm:text-[16px] font-semibold px-4 py-2.5 rounded-xl border border-outline-variant/30 hover:border-primary/50 transition-all flex items-center gap-2"
           >
             <span className="material-symbols-outlined text-[20px]">category</span> 
             <span className="hidden sm:inline">Categories</span>
           </button>
           <button 
             onClick={() => handleOpenModal()}
-            className="bg-primary text-on-primary font-title-md text-[14px] sm:text-[16px] font-semibold px-4 sm:px-6 py-2 rounded-DEFAULT ripple shadow-[0_0_15px_rgba(212,175,55,0.3)] hover:shadow-[0_0_25px_rgba(212,175,55,0.5)] transition-shadow duration-300 flex items-center gap-2"
+            className="bg-primary text-on-primary font-title-md text-[14px] sm:text-[16px] font-semibold px-4 sm:px-6 py-2.5 rounded-xl ripple shadow-[0_0_15px_rgba(212,175,55,0.3)] hover:shadow-[0_0_25px_rgba(212,175,55,0.5)] transition-shadow duration-300 flex items-center gap-2"
           >
             <span className="material-symbols-outlined">add</span> 
             <span className="hidden sm:inline">Add New Item</span>

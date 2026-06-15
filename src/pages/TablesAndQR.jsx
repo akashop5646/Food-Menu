@@ -145,31 +145,31 @@ export default function TablesAndQR() {
             <select 
               value={selectedFilter}
               onChange={(e) => setSelectedFilter(e.target.value)}
-              className="bg-surface-container-high hover:bg-surface-container-highest border border-outline-variant text-on-surface pl-4 pr-10 py-2 rounded-DEFAULT font-label-caps text-[12px] font-bold tracking-[0.1em] transition-colors appearance-none outline-none focus:border-primary cursor-pointer"
+              className="bg-none bg-surface-container-high hover:bg-surface-container-highest border border-outline-variant text-on-surface pl-4 pr-10 py-2.5 rounded-xl font-label-caps text-[12px] font-bold tracking-[0.1em] transition-colors appearance-none outline-none focus:border-primary cursor-pointer shadow-sm"
             >
               <option value="All">All Locations</option>
               {locations.map(loc => (
                 <option key={loc._id || loc.name} value={loc.name}>{loc.name}</option>
               ))}
             </select>
-            <span className="material-symbols-outlined absolute right-3 top-2 text-on-surface-variant text-[18px] pointer-events-none">expand_more</span>
+            <span className="material-symbols-outlined absolute right-3 top-3.5 text-on-surface-variant text-[18px] pointer-events-none">expand_more</span>
           </div>
 
           <div className="relative group hidden sm:block">
             <input 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-transparent border-b border-surface-variant text-on-surface focus:outline-none focus:border-primary focus:shadow-[0_4px_12px_rgba(212,175,55,0.1)] transition-all duration-300 py-2 pl-8 pr-4 w-64 placeholder-on-surface-variant font-body-sm text-[14px]" 
+              className="bg-transparent border-b border-surface-variant text-on-surface focus:outline-none focus:border-primary focus:shadow-[0_4px_12px_rgba(212,175,55,0.1)] transition-all duration-300 py-2.5 pl-8 pr-4 w-64 placeholder-on-surface-variant font-body-sm text-[14px]" 
               placeholder="Search tables..." 
               type="text"
             />
-            <span className="material-symbols-outlined absolute left-0 top-2.5 text-on-surface-variant text-[18px]">search</span>
+            <span className="material-symbols-outlined absolute left-0 top-3 text-on-surface-variant text-[18px]">search</span>
           </div>
         </div>
         <div className="flex gap-3">
           <button 
             onClick={() => setIsLocationModalOpen(true)}
-            className="bg-surface-container-high border border-outline-variant/50 text-on-surface font-title-md text-[14px] sm:text-[16px] font-semibold px-4 py-2 rounded-DEFAULT hover:border-primary/50 transition-colors flex items-center gap-2"
+            className="bg-surface-container-high border border-outline-variant/50 text-on-surface font-title-md text-[14px] sm:text-[16px] font-semibold px-4 py-2.5 rounded-xl hover:border-primary/50 transition-colors flex items-center gap-2 shadow-sm"
           >
             <span className="material-symbols-outlined text-[18px] hidden sm:block">add_location</span> 
             <span className="hidden sm:block">Create Location</span>
@@ -182,7 +182,7 @@ export default function TablesAndQR() {
               }
               setIsModalOpen(true);
             }}
-            className="bg-primary text-on-primary font-title-md text-[14px] sm:text-[16px] font-semibold px-4 sm:px-6 py-2 rounded-DEFAULT ripple shadow-[0_0_15px_rgba(212,175,55,0.3)] hover:shadow-[0_0_25px_rgba(212,175,55,0.5)] transition-shadow duration-300 flex items-center gap-2"
+            className="bg-primary text-on-primary font-title-md text-[14px] sm:text-[16px] font-semibold px-4 sm:px-6 py-2.5 rounded-xl ripple shadow-[0_0_15px_rgba(212,175,55,0.3)] hover:shadow-[0_0_25px_rgba(212,175,55,0.5)] transition-shadow duration-300 flex items-center gap-2"
           >
             <span className="material-symbols-outlined hidden sm:block">qr_code</span> 
             <span className="hidden sm:block">Generate QR</span>
