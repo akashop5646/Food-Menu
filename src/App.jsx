@@ -113,6 +113,7 @@ function MenuPage() {
   const [deviceId, setDeviceId] = useState('');
   const [customerIp, setCustomerIp] = useState('');
   const [checkoutSessionId, setCheckoutSessionId] = useState('');
+  const [activePolicy, setActivePolicy] = useState(null);
 
   // Fetch menu items and categories from API
   useEffect(() => {
@@ -429,10 +430,13 @@ function MenuPage() {
         ) : heroItem ? (
           <section className="relative h-[530px] md:h-[618px] flex flex-col justify-end bg-surface-container overflow-hidden">
             {heroItem.image && (
-              <div 
-                className="absolute inset-0 bg-center bg-cover bg-no-repeat opacity-40 mix-blend-luminosity" 
-                style={{ backgroundImage: `url('${heroItem.image}')` }}
-              />
+              <>
+                <div 
+                  className="absolute inset-0 bg-center bg-cover bg-no-repeat opacity-65" 
+                  style={{ backgroundImage: `url('${heroItem.image}')` }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent pointer-events-none" />
+              </>
             )}
             <div className="max-w-[1200px] mx-auto w-full p-margin-mobile md:p-margin-desktop relative z-10">
               <motion.div 
@@ -1262,7 +1266,216 @@ function MenuPage() {
         )}
       </AnimatePresence>
 
+      {/* Footer */}
+      <footer className="mt-20 border-t border-outline-variant/15 py-10 bg-surface-container-lowest/80 backdrop-blur-md">
+        <div className="max-w-[1200px] mx-auto px-margin-mobile md:px-margin-desktop flex flex-col md:flex-row justify-between items-center gap-6">
+          <div className="text-center md:text-left">
+            <div className="font-display-lg text-[18px] text-primary font-semibold mb-2">Aurum Table</div>
+            <p className="text-body-sm text-on-surface-variant/70 max-w-xs leading-relaxed text-[12px] md:text-body-sm">
+              Experience culinary excellence at your table. Safe payments, instant order tracking, and split settlements.
+            </p>
+          </div>
+          <div className="flex flex-wrap justify-center gap-6 font-label-caps text-[11px] uppercase tracking-widest">
+            <button onClick={() => setActivePolicy('privacy')} className="text-on-surface-variant hover:text-primary transition-colors focus-ring-gold rounded px-1.5 py-0.5">Privacy Policy</button>
+            <button onClick={() => setActivePolicy('terms')} className="text-on-surface-variant hover:text-primary transition-colors focus-ring-gold rounded px-1.5 py-0.5">Terms & Conditions</button>
+            <button onClick={() => setActivePolicy('refund')} className="text-on-surface-variant hover:text-primary transition-colors focus-ring-gold rounded px-1.5 py-0.5">Cancellation & Refund</button>
+            <button onClick={() => setActivePolicy('contact')} className="text-on-surface-variant hover:text-primary transition-colors focus-ring-gold rounded px-1.5 py-0.5">Contact Us</button>
+          </div>
+        </div>
+        <div className="max-w-[1200px] mx-auto px-margin-mobile md:px-margin-desktop text-center mt-8 pt-4 border-t border-outline-variant/10 text-[10px] text-on-surface-variant/40">
+          © 2026 Aurum Table. All rights reserved. Powered by Razorpay.
+        </div>
+      </footer>
 
+      {/* Policy Modal */}
+      <AnimatePresence>
+        {activePolicy && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-md z-[110] flex items-center justify-center p-4 md:p-8"
+            onClick={() => setActivePolicy(null)}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${activePolicy} Policy`}
+          >
+            <motion.div 
+              initial={{ opacity: 0, y: 50, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 50, scale: 0.95 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-surface-container w-full max-w-2xl rounded-2xl overflow-hidden flex flex-col max-h-[85vh] shadow-2xl border border-primary/20"
+            >
+              <div className="p-6 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-lowest shrink-0">
+                <h2 className="font-headline-sm text-primary text-xl md:text-2xl capitalize">
+                  {activePolicy === 'privacy' && 'Privacy Policy'}
+                  {activePolicy === 'terms' && 'Terms & Conditions'}
+                  {activePolicy === 'refund' && 'Cancellation & Refund Policy'}
+                  {activePolicy === 'contact' && 'Contact Us'}
+                </h2>
+                <button 
+                  onClick={() => setActivePolicy(null)}
+                  aria-label="Close policy modal"
+                  className="text-on-surface-variant hover:text-primary transition-colors focus-ring-gold focus:outline-none rounded-full p-1"
+                >
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+              
+              <div className="p-6 md:p-8 flex-1 overflow-y-auto hide-scrollbar text-on-surface-variant/90 space-y-4 font-body-md text-sm md:text-[15px] leading-relaxed text-left">
+                {activePolicy === 'privacy' && (
+                  <>
+                    <p><strong>Effective Date:</strong> June 15, 2026</p>
+                    <p>Welcome to Aurum Table (accessible via https://food-menu-pb17.vercel.app). We respect your privacy and are committed to protecting your personal data. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website and use our food ordering services.</p>
+                    <p>Please read this privacy policy carefully. If you do not agree with the terms of this privacy policy, please do not access the site.</p>
+                    
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">1. Information We Collect</h3>
+                    <p>We collect information that you provide directly to us when you place an order, create an account, or interact with our platform. This includes:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li><strong>Personal Identifiable Information (PII):</strong> Name, delivery address, email address, and phone number.</li>
+                      <li><strong>Order Details:</strong> Information about the food items you order, special instructions, and transaction history.</li>
+                      <li><strong>Device and Usage Data:</strong> IP address, browser type, operating system, and your behavior on our website (collected via cookies).</li>
+                    </ul>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">2. Payment Data and Security</h3>
+                    <p>To process payments, we use a secure third-party payment gateway: Razorpay.</p>
+                    <p>We do not store your credit/debit card numbers, CVV, UPI IDs, or net banking passwords on our servers.</p>
+                    <p>All payment processing is handled securely by Razorpay in compliance with the Payment Card Industry Data Security Standard (PCI-DSS). Razorpay's use of your personal information is governed by their respective Privacy Policy.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">3. How We Use Your Information</h3>
+                    <p>We use the collected information to:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Process, fulfill, and deliver your food orders.</li>
+                      <li>Manage your account and provide customer support.</li>
+                      <li>Send transaction receipts, order updates, and administrative messages.</li>
+                      <li>Detect, prevent, and mitigate fraudulent or illegal activities.</li>
+                    </ul>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">4. Data Sharing and Split Settlements (Third Parties)</h3>
+                    <p>Because our platform coordinates food preparation and delivery, we must share certain information with third parties to fulfill your request:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li><strong>Merchants/Restaurants:</strong> We share your order details and name with the respective food vendors so they can prepare your meals.</li>
+                      <li><strong>Delivery Partners:</strong> We share your delivery address and phone number with delivery personnel so they can transport your order.</li>
+                      <li><strong>Financial Sub-agents (Razorpay Route):</strong> To facilitate automated split settlements between our platform and our registered food vendors, transaction and billing data is processed via Razorpay's routing architecture.</li>
+                      <li><strong>Legal Requirements:</strong> We may disclose your information if required to do so by law or in response to valid requests by public authorities.</li>
+                    </ul>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">5. Cookies</h3>
+                    <p>We use cookies and similar tracking technologies to track activity on our website and hold certain information to improve your browsing experience. You can instruct your browser to refuse all cookies, but doing so may prevent you from using some parts of our platform.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">6. Data Retention and Security</h3>
+                    <p>We retain your personal information only for as long as necessary to fulfill the purposes outlined in this policy and to comply with legal/accounting requirements. We implement industry-standard administrative, technical, and physical security measures to protect your data, though no method of transmission over the internet is 100% secure.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">7. Your Rights</h3>
+                    <p>Depending on your location, you may have the right to access, correct, or delete the personal information we hold about you. To exercise these rights, please contact us using the information below.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">8. Changes to This Policy</h3>
+                    <p>We reserve the right to modify this Privacy Policy at any time. Any changes will be posted on this page with an updated "Effective Date."</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">9. Contact Us</h3>
+                    <p>If you have questions or comments about this Privacy Policy, please contact us at:</p>
+                    <ul className="list-none space-y-1">
+                      <li><strong>Business Name:</strong> Aurum Table</li>
+                      <li><strong>Email:</strong> support@aurumtable.com</li>
+                      <li><strong>Phone:</strong> +91 98765 43210</li>
+                      <li><strong>Physical Address:</strong> 12, Aurum Culinary Street, Bangalore, Karnataka, India - 560001</li>
+                    </ul>
+                  </>
+                )}
+                {activePolicy === 'terms' && (
+                  <>
+                    <p><strong>Effective Date:</strong> June 15, 2026</p>
+                    <p>Welcome to Aurum Table. By accessing our website (https://food-menu-pb17.vercel.app) and placing food orders, you agree to comply with and be bound by the following Terms & Conditions. Please read them carefully.</p>
+                    
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">1. Services Provided</h3>
+                    <p>Aurum Table operates a digital table ordering and food delivery platform connecting customers with authorized food merchants and payment systems (Razorpay).</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">2. User Accounts & Responsibilities</h3>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>You must provide accurate and complete information when placing orders (Table number, contact details, payment information).</li>
+                      <li>You agree not to misuse our platform, disrupt servers, or initiate fraudulent transactions.</li>
+                    </ul>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">3. Placing Orders & Pricing</h3>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>All orders placed through the platform are subject to availability and merchant confirmation.</li>
+                      <li>Prices are shown in INR (₹) and include applicable taxes unless specified otherwise.</li>
+                      <li>We reserve the right to refuse service or cancel orders at our sole discretion.</li>
+                    </ul>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">4. Payments & Razorpay</h3>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Payments are processed securely via Razorpay. By choosing online payment, you agree to be bound by Razorpay's Terms of Service.</li>
+                      <li>Any transaction fees or credit card charges applied by banks are the user's responsibility.</li>
+                    </ul>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">5. Limitation of Liability</h3>
+                    <p>Aurum Table is not liable for indirect, incidental, or consequential damages resulting from the use or inability to use our services, food preparation delays, or errors by third-party delivery partners.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">6. Governing Law</h3>
+                    <p>These Terms & Conditions are governed by and construed in accordance with the laws of India. Any disputes shall be subject to the exclusive jurisdiction of the courts in Bangalore, India.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">7. Contact Us</h3>
+                    <p>If you have questions regarding these Terms & Conditions, contact us at support@aurumtable.com.</p>
+                  </>
+                )}
+                {activePolicy === 'refund' && (
+                  <>
+                    <p><strong>Effective Date:</strong> June 15, 2026</p>
+                    <p>At Aurum Table, we strive to provide a seamless dining and ordering experience. Please review our policies regarding order cancellations and refund requests.</p>
+                    
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">1. Order Cancellation</h3>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li><strong>Before Preparation:</strong> Customers can request order cancellations before the kitchen begins preparing the food. Please coordinate immediately with your server.</li>
+                      <li><strong>After Preparation Begins:</strong> Food orders cannot be cancelled once food preparation has commenced. No refunds will be provided for cancellations requested after this point.</li>
+                    </ul>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">2. Refund Eligibility & Process</h3>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li><strong>Merchant Refusal:</strong> If a restaurant or merchant is unable to fulfill your order due to item unavailability or other operational challenges, you will receive a full refund.</li>
+                      <li><strong>Payment Failure:</strong> In case of double-deduction or transaction failure where money was debited but the order failed verification, the amount will be automatically credited back by Razorpay.</li>
+                      <li><strong>Quality Issues:</strong> If you experience issues with food quality or order completeness, please notify staff immediately at the venue. Online refund adjustments will be assessed case-by-case.</li>
+                    </ul>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">3. Refund Timelines</h3>
+                    <p>Approved online refunds will be processed via Razorpay to the original payment source (Credit/Debit Card, Net Banking, or UPI) within <strong>5 to 7 business days</strong> in compliance with standard bank processing times.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">4. Contact Us</h3>
+                    <p>For cancellation or refund assistance, please email support@aurumtable.com or speak directly with the table captain/staff.</p>
+                  </>
+                )}
+                {activePolicy === 'contact' && (
+                  <>
+                    <p>We would love to hear from you! For reservations, support, feedback, or business inquiries, please reach out to us using the exact details below.</p>
+                    
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">📍 General Inquiries & Customer Support</h3>
+                    <ul className="list-none space-y-2">
+                      <li><strong>Registered Business/Legal Name:</strong> Aurum Table</li>
+                      <li><strong>Support Email:</strong> support@aurumtable.com</li>
+                      <li><strong>Customer Support Phone:</strong> +91 98765 43210</li>
+                      <li><strong>Physical Address:</strong> 12, Aurum Culinary Street, Bangalore, Karnataka, India - 560001</li>
+                      <li><strong>Operational Hours:</strong> Monday - Sunday, 11:00 AM - 11:00 PM IST</li>
+                    </ul>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">💬 Help Desk & Table Assistance</h3>
+                    <p>If you are currently dining at our restaurant, you can call for waiter verification or bill requests directly through your table QR code interface. For urgent billing issues, please contact the billing desk at our physical counter.</p>
+                  </>
+                )}
+              </div>
+              
+              <div className="p-4 border-t border-outline-variant/10 bg-surface-container-lowest flex justify-end shrink-0">
+                <button 
+                  onClick={() => setActivePolicy(null)}
+                  className="bg-primary hover:bg-primary-fixed-dim text-on-primary font-label-caps text-xs px-6 py-2.5 rounded-full uppercase tracking-wider transition-colors focus-ring-gold focus:outline-none"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Global Toast Notification */}
       <AnimatePresence>
@@ -1271,7 +1484,7 @@ function MenuPage() {
             initial={{ opacity: 0, y: 50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.9 }}
-            className="fixed bottom-24 md:bottom-10 left-1/2 -translate-x-1/2 md:left-auto md:translate-x-0 md:right-10 bg-surface-container-high border border-primary/30 text-primary px-6 py-3 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.5),0_0_20px_rgba(212,175,55,0.15)] flex items-center gap-3 z-[200] whitespace-nowrap"
+            className="fixed bottom-24 left-4 right-4 md:left-auto md:right-10 md:bottom-10 bg-surface-container-high border border-primary/30 text-primary px-6 py-3 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.5),0_0_20px_rgba(212,175,55,0.15)] flex items-center gap-3 z-[200]"
           >
             <span className="material-symbols-outlined text-[20px]">check_circle</span>
             <span className="font-body-md font-medium tracking-wide text-sm">{notification}</span>
