@@ -14,6 +14,37 @@ export default function TablesAndQR() {
   const [selectedFilter, setSelectedFilter] = useState('All');
   
   const [openDropdownId, setOpenDropdownId] = useState(null);
+  const [editingTable, setEditingTable] = useState(null);
+  const [editFormData, setEditFormData] = useState({ name: '', location: '', seats: 4 });
+
+  const handleStartEdit = (table) => {
+    setEditingTable(table);
+    setEditFormData({
+      name: table.name,
+      location: table.location,
+      seats: table.seats
+    });
+    setOpenDropdownId(null);
+  };
+
+  const submitEditTable = async (e) => {
+    e.preventDefault();
+    if (!editingTable) return;
+    try {
+      const res = await fetch(`/api/tables/${editingTable._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...editFormData, baseUrl: window.location.origin })
+      });
+      if (res.ok) {
+        const updatedTable = await res.json();
+        setTables(prev => prev.map(t => t._id === editingTable._id ? updatedTable : t));
+        setEditingTable(null);
+      }
+    } catch (err) {
+      console.error('Failed to edit table', err);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -166,29 +197,28 @@ export default function TablesAndQR() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.05 }}
-              className="bg-surface-container-low rounded-lg p-container-padding border border-white/5 relative group hover:-translate-y-2 transition-transform duration-300 hover:border-primary/50 overflow-hidden"
+              className="bg-surface-container/40 backdrop-blur-md rounded-2xl p-5 border border-primary/15 relative group hover:border-primary/45 transition-all duration-300 flex flex-col premium-card-shadow overflow-hidden"
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-surface-container-highest to-background opacity-50 z-0"></div>
+              <div className="absolute inset-0 bg-gradient-to-br from-surface-container-highest/30 to-background/10 opacity-50 z-0"></div>
               <div className="relative z-10 flex flex-col h-full">
                 <div className="flex justify-between items-start mb-6">
                   <div>
-                    <h3 className="font-title-md text-[20px] font-semibold text-on-surface">{table.name || `Table ${table.number}`}</h3>
-                    <p className="font-body-sm text-[14px] text-on-surface-variant mt-1">{table.location || 'Main Dining Room'}</p>
+                    <h3 className="font-title-md text-[18px] md:text-[20px] font-semibold text-on-surface leading-snug">{table.name || `Table ${table.number}`}</h3>
+                    <p className="font-body-sm text-[13px] text-on-surface-variant/75 mt-1">{table.location || 'Main Dining Room'}</p>
                   </div>
-                  <div className={`px-2 py-1 rounded-sm font-label-caps text-[12px] font-bold tracking-[0.1em] ${
-                    table.status === 'Active' ? 'bg-primary/20 text-primary' : 'bg-surface-container-highest text-on-surface-variant'
+                  <div className={`px-2.5 py-0.5 rounded-full font-label-caps text-[10px] font-bold tracking-[0.08em] uppercase ${
+                    table.status === 'Active' ? 'bg-primary/20 text-primary border border-primary/30' : 'bg-surface-container-highest text-on-surface-variant/80 border border-outline-variant/10'
                   }`}>
                     {table.status || 'Idle'}
                   </div>
                 </div>
                 
                 <div className="flex-1 flex justify-center items-center py-6 relative">
-                  <div className="w-32 h-32 bg-white/10 rounded-DEFAULT relative overflow-hidden group-hover:scale-110 transition-transform duration-500 flex items-center justify-center border border-white/20">
-                    <div className="w-full h-full bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-white/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 absolute inset-0 transition-opacity duration-500"></div>
+                  <div className="w-32 h-32 bg-white rounded-xl relative overflow-hidden group-hover:scale-105 transition-transform duration-500 flex items-center justify-center p-1.5 border border-primary/20 shadow-md">
                     {table.qrUrl ? (
-                      <img src={table.qrUrl} alt={`QR for ${table.name}`} className="w-full h-full object-cover mix-blend-screen" />
+                      <img src={table.qrUrl} alt={`QR for ${table.name}`} className="w-full h-full object-contain rounded-lg" />
                     ) : (
-                      <span className="material-symbols-outlined text-white/50 text-[64px]">qr_code_2</span>
+                      <span className="material-symbols-outlined text-black/20 text-[64px]">qr_code_2</span>
                     )}
                   </div>
                   
@@ -196,18 +226,18 @@ export default function TablesAndQR() {
                     <a 
                       href={table.qrUrl} 
                       download={`QR_${table.name.replace(/\s+/g, '_')}.png`}
-                      className="bg-surface-bright border border-outline text-on-surface rounded-full px-4 py-2 flex items-center gap-2 shadow-lg hover:text-primary hover:border-primary"
+                      className="bg-gold-metallic text-on-primary font-label-caps text-[11px] rounded-full px-4 py-2 flex items-center gap-1.5 shadow-lg gold-glow transition-all"
                     >
-                      <span className="material-symbols-outlined text-[18px]">download</span> Download
+                      <span className="material-symbols-outlined text-[16px]">download</span> Download
                     </a>
                   </div>
                 </div>
                 
-                <div className="mt-4 pt-4 border-t border-surface-variant flex justify-between items-center relative">
-                  <div className="font-mono-data text-[14px] font-medium tracking-[0.02em] text-on-surface-variant">Seats: {table.seats || 4}</div>
+                <div className="mt-4 pt-4 border-t border-outline-variant/15 flex justify-between items-center relative">
+                  <div className="font-mono-data text-[13px] font-medium tracking-[0.02em] text-on-surface-variant/80">Seats: {table.seats || 4}</div>
                   <button 
                     onClick={() => setOpenDropdownId(openDropdownId === table._id ? null : table._id)} 
-                    className="text-on-surface-variant hover:text-primary transition-colors"
+                    className="text-on-surface-variant hover:text-primary transition-colors focus-ring-gold rounded p-1"
                   >
                     <span className="material-symbols-outlined text-[20px]">more_vert</span>
                   </button>
@@ -218,8 +248,14 @@ export default function TablesAndQR() {
                         initial={{ opacity: 0, scale: 0.95, y: -10 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                        className="absolute right-0 bottom-full mb-2 w-36 bg-surface-container-high border border-outline-variant/30 rounded shadow-xl z-20 overflow-hidden"
+                        className="absolute right-0 bottom-full mb-2 w-36 bg-surface-container-high border border-outline-variant/30 rounded-xl shadow-xl z-20 overflow-hidden"
                       >
+                        <button 
+                          onClick={() => handleStartEdit(table)}
+                          className="w-full text-left px-4 py-3 font-body-sm text-[13px] text-on-surface hover:bg-surface-bright transition-colors flex items-center gap-2 border-b border-outline-variant/10"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">edit</span> Edit Table
+                        </button>
                         <button 
                           onClick={() => { handleDeleteTable(table._id); setOpenDropdownId(null); }}
                           className="w-full text-left px-4 py-3 font-body-sm text-[13px] text-error hover:bg-surface-bright transition-colors flex items-center gap-2"
@@ -322,6 +358,73 @@ export default function TablesAndQR() {
                 <div className="pt-4 flex justify-end gap-3">
                   <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2 text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest">Cancel</button>
                   <button type="submit" disabled={locations.length === 0} className="bg-primary text-on-primary px-6 py-2 rounded font-label-caps text-[12px] uppercase tracking-widest gold-glow disabled:opacity-50 disabled:cursor-not-allowed">Generate & Save</button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Table Modal Overlay */}
+      <AnimatePresence>
+        {editingTable && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-surface-container-low border border-outline-variant/30 rounded-xl w-full max-w-md p-6 shadow-2xl"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="font-headline-sm text-primary text-[24px]">Edit Table</h2>
+                <button onClick={() => setEditingTable(null)} className="text-on-surface-variant hover:text-primary transition-colors">
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+              <form onSubmit={submitEditTable} className="space-y-4">
+                <div>
+                  <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">Table Name / Number</label>
+                  <input 
+                    required 
+                    type="text" 
+                    value={editFormData.name} 
+                    onChange={e => setEditFormData({...editFormData, name: e.target.value})} 
+                    placeholder="e.g. VIP Table 1" 
+                    className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none" 
+                  />
+                </div>
+                <div>
+                  <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">Location / Section</label>
+                  <select 
+                    value={editFormData.location} 
+                    onChange={e => setEditFormData({...editFormData, location: e.target.value})} 
+                    className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none appearance-none cursor-pointer"
+                    required
+                  >
+                    <option value="" disabled>Select a location</option>
+                    {locations.map(loc => (
+                      <option key={loc._id || loc.name} value={loc.name}>{loc.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">Seats</label>
+                  <input 
+                    type="number" 
+                    min="1" 
+                    value={editFormData.seats} 
+                    onChange={e => setEditFormData({...editFormData, seats: parseInt(e.target.value)})} 
+                    className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none" 
+                  />
+                </div>
+                <div className="pt-4 flex justify-end gap-3">
+                  <button type="button" onClick={() => setEditingTable(null)} className="px-5 py-2 text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest">Cancel</button>
+                  <button type="submit" className="bg-primary text-on-primary px-6 py-2 rounded font-label-caps text-[12px] uppercase tracking-widest gold-glow">Save Changes</button>
                 </div>
               </form>
             </motion.div>

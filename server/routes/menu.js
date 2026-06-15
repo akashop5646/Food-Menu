@@ -20,12 +20,19 @@ function sanitizeString(input, maxLength = 500) {
   return input.replace(/<[^>]*>/g, '').trim().slice(0, maxLength);
 }
 
-// GET all menu items (public)
+// GET all menu items (public, supports ?all=true parameter)
 router.get('/', async (req, res) => {
   try {
+    const { all } = req.query;
     const db = await getDB();
+    
+    const query = {};
+    if (all !== 'true') {
+      query.available = { $ne: false };
+    }
+
     let items = await db.collection('menu_items')
-      .find({ available: { $ne: false } })
+      .find(query)
       .sort({ chefPick: -1, createdAt: -1 })
       .toArray();
       

@@ -83,4 +83,53 @@ router.delete('/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// PUT to update a table by ID (requireAdmin)
+router.put('/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, location, seats, baseUrl } = req.body;
+    const db = await getDB();
+
+    const table = await db.collection('tables').findOne({ _id: new ObjectId(id) });
+    if (!table) {
+      return res.status(404).json({ error: 'Table not found' });
+    }
+
+    const tableName = name || table.name;
+    const loc = location || table.location;
+    const s = seats !== undefined ? seats : table.seats;
+
+    // Regenerate QR URL since table name or location might have changed
+    const base = baseUrl || 'http://localhost:3000';
+    const orderUrl = `${base}/?table=${encodeURIComponent(tableName)}&location=${encodeURIComponent(loc)}`;
+    const qrUrl = await QRCode.toDataURL(orderUrl, {
+      width: 800,
+      margin: 2,
+      color: {
+        dark: '#000000',
+        light: '#ffffff'
+      }
+    });
+
+    const updateFields = {
+      name: tableName,
+      location: loc,
+      seats: Number(s) || 4,
+      orderUrl,
+      qrUrl
+    };
+
+    await db.collection('tables').updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updateFields }
+    );
+
+    const updatedTable = { ...table, ...updateFields };
+    res.json(updatedTable);
+  } catch (error) {
+    console.error('Error updating table:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;
