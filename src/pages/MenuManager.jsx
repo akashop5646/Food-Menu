@@ -121,7 +121,8 @@ export default function MenuManager() {
         body: JSON.stringify({
           ...formData,
           price: Number(formData.price)
-        })
+        }),
+        credentials: 'include'
       });
 
       if (res.ok) {
@@ -137,7 +138,10 @@ export default function MenuManager() {
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this item?')) return;
     try {
-      const res = await fetch(`/api/menu/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/menu/${id}`, { 
+        method: 'DELETE',
+        credentials: 'include'
+      });
       if (res.ok) {
         setItems(items.filter(i => i._id !== id));
       }
@@ -152,7 +156,8 @@ export default function MenuManager() {
       const res = await fetch(`/api/menu/${item._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ available: newStatus })
+        body: JSON.stringify({ available: newStatus }),
+        credentials: 'include'
       });
 
       if (res.ok) {
@@ -174,7 +179,8 @@ export default function MenuManager() {
 
       const res = await fetch('/api/upload', {
         method: 'POST',
-        body: form
+        body: form,
+        credentials: 'include'
       });
 
       const data = await res.json();
@@ -198,7 +204,8 @@ export default function MenuManager() {
       const res = await fetch('/api/categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newCategoryName })
+        body: JSON.stringify({ name: newCategoryName }),
+        credentials: 'include'
       });
       if (res.ok) {
         setNewCategoryName('');
@@ -216,7 +223,10 @@ export default function MenuManager() {
   const handleDeleteCategory = async (id) => {
     if (!window.confirm('Delete this category? Items in this category will not be deleted, but may not display properly.')) return;
     try {
-      const res = await fetch(`/api/categories/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/categories/${id}`, { 
+        method: 'DELETE',
+        credentials: 'include'
+      });
       if (res.ok) {
         fetchCategories();
       }

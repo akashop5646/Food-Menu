@@ -12,6 +12,7 @@ export default function TablesAndQR() {
   const [formData, setFormData] = useState({ name: '', location: '', seats: 4 });
   const [newLocationName, setNewLocationName] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
   
   const [openDropdownId, setOpenDropdownId] = useState(null);
   const [editingTable, setEditingTable] = useState(null);
@@ -34,7 +35,8 @@ export default function TablesAndQR() {
       const res = await fetch(`/api/tables/${editingTable._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...editFormData, baseUrl: window.location.origin })
+        body: JSON.stringify({ ...editFormData, baseUrl: window.location.origin }),
+        credentials: 'include'
       });
       if (res.ok) {
         const updatedTable = await res.json();
@@ -74,7 +76,8 @@ export default function TablesAndQR() {
       const res = await fetch('/api/tables', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, baseUrl: window.location.origin })
+        body: JSON.stringify({ ...formData, baseUrl: window.location.origin }),
+        credentials: 'include'
       });
       if (res.ok) {
         const newTable = await res.json();
@@ -94,7 +97,8 @@ export default function TablesAndQR() {
       const res = await fetch('/api/locations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newLocationName })
+        body: JSON.stringify({ name: newLocationName }),
+        credentials: 'include'
       });
       if (res.ok) {
         const newLoc = await res.json();
@@ -113,7 +117,10 @@ export default function TablesAndQR() {
   const handleDeleteTable = async (id) => {
     if (!window.confirm('Are you sure you want to delete this table?')) return;
     try {
-      const res = await fetch(`/api/tables/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/tables/${id}`, { 
+        method: 'DELETE',
+        credentials: 'include'
+      });
       if (res.ok) {
         setTables(prev => prev.filter(t => t._id !== id));
       }
@@ -122,9 +129,12 @@ export default function TablesAndQR() {
     }
   };
 
-  const filteredTables = selectedFilter === 'All' 
-    ? tables 
-    : tables.filter(t => t.location === selectedFilter);
+  const filteredTables = tables.filter(t => {
+    const matchesLocation = selectedFilter === 'All' || t.location === selectedFilter;
+    const matchesSearch = (t.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          `table ${t.number}`.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesLocation && matchesSearch;
+  });
 
   return (
     <div className="flex flex-col h-full w-full pb-10">
@@ -147,6 +157,8 @@ export default function TablesAndQR() {
 
           <div className="relative group hidden sm:block">
             <input 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="bg-transparent border-b border-surface-variant text-on-surface focus:outline-none focus:border-primary focus:shadow-[0_4px_12px_rgba(212,175,55,0.1)] transition-all duration-300 py-2 pl-8 pr-4 w-64 placeholder-on-surface-variant font-body-sm text-[14px]" 
               placeholder="Search tables..." 
               type="text"
