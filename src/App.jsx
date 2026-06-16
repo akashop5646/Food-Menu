@@ -293,6 +293,15 @@ function MenuPage() {
     }
 
     const checkVerification = async () => {
+      const isToday = (dateString) => {
+        if (!dateString) return false;
+        const d = new Date(dateString);
+        const today = new Date();
+        return d.getDate() === today.getDate() &&
+               d.getMonth() === today.getMonth() &&
+               d.getFullYear() === today.getFullYear();
+      };
+
       try {
         let url = `/api/orders/active?table=${encodeURIComponent(selectedTable)}&deviceId=${encodeURIComponent(deviceId)}`;
         if (cart.length > 0 && checkoutSessionId) {
@@ -301,7 +310,7 @@ function MenuPage() {
         const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
-          if (data.verified && data.order) {
+          if (data.verified && data.order && isToday(data.order.createdAt)) {
             setActiveOrder(data.order);
             setIsOrderVerified(true);
             // Clear cart & session ID if the order was just placed/verified
@@ -314,7 +323,8 @@ function MenuPage() {
             setActiveOrder(null);
             setIsOrderVerified(false);
           }
-          setActiveOrders(data.orders || []);
+          const todayOrders = (data.orders || []).filter(o => isToday(o.createdAt));
+          setActiveOrders(todayOrders);
         }
       } catch (err) {
         console.error('Error checking verification status:', err);
