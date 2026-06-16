@@ -1085,15 +1085,6 @@ function MenuPage() {
                 </div>
               </div>
             </div>
-            
-            <div className="p-6 border-t border-outline-variant/20 mt-auto bg-surface-container-lowest">
-              <button 
-                onClick={() => setIsFilterOpen(false)}
-                className="w-full bg-gold-metallic text-on-primary font-label-caps text-label-caps py-4 rounded uppercase tracking-wider gold-glow transition-all flex items-center justify-center gap-2"
-              >
-                Apply Filters
-              </button>
-            </div>
           </motion.div>
         )}
       </AnimatePresence>
