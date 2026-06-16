@@ -158,7 +158,12 @@ export default function AdminDashboard() {
   };
   
   // Theme State
-  const [isDark, setIsDark] = useState(true);
+  const [isDark, setIsDark] = useState(() => {
+    const saved = localStorage.getItem('aurum_admin_theme');
+    if (saved) return saved === 'dark';
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return prefersDark;
+  });
   const [ripple, setRipple] = useState(null);
   const rippleCount = useRef(0);
 
@@ -201,6 +206,7 @@ export default function AdminDashboard() {
     // Swap theme halfway through animation
     setTimeout(() => {
       setIsDark(nextIsDark);
+      localStorage.setItem('aurum_admin_theme', nextIsDark ? 'dark' : 'light');
       if (nextIsDark) {
         document.documentElement.classList.add('dark');
       } else {
@@ -221,7 +227,7 @@ export default function AdminDashboard() {
     } else {
       document.documentElement.classList.remove('dark');
     }
-  }, []);
+  }, [isDark]);
 
   const newOrders = orders.filter(o => o.status === 'NEW');
   const preparingOrders = orders.filter(o => o.status === 'PREPARING');

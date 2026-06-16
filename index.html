@@ -8,6 +8,32 @@
       name="description"
       content="A premium React digital food menu page for restaurants."
     />
+    <script>
+      (function() {
+        const path = window.location.pathname;
+        let isDark = true;
+        if (path.startsWith('/admin')) {
+          const savedAdmin = localStorage.getItem('aurum_admin_theme');
+          if (savedAdmin) {
+            isDark = savedAdmin === 'dark';
+          } else {
+            isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          }
+        } else {
+          const savedCustomer = localStorage.getItem('aurum_theme');
+          if (savedCustomer) {
+            isDark = savedCustomer === 'dark';
+          } else {
+            isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          }
+        }
+        if (isDark) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      })();
+    </script>
     <link rel="preconnect" href="https://images.unsplash.com" />
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">

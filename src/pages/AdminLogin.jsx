@@ -10,6 +10,22 @@ export default function AdminLogin() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Set theme on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('aurum_admin_theme');
+    let isDark = true;
+    if (saved) {
+      isDark = saved === 'dark';
+    } else {
+      isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');

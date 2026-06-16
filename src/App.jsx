@@ -16,7 +16,10 @@ function MenuPage() {
 
   // Client-Side Theme Controller
   const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('aurum_theme') || 'dark';
+    const saved = localStorage.getItem('aurum_theme');
+    if (saved) return saved;
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return prefersDark ? 'dark' : 'light';
   });
 
   useEffect(() => {
