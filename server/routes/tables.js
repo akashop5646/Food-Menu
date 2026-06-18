@@ -6,12 +6,55 @@ import { requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
+async function getLocationLookups(db) {
+  const locations = await db.collection('locations').find({}).sort({ name: 1 }).toArray();
+  const byId = new Map(locations.map(location => [String(location._id), location]));
+  const byName = new Map(locations.map(location => [location.name.toLowerCase(), location]));
+  return { locations, byId, byName };
+}
+
+function normalizeLocationInput(locationInput) {
+  if (typeof locationInput !== 'string') return '';
+  return locationInput.trim();
+}
+
+function resolveLocation(lookups, { locationId, location }) {
+  if (locationId) {
+    const byId = lookups.byId.get(String(locationId));
+    if (byId) return byId;
+  }
+
+  const cleanedLocation = normalizeLocationInput(location);
+  if (!cleanedLocation) return null;
+
+  const byName = lookups.byName.get(cleanedLocation.toLowerCase());
+  if (byName) return byName;
+
+  return null;
+}
+
+function shapeTable(table, lookups) {
+  const resolvedLocation = resolveLocation(lookups, table);
+  const fallbackLocation = normalizeLocationInput(table.location) || 'Main Dining Room';
+  const locationName = resolvedLocation?.name || fallbackLocation;
+
+  return {
+    ...table,
+    locationId: table.locationId ? String(table.locationId) : (resolvedLocation?._id ? String(resolvedLocation._id) : null),
+    location: locationName,
+    locationName
+  };
+}
+
 // GET all tables (public — needed for customer-facing features)
 router.get('/', async (req, res) => {
   try {
     const db = await getDB();
-    const tables = await db.collection('tables').find({}).sort({ number: 1 }).toArray();
-    res.json(tables);
+    const [tables, lookups] = await Promise.all([
+      db.collection('tables').find({}).sort({ number: 1 }).toArray(),
+      getLocationLookups(db)
+    ]);
+    res.json(tables.map(table => shapeTable(table, lookups)));
   } catch (error) {
     console.error('Error fetching tables:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -21,15 +64,18 @@ router.get('/', async (req, res) => {
 // POST to create a new table (H1 fix: requireAdmin added)
 router.post('/', requireAdmin, async (req, res) => {
   try {
-    const { name, location, seats, baseUrl } = req.body;
+    const { name, location, locationId, seats, baseUrl } = req.body;
     const db = await getDB();
+    const lookups = await getLocationLookups(db);
     
     // Auto-increment number or just get max number
     const maxTable = await db.collection('tables').find().sort({ number: -1 }).limit(1).toArray();
     const number = (maxTable.length > 0 ? maxTable[0].number : 0) + 1;
     
     const tableName = name || `Table ${number}`;
-    const loc = location || 'Main Dining Room';
+    const resolvedLocation = resolveLocation(lookups, { locationId, location });
+    const loc = resolvedLocation?.name || normalizeLocationInput(location) || 'Main Dining Room';
+    const resolvedLocationId = resolvedLocation ? String(resolvedLocation._id) : (locationId ? String(locationId) : null);
     
     // Unique URL for the table ordering system
     // Use frontend's baseUrl if provided, so mobile devices on the same network get the correct IP link
@@ -49,7 +95,8 @@ router.post('/', requireAdmin, async (req, res) => {
     const newTable = {
       number,
       name: tableName,
-      location: location || 'Main Dining Room',
+      location: loc,
+      locationId: resolvedLocationId,
       seats: seats || 4,
       status: 'Idle',
       qrUrl,
@@ -87,8 +134,9 @@ router.delete('/:id', requireAdmin, async (req, res) => {
 router.put('/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, location, seats, baseUrl } = req.body;
+    const { name, location, locationId, seats, baseUrl } = req.body;
     const db = await getDB();
+    const lookups = await getLocationLookups(db);
 
     const table = await db.collection('tables').findOne({ _id: new ObjectId(id) });
     if (!table) {
@@ -96,7 +144,9 @@ router.put('/:id', requireAdmin, async (req, res) => {
     }
 
     const tableName = name || table.name;
-    const loc = location || table.location;
+    const resolvedLocation = resolveLocation(lookups, { locationId, location });
+    const loc = resolvedLocation?.name || normalizeLocationInput(location) || table.location || 'Main Dining Room';
+    const resolvedLocationId = resolvedLocation ? String(resolvedLocation._id) : (locationId ? String(locationId) : (table.locationId ? String(table.locationId) : null));
     const s = seats !== undefined ? seats : table.seats;
 
     // Regenerate QR URL since table name or location might have changed
@@ -114,6 +164,7 @@ router.put('/:id', requireAdmin, async (req, res) => {
     const updateFields = {
       name: tableName,
       location: loc,
+      locationId: resolvedLocationId,
       seats: Number(s) || 4,
       orderUrl,
       qrUrl

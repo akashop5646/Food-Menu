@@ -2,6 +2,8 @@ import express from 'express';
 import { getDB } from '../db.js';
 import { ObjectId } from 'mongodb';
 import { v2 as cloudinary } from 'cloudinary';
+import multer from 'multer';
+import sharp from 'sharp';
 import dotenv from 'dotenv';
 import { requireAdmin } from '../middleware/auth.js';
 
@@ -13,11 +15,61 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 const router = express.Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 }
+});
 
 // Sanitize string input — strip HTML tags and limit length
 function sanitizeString(input, maxLength = 500) {
   if (typeof input !== 'string') return '';
   return input.replace(/<[^>]*>/g, '').trim().slice(0, maxLength);
+}
+
+function parseBoolean(value, fallback = false) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') return value === 'true';
+  return fallback;
+}
+
+function parseCategories(value) {
+  if (Array.isArray(value)) {
+    return value.map((category) => sanitizeString(category, 100)).filter(Boolean);
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed.map((category) => sanitizeString(category, 100)).filter(Boolean);
+      }
+    } catch {
+      return [sanitizeString(value, 100)].filter(Boolean);
+    }
+  }
+
+  return [];
+}
+
+async function compressImageLosslessly(buffer) {
+  return sharp(buffer)
+    .rotate()
+    .webp({ lossless: true, effort: 6 })
+    .toBuffer();
+}
+
+function uploadBufferToCloudinary(buffer) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: 'menu-items', resource_type: 'image' },
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result);
+      }
+    );
+
+    stream.end(buffer);
+  });
 }
 
 // GET all menu items (public, supports ?all=true parameter)
@@ -52,9 +104,9 @@ router.get('/', async (req, res) => {
 });
 
 // POST create a new menu item (H1 fix: requireAdmin added)
-router.post('/', requireAdmin, async (req, res) => {
+router.post('/', requireAdmin, upload.single('imageFile'), async (req, res) => {
   try {
-    const { name, categories, price, description, image, chefPick } = req.body;
+    const { name, price, description } = req.body;
     
     // Validation
     if (!name || price == null) {
@@ -69,13 +121,21 @@ router.post('/', requireAdmin, async (req, res) => {
     }
 
     const db = await getDB();
+    let image = typeof req.body.image === 'string' ? req.body.image.slice(0, 2000) : '';
+
+    if (req.file) {
+      const compressed = await compressImageLosslessly(req.file.buffer);
+      const uploaded = await uploadBufferToCloudinary(compressed);
+      image = uploaded.secure_url || uploaded.url || image;
+    }
+
     const newItem = {
       name: sanitizedName,
-      categories: Array.isArray(categories) ? categories.map(c => sanitizeString(c, 100)) : [],
+      categories: parseCategories(req.body.categories),
       price: Number(price),
       description: sanitizedDesc,
-      image: typeof image === 'string' ? image.slice(0, 2000) : '',
-      chefPick: Boolean(chefPick),
+      image,
+      chefPick: parseBoolean(req.body.chefPick),
       available: true,
       createdAt: new Date(),
     };
@@ -95,29 +155,24 @@ router.post('/', requireAdmin, async (req, res) => {
 });
 
 // PUT update a menu item (H1 fix: requireAdmin added)
-router.put('/:id', requireAdmin, async (req, res) => {
+router.put('/:id', requireAdmin, upload.single('imageFile'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, categories, price, description, image, chefPick, available } = req.body;
     const updates = {};
-    const allowed = ['name', 'categories', 'price', 'description', 'image', 'chefPick', 'available'];
-    
-    for (const key of allowed) {
-      if (req.body[key] !== undefined) {
-        if (key === 'price') {
-          updates[key] = Number(req.body[key]);
-        } else if (key === 'categories') {
-          updates[key] = Array.isArray(req.body[key]) ? req.body[key].map(c => sanitizeString(c, 100)) : [];
-        } else if (key === 'name') {
-          updates[key] = sanitizeString(req.body[key], 200);
-        } else if (key === 'description') {
-          updates[key] = sanitizeString(req.body[key], 1000);
-        } else if (key === 'image') {
-          updates[key] = typeof req.body[key] === 'string' ? req.body[key].slice(0, 2000) : '';
-        } else {
-          updates[key] = req.body[key];
-        }
-      }
+
+    if (req.body.name !== undefined) updates.name = sanitizeString(req.body.name, 200);
+    if (req.body.categories !== undefined) updates.categories = parseCategories(req.body.categories);
+    if (req.body.price !== undefined) updates.price = Number(req.body.price);
+    if (req.body.description !== undefined) updates.description = sanitizeString(req.body.description, 1000);
+    if (req.body.chefPick !== undefined) updates.chefPick = parseBoolean(req.body.chefPick);
+    if (req.body.available !== undefined) updates.available = parseBoolean(req.body.available, true);
+
+    if (req.file) {
+      const compressed = await compressImageLosslessly(req.file.buffer);
+      const uploaded = await uploadBufferToCloudinary(compressed);
+      updates.image = uploaded.secure_url || uploaded.url || '';
+    } else if (req.body.image !== undefined) {
+      updates.image = typeof req.body.image === 'string' ? req.body.image.slice(0, 2000) : '';
     }
 
     const db = await getDB();

@@ -9,20 +9,23 @@ export default function TablesAndQR() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   
-  const [formData, setFormData] = useState({ name: '', location: '', seats: 4 });
+  const [formData, setFormData] = useState({ name: '', locationId: '', seats: 4 });
   const [newLocationName, setNewLocationName] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   
   const [openDropdownId, setOpenDropdownId] = useState(null);
   const [editingTable, setEditingTable] = useState(null);
-  const [editFormData, setEditFormData] = useState({ name: '', location: '', seats: 4 });
+  const [editFormData, setEditFormData] = useState({ name: '', locationId: '', seats: 4 });
+
+  const getLocationLabel = (table) => table.locationName || table.location || 'Main Dining Room';
+  const getLocationIdForTable = (table) => String(table.locationId || locations.find(loc => loc.name === table.location)?._id || '');
 
   const handleStartEdit = (table) => {
     setEditingTable(table);
     setEditFormData({
       name: table.name,
-      location: table.location,
+      locationId: getLocationIdForTable(table),
       seats: table.seats
     });
     setOpenDropdownId(null);
@@ -70,6 +73,12 @@ export default function TablesAndQR() {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (locations.length > 0 && !formData.locationId) {
+      setFormData(prev => ({ ...prev, locationId: String(locations[0]._id) }));
+    }
+  }, [locations, formData.locationId]);
+
   const submitGenerateQR = async (e) => {
     e.preventDefault();
     try {
@@ -83,7 +92,7 @@ export default function TablesAndQR() {
         const newTable = await res.json();
         setTables(prev => [...prev, newTable]);
         setIsModalOpen(false);
-        setFormData({ name: '', location: locations.length > 0 ? locations[0].name : '', seats: 4 });
+        setFormData({ name: '', locationId: locations.length > 0 ? String(locations[0]._id) : '', seats: 4 });
       }
     } catch (err) {
       console.error('Failed to generate QR', err);
@@ -105,8 +114,8 @@ export default function TablesAndQR() {
         setLocations(prev => [...prev, newLoc]);
         setIsLocationModalOpen(false);
         setNewLocationName('');
-        if (!formData.location) {
-          setFormData(prev => ({ ...prev, location: newLoc.name }));
+        if (!formData.locationId) {
+          setFormData(prev => ({ ...prev, locationId: String(newLoc._id) }));
         }
       }
     } catch (err) {
@@ -130,7 +139,7 @@ export default function TablesAndQR() {
   };
 
   const filteredTables = tables.filter(t => {
-    const matchesLocation = selectedFilter === 'All' || t.location === selectedFilter;
+    const matchesLocation = selectedFilter === 'All' || String(t.locationId || getLocationIdForTable(t)) === selectedFilter;
     const matchesSearch = (t.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                           `table ${t.number}`.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesLocation && matchesSearch;
@@ -149,7 +158,7 @@ export default function TablesAndQR() {
             >
               <option value="All">All Locations</option>
               {locations.map(loc => (
-                <option key={loc._id || loc.name} value={loc.name}>{loc.name}</option>
+                <option key={loc._id || loc.name} value={loc._id}>{loc.name}</option>
               ))}
             </select>
             <span className="material-symbols-outlined absolute right-3 top-3.5 text-on-surface-variant text-[18px] pointer-events-none">expand_more</span>
@@ -177,8 +186,8 @@ export default function TablesAndQR() {
           </button>
           <button 
             onClick={() => {
-              if (locations.length > 0 && !formData.location) {
-                setFormData(prev => ({ ...prev, location: locations[0].name }));
+              if (locations.length > 0 && !formData.locationId) {
+                setFormData(prev => ({ ...prev, locationId: String(locations[0]._id) }));
               }
               setIsModalOpen(true);
             }}
@@ -216,7 +225,7 @@ export default function TablesAndQR() {
                 <div className="flex justify-between items-start mb-6">
                   <div>
                     <h3 className="font-title-md text-[18px] md:text-[20px] font-semibold text-on-surface leading-snug">{table.name || `Table ${table.number}`}</h3>
-                    <p className="font-body-sm text-[13px] text-on-surface-variant/75 mt-1">{table.location || 'Main Dining Room'}</p>
+                    <p className="font-body-sm text-[13px] text-on-surface-variant/75 mt-1">{getLocationLabel(table)}</p>
                   </div>
                   <div className={`px-2.5 py-0.5 rounded-full font-label-caps text-[10px] font-bold tracking-[0.08em] uppercase ${
                     table.status === 'Active' ? 'bg-primary/20 text-primary border border-primary/30' : 'bg-surface-container-highest text-on-surface-variant/80 border border-outline-variant/10'
@@ -349,14 +358,14 @@ export default function TablesAndQR() {
                 <div>
                   <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">Location / Section</label>
                   <select 
-                    value={formData.location} 
-                    onChange={e => setFormData({...formData, location: e.target.value})} 
+                    value={formData.locationId} 
+                    onChange={e => setFormData({...formData, locationId: e.target.value})} 
                     className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none appearance-none cursor-pointer"
                     required
                   >
                     <option value="" disabled>Select a location</option>
                     {locations.map(loc => (
-                      <option key={loc._id || loc.name} value={loc.name}>{loc.name}</option>
+                      <option key={loc._id || loc.name} value={loc._id}>{loc.name}</option>
                     ))}
                   </select>
                   {locations.length === 0 && (
@@ -413,14 +422,14 @@ export default function TablesAndQR() {
                 <div>
                   <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">Location / Section</label>
                   <select 
-                    value={editFormData.location} 
-                    onChange={e => setEditFormData({...editFormData, location: e.target.value})} 
+                    value={editFormData.locationId} 
+                    onChange={e => setEditFormData({...editFormData, locationId: e.target.value})} 
                     className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none appearance-none cursor-pointer"
                     required
                   >
                     <option value="" disabled>Select a location</option>
                     {locations.map(loc => (
-                      <option key={loc._id || loc.name} value={loc.name}>{loc.name}</option>
+                      <option key={loc._id || loc.name} value={loc._id}>{loc.name}</option>
                     ))}
                   </select>
                 </div>

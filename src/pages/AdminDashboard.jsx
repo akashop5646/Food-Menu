@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import TablesAndQR from './TablesAndQR';
@@ -44,7 +44,7 @@ export default function AdminDashboard() {
     let reconnectTimer;
     
     const connect = () => {
-      console.log('🔌 Connecting to WebSocket:', wsUrl);
+      console.log('ðŸ”Œ Connecting to WebSocket:', wsUrl);
       ws = new WebSocket(wsUrl);
       
       ws.onmessage = (event) => {
@@ -59,7 +59,7 @@ export default function AdminDashboard() {
       };
       
       ws.onclose = () => {
-        console.log('🔌 WebSocket connection closed. Reconnecting in 3s...');
+        console.log('ðŸ”Œ WebSocket connection closed. Reconnecting in 3s...');
         reconnectTimer = setTimeout(connect, 3000);
       };
       
@@ -245,7 +245,7 @@ export default function AdminDashboard() {
                 <span className="text-[12px] text-on-surface-variant font-normal ml-1.5">({order.location})</span>
               )}
             </span>
-            <span className="text-[11px] text-on-surface-variant/70 block mt-0.5">{minsAgo} mins ago • by {order.confirmedBy.split('@')[0]}</span>
+            <span className="text-[11px] text-on-surface-variant/70 block mt-0.5">{minsAgo} mins ago â€¢ by {order.confirmedBy.split('@')[0]}</span>
           </div>
           
           <span className={`px-2 py-0.5 rounded text-[10px] font-label-caps tracking-wider uppercase font-semibold border ${
@@ -353,7 +353,11 @@ export default function AdminDashboard() {
                       <td className="py-3.5 px-4 font-price-display text-primary font-semibold">₹{order.total.toFixed(2)}</td>
                       <td className="py-3.5 px-4 font-body-sm text-on-surface-variant">
                         <span className="px-2 py-0.5 rounded bg-surface-container-high border border-outline-variant/30 text-[10px] font-label-caps uppercase tracking-wider font-semibold">
-                          {order.paymentType === 'NOW' ? 'GPAY / UPI' : 'PAY LATER'}
+                          {order.paymentType === 'NOW'
+                            ? 'GPAY / UPI'
+                            : order.paymentType === 'LATER'
+                              ? 'PAY LATER'
+                              : (order.paymentType || 'UNKNOWN')}
                         </span>
                       </td>
                       <td className="py-3.5 px-4">
@@ -694,3 +698,4 @@ export default function AdminDashboard() {
     </div>
   );
 }
+

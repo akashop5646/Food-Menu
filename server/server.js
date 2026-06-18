@@ -34,7 +34,7 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'", "https://accounts.google.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "https://images.unsplash.com", "https://res.cloudinary.com"],
+      imgSrc: ["'self'", "data:", "blob:", "https://images.unsplash.com", "https://res.cloudinary.com"],
       connectSrc: ["'self'", "ws:", "wss:", "https://accounts.google.com"],
       frameSrc: ["'self'", "https://accounts.google.com"],
       objectSrc: ["'none'"],

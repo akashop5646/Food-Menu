@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function MenuManager() {
@@ -6,11 +6,15 @@ export default function MenuManager() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [categories, setCategories] = useState([]);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [notification, setNotification] = useState('');
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState('');
+  const [isImageDragActive, setIsImageDragActive] = useState(false);
+  const fileInputRef = useRef(null);
   
   // Search & Filter States
   const [searchQuery, setSearchQuery] = useState('');
@@ -41,6 +45,45 @@ export default function MenuManager() {
     image: '',
     chefPick: false
   });
+
+  const resetImageSelection = (fallbackImage = '') => {
+    setImageFile(null);
+    setImagePreview(fallbackImage);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingItem(null);
+    setIsImageDragActive(false);
+    resetImageSelection('');
+  };
+
+  const handleSelectedImage = (file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showNotification('Please choose an image file.');
+      return;
+    }
+
+    setImageFile(file);
+    setImagePreview((prev) => {
+      if (prev && prev.startsWith('blob:')) {
+        URL.revokeObjectURL(prev);
+      }
+      return URL.createObjectURL(file);
+    });
+  };
+
+  useEffect(() => {
+    return () => {
+      if (imagePreview && imagePreview.startsWith('blob:')) {
+        URL.revokeObjectURL(imagePreview);
+      }
+    };
+  }, [imagePreview]);
 
   const fetchCategories = async () => {
     try {
@@ -95,6 +138,7 @@ export default function MenuManager() {
         image: item.image || '',
         chefPick: !!item.chefPick
       });
+      resetImageSelection(item.image || '');
     } else {
       setEditingItem(null);
       setFormData({
@@ -105,33 +149,49 @@ export default function MenuManager() {
         image: '',
         chefPick: false
       });
+      resetImageSelection('');
     }
     setIsModalOpen(true);
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
+    setIsSaving(true);
     try {
       const method = editingItem ? 'PUT' : 'POST';
       const url = editingItem ? `/api/menu/${editingItem._id}` : '/api/menu';
-      
+
+      const payload = new FormData();
+      payload.append('name', formData.name);
+      payload.append('categories', JSON.stringify(formData.categories));
+      payload.append('price', String(Number(formData.price)));
+      payload.append('description', formData.description);
+      payload.append('image', formData.image || '');
+      payload.append('chefPick', String(formData.chefPick));
+      if (imageFile) {
+        payload.append('imageFile', imageFile);
+      }
+
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          price: Number(formData.price)
-        }),
+        body: payload,
         credentials: 'include'
       });
 
       if (res.ok) {
-        setIsModalOpen(false);
+        handleCloseModal();
+        setEditingItem(null);
         showNotification(editingItem ? 'Item updated successfully!' : 'Item added successfully!');
         fetchMenu();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Failed to save item');
       }
     } catch (err) {
       console.error('Error saving item:', err);
+      alert('Failed to save item');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -168,33 +228,17 @@ export default function MenuManager() {
     }
   };
 
-  const handleImageUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const handleImageUpload = (e) => {
+    const file = e.target.files?.[0];
+    handleSelectedImage(file);
+  };
 
-    setIsUploading(true);
-    try {
-      const form = new FormData();
-      form.append('image', file);
-
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: form,
-        credentials: 'include'
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        setFormData(prev => ({ ...prev, image: data.url }));
-      } else {
-        alert(data.error || 'Failed to upload image');
-      }
-    } catch (err) {
-      console.error('Upload error:', err);
-      alert('Error uploading image');
-    } finally {
-      setIsUploading(false);
-    }
+  const handleImageDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsImageDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    handleSelectedImage(file);
   };
 
   const handleAddCategory = async (e) => {
@@ -494,7 +538,7 @@ export default function MenuManager() {
                 <h2 className="font-headline-sm text-primary text-[24px]">
                   {editingItem ? 'Edit Menu Item' : 'Add New Item'}
                 </h2>
-                <button onClick={() => setIsModalOpen(false)} className="text-on-surface-variant hover:text-primary transition-colors">
+                <button onClick={handleCloseModal} className="text-on-surface-variant hover:text-primary transition-colors">
                   <span className="material-symbols-outlined">close</span>
                 </button>
               </div>
@@ -542,27 +586,91 @@ export default function MenuManager() {
                   </div>
                   <div className="col-span-2">
                     <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">Image Upload</label>
-                    <div className="flex items-center gap-4">
-                      {formData.image && (
-                        <div className="relative group">
-                          <img src={formData.image} alt="Preview" className="w-16 h-16 object-cover rounded border border-outline-variant/50" />
-                          <button 
-                            type="button" 
-                            onClick={() => setFormData({...formData, image: ''})} 
-                            className="absolute -top-2 -right-2 bg-error text-white rounded-full p-0.5 shadow hover:scale-110 transition-transform"
-                          >
-                            <span className="material-symbols-outlined text-[14px] block">close</span>
-                          </button>
-                        </div>
-                      )}
-                      <input 
-                        type="file" 
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => fileInputRef.current?.click()}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          fileInputRef.current?.click();
+                        }
+                      }}
+                      onDragEnter={(e) => {
+                        e.preventDefault();
+                        setIsImageDragActive(true);
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setIsImageDragActive(true);
+                      }}
+                      onDragLeave={() => setIsImageDragActive(false)}
+                      onDrop={handleImageDrop}
+                      className={`rounded-2xl border border-dashed p-4 transition-all cursor-pointer bg-surface-container-highest/70 ${
+                        isImageDragActive
+                          ? 'border-primary bg-primary/10 shadow-[0_0_0_1px_rgba(212,175,55,0.25)]'
+                          : 'border-outline-variant/50 hover:border-primary/60 hover:bg-surface-container-highest'
+                      }`}
+                    >
+                      <input
+                        ref={fileInputRef}
+                        type="file"
                         accept="image/*"
                         onChange={handleImageUpload}
-                        className="block w-full text-sm text-on-surface-variant file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                        className="hidden"
                       />
-                      {isUploading && <span className="material-symbols-outlined animate-spin text-primary">progress_activity</span>}
+                      <div className="flex items-center gap-4">
+                        <div className="w-20 h-20 shrink-0 rounded-xl overflow-hidden bg-surface-container flex items-center justify-center border border-outline-variant/30">
+                          {imagePreview ? (
+                            <img src={imagePreview} alt="Selected preview" className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="material-symbols-outlined text-[28px] text-on-surface-variant/50">image</span>
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <p className="font-title-md text-on-surface text-[15px]">
+                            {imageFile ? imageFile.name : formData.image ? 'Current image selected' : 'Drop an image here'}
+                          </p>
+                          <p className="text-sm text-on-surface-variant mt-1">
+                            Drag and drop or click to browse. The file stays local until you click {editingItem ? 'Save Changes' : 'Create Item'}.
+                          </p>
+                          {imageFile && (
+                            <p className="text-xs text-on-surface-variant mt-2">
+                              {(imageFile.size / 1024 / 1024).toFixed(2)} MB before compression
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              fileInputRef.current?.click();
+                            }}
+                            className="px-4 py-2 rounded-lg bg-primary/10 text-primary font-label-caps text-[11px] uppercase tracking-widest hover:bg-primary/20 transition-colors"
+                          >
+                            Choose File
+                          </button>
+                          {(imageFile || formData.image) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                resetImageSelection(editingItem?.image || '');
+                              }}
+                              className="px-4 py-2 rounded-lg bg-surface-container text-on-surface-variant font-label-caps text-[11px] uppercase tracking-widest hover:text-error transition-colors"
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
+                    <p className="mt-2 text-xs text-on-surface-variant">
+                      Uploaded on save only. The server recompresses the image before sending it to Cloudinary.
+                    </p>
                   </div>
                   <div className="col-span-2 flex items-center gap-3 mt-4">
                     <label className="inline-flex items-center cursor-pointer group">
@@ -577,8 +685,8 @@ export default function MenuManager() {
                 </div>
 
                 <div className="pt-6 flex justify-end gap-3 border-t border-outline-variant/20 mt-6">
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2 text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest">Cancel</button>
-                  <button type="submit" disabled={isUploading} className="bg-primary text-on-primary px-6 py-2 rounded font-label-caps text-[12px] uppercase tracking-widest gold-glow disabled:opacity-50">
+                  <button type="button" onClick={handleCloseModal} className="px-5 py-2 text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest">Cancel</button>
+                  <button type="submit" disabled={isSaving} className="bg-primary text-on-primary px-6 py-2 rounded font-label-caps text-[12px] uppercase tracking-widest gold-glow disabled:opacity-50">
                     {editingItem ? 'Save Changes' : 'Create Item'}
                   </button>
                 </div>

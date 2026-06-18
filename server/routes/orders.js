@@ -48,7 +48,7 @@ router.get('/active', async (req, res) => {
 // Create a verified order (called by Waiter scanning page)
 router.post('/', requireAuth, async (req, res) => {
   try {
-    const { table, location, items, total, paymentType, paymentStatus, deviceId, customerIp, checkoutSessionId } = req.body;
+    const { table, location, tableId, locationId, items, total, paymentType, paymentStatus, source, deviceId, customerIp, checkoutSessionId } = req.body;
 
     // Validation checks
     if (!table) return res.status(400).json({ error: 'Table is required.' });
@@ -58,16 +58,19 @@ router.post('/', requireAuth, async (req, res) => {
     if (total === undefined || total === null) {
       return res.status(400).json({ error: 'Total amount is required.' });
     }
-    if (paymentType !== 'NOW' && paymentType !== 'LATER') {
-      return res.status(400).json({ error: 'Invalid payment type (NOW or LATER required).' });
-    }
     if (paymentStatus !== 'PAID' && paymentStatus !== 'PENDING') {
       return res.status(400).json({ error: 'Invalid payment status (PAID or PENDING required).' });
     }
 
+    const normalizedPaymentType = typeof paymentType === 'string' && paymentType.trim()
+      ? paymentType.trim()
+      : 'LATER';
+
     const newOrder = {
       table,
       location: location || null,
+      tableId: tableId || null,
+      locationId: locationId || null,
       items: items.map(item => ({
         id: item.id || item._id,
         name: item.name,
@@ -75,8 +78,9 @@ router.post('/', requireAuth, async (req, res) => {
         quantity: Number(item.quantity)
       })),
       total: Number(total),
-      paymentType,
+      paymentType: normalizedPaymentType,
       paymentStatus,
+      source: source || 'QR',
       status: 'NEW',
       confirmedBy: req.user.name || req.user.email,
       createdAt: new Date(),
