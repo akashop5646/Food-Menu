@@ -3,7 +3,6 @@ import { getDB } from '../db.js';
 import { ObjectId } from 'mongodb';
 import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
-import sharp from 'sharp';
 import dotenv from 'dotenv';
 import { requireAdmin } from '../middleware/auth.js';
 
@@ -52,10 +51,16 @@ function parseCategories(value) {
 }
 
 async function compressImageLosslessly(buffer) {
-  return sharp(buffer)
-    .rotate()
-    .webp({ lossless: true, effort: 6 })
-    .toBuffer();
+  try {
+    const { default: sharp } = await import('sharp');
+    return sharp(buffer)
+      .rotate()
+      .webp({ lossless: true, effort: 6 })
+      .toBuffer();
+  } catch (error) {
+    console.warn('Sharp unavailable, uploading original image buffer:', error?.message || error);
+    return buffer;
+  }
 }
 
 function uploadBufferToCloudinary(buffer) {
