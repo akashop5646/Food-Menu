@@ -47,7 +47,7 @@ export default function AdminDashboard() {
     const startPolling = () => {
       if (!fallbackPoll) {
         // ponytail: fallback polling if WebSocket is not available (e.g., on serverless platforms like Vercel)
-        fallbackPoll = setInterval(triggerRefresh, 5000);
+        fallbackPoll = setInterval(triggerRefresh, 3000);
       }
     };
     
@@ -79,9 +79,9 @@ export default function AdminDashboard() {
       };
       
       ws.onclose = () => {
-        console.log('🔌 WebSocket connection closed. Starting fallback polling and reconnecting in 5s...');
+        console.log('🔌 WebSocket connection closed. Starting fallback polling and reconnecting in 3s...');
         startPolling();
-        reconnectTimer = setTimeout(connect, 5000);
+        reconnectTimer = setTimeout(connect, 3000);
       };
       
       ws.onerror = (err) => {
