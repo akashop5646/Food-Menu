@@ -13,16 +13,40 @@ router.get('/active', async (req, res) => {
     const { table, deviceId, checkoutSessionId } = req.query;
     if (!table) return res.status(400).json({ error: 'Table is required.' });
 
-    const db = await getDB();
-    const query = {
-      table: table,
-      status: { $in: ['NEW', 'PREPARING', 'READY'] }
-    };
-    if (deviceId) {
-      query.deviceId = deviceId;
+    // ponytail: extract client IP address to identify customer across page refreshes
+    let clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    if (clientIp && clientIp.includes(',')) {
+      clientIp = clientIp.split(',')[0].trim();
     }
 
-    // Fetch all active orders sorted by newest first
+    // ponytail: query orders from today to show receipt for same-day session
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const db = await getDB();
+
+    // Construct identifying OR query conditions
+    const orConditions = [];
+    if (deviceId) {
+      orConditions.push({ deviceId });
+    }
+    if (clientIp) {
+      orConditions.push({ customerIp: clientIp });
+    }
+    if (checkoutSessionId) {
+      orConditions.push({ checkoutSessionId });
+    }
+
+    const query = {
+      table: table,
+      createdAt: { $gte: todayStart }
+    };
+
+    if (orConditions.length > 0) {
+      query.$or = orConditions;
+    }
+
+    // Fetch all active/completed orders from today sorted by newest first
     const activeOrders = await db.collection('orders').find(query).sort({ createdAt: -1 }).toArray();
 
     let targetOrderVerified = false;
