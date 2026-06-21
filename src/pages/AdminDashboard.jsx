@@ -30,6 +30,10 @@ export default function AdminDashboard() {
   const [paymentsLoading, setPaymentsLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  const [paymentsSearch, setPaymentsSearch] = useState('');
+  const [paymentsStatusFilter, setPaymentsStatusFilter] = useState('ALL'); // ALL, PAID, PENDING
+  const [paymentsTypeFilter, setPaymentsTypeFilter] = useState('ALL'); // ALL, RAZORPAY, LATER, UPI
+
   const triggerRefresh = () => setRefreshKey(prev => prev + 1);
 
   // Setup WebSocket and fallback polling for real-time dashboard updates
@@ -317,6 +321,34 @@ export default function AdminDashboard() {
   };
 
   const renderPaymentsView = () => {
+    // ponytail: filter payment orders locally for real-time responsiveness
+    const filteredPaymentOrders = paymentOrders.filter(order => {
+      // 1. Search Query
+      const searchLower = paymentsSearch.toLowerCase();
+      const tableMatches = order.table.toLowerCase().includes(searchLower);
+      const orderIdMatches = order._id.toString().toLowerCase().includes(searchLower);
+      const itemsText = order.items.map(item => `${item.quantity}x ${item.name}`).join(', ').toLowerCase();
+      const itemsMatches = itemsText.includes(searchLower);
+      const matchesSearch = !paymentsSearch || tableMatches || orderIdMatches || itemsMatches;
+
+      // 2. Status Filter
+      const matchesStatus = paymentsStatusFilter === 'ALL' || order.paymentStatus === paymentsStatusFilter;
+
+      // 3. Payment Type Filter
+      const type = order.paymentType || 'UNKNOWN';
+      let normalizedType = 'UNKNOWN';
+      if (type === 'RAZORPAY' || type === 'ONLINE' || type === 'NOW') {
+        normalizedType = 'RAZORPAY';
+      } else if (type === 'LATER') {
+        normalizedType = 'LATER';
+      } else if (type === 'UPI') {
+        normalizedType = 'UPI';
+      }
+      const matchesType = paymentsTypeFilter === 'ALL' || normalizedType === paymentsTypeFilter;
+
+      return matchesSearch && matchesStatus && matchesType;
+    });
+
     return (
       <div className="bg-surface-container rounded-2xl border border-outline-variant/20 shadow-lg overflow-hidden">
         <div className="p-6 md:p-8 border-b border-outline-variant/10 flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-surface-container-low">
@@ -331,6 +363,71 @@ export default function AdminDashboard() {
           </div>
         </div>
 
+        {/* ponytail: search and filters toolbar */}
+        <div className="px-6 md:px-8 py-4 bg-surface-container-low border-b border-outline-variant/10 flex flex-wrap gap-4 items-center">
+          {/* Search bar */}
+          <div className="relative min-w-[240px] flex-1">
+            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/70 text-sm">search</span>
+            <input 
+              type="text" 
+              placeholder="Search table, items, order ID..." 
+              value={paymentsSearch}
+              onChange={(e) => setPaymentsSearch(e.target.value)}
+              className="w-full bg-surface-container-lowest border border-outline-variant/30 text-on-surface pl-9 pr-4 py-2 rounded-xl focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors font-body-md text-sm placeholder-on-surface-variant/40"
+            />
+            {paymentsSearch && (
+              <button onClick={() => setPaymentsSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant/70 hover:text-on-surface flex items-center">
+                <span className="material-symbols-outlined text-sm">close</span>
+              </button>
+            )}
+          </div>
+
+          {/* Status Filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-label-caps text-on-surface-variant/70 uppercase tracking-widest font-semibold">Status:</span>
+            <div className="flex bg-surface-container-highest/40 rounded-xl p-0.5 border border-outline-variant/20">
+              {['ALL', 'PAID', 'PENDING'].map(status => (
+                <button
+                  key={status}
+                  onClick={() => setPaymentsStatusFilter(status)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-label-caps uppercase tracking-wider font-semibold transition-all ${
+                    paymentsStatusFilter === status
+                      ? 'bg-primary text-on-primary shadow-sm'
+                      : 'text-on-surface-variant/80 hover:text-on-surface'
+                  }`}
+                >
+                  {status}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Payment Type Filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-label-caps text-on-surface-variant/70 uppercase tracking-widest font-semibold">Method:</span>
+            <div className="flex bg-surface-container-highest/40 rounded-xl p-0.5 border border-outline-variant/20">
+              {[
+                { value: 'ALL', label: 'All' },
+                { value: 'RAZORPAY', label: 'Online' },
+                { value: 'LATER', label: 'Pay Later' },
+                { value: 'UPI', label: 'UPI' }
+              ].map(type => (
+                <button
+                  key={type.value}
+                  onClick={() => setPaymentsTypeFilter(type.value)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-label-caps uppercase tracking-wider font-semibold transition-all ${
+                    paymentsTypeFilter === type.value
+                      ? 'bg-primary text-on-primary shadow-sm'
+                      : 'text-on-surface-variant/80 hover:text-on-surface'
+                  }`}
+                >
+                  {type.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
         <div className="p-6 md:p-8 overflow-x-auto">
           {paymentsLoading ? (
             <div className="flex justify-center py-12">
@@ -341,6 +438,12 @@ export default function AdminDashboard() {
               <span className="material-symbols-outlined text-5xl">receipt</span>
               <p className="font-title-md">No orders found</p>
               <p className="font-body-sm">Scanned waiter orders will show up here.</p>
+            </div>
+          ) : filteredPaymentOrders.length === 0 ? (
+            <div className="text-center py-16 text-on-surface-variant/60 flex flex-col items-center gap-2">
+              <span className="material-symbols-outlined text-5xl">search_off</span>
+              <p className="font-title-md">No matching transactions</p>
+              <p className="font-body-sm">Try adjusting your search query or filters.</p>
             </div>
           ) : (
             <table className="w-full text-left border-collapse text-sm">
@@ -356,7 +459,7 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant/10">
-                {paymentOrders.map((order) => {
+                {filteredPaymentOrders.map((order) => {
                   const dateStr = new Date(order.createdAt).toLocaleString(undefined, {
                     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
                   });
