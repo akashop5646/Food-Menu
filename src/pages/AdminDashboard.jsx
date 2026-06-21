@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import TablesAndQR from './TablesAndQR';
@@ -353,8 +353,8 @@ export default function AdminDashboard() {
                       <td className="py-3.5 px-4 font-price-display text-primary font-semibold">₹{order.total.toFixed(2)}</td>
                       <td className="py-3.5 px-4 font-body-sm text-on-surface-variant">
                         <span className="px-2 py-0.5 rounded bg-surface-container-high border border-outline-variant/30 text-[10px] font-label-caps uppercase tracking-wider font-semibold">
-                          {order.paymentType === 'NOW'
-                            ? 'GPAY / UPI'
+                          {order.paymentType === 'RAZORPAY' || order.paymentType === 'ONLINE' || order.paymentType === 'NOW'
+                            ? 'RAZORPAY / ONLINE'
                             : order.paymentType === 'LATER'
                               ? 'PAY LATER'
                               : (order.paymentType || 'UNKNOWN')}

@@ -108,10 +108,8 @@ function MenuPage() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [qrCode, setQrCode] = useState('');
 
-  // Google Pay / UPI configuration and states
-  const [gpayId, setGpayId] = useState('');
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentQrCode, setPaymentQrCode] = useState('');
+  // Razorpay configuration and states
+  const [razorpayKeyId, setRazorpayKeyId] = useState('');
   const [isOrderVerified, setIsOrderVerified] = useState(false);
   const [deviceId, setDeviceId] = useState('');
   const [customerIp, setCustomerIp] = useState('');
@@ -130,23 +128,23 @@ function MenuPage() {
 
     const fetchMenu = async () => {
       try {
-        const [itemsRes, catsRes, gpayRes, ipRes] = await Promise.all([
+        const [itemsRes, catsRes, razorpayRes, ipRes] = await Promise.all([
           fetch('/api/menu'),
           fetch('/api/categories'),
-          fetch('/api/settings/gpay'),
+          fetch('/api/settings/razorpay'),
           fetch('/api/auth/ip').catch(() => null)
         ]);
         const items = await itemsRes.json();
         const cats = await catsRes.json();
-        let gpayData = { gpayId: '' };
+        let razorpayData = { razorpayKeyId: '' };
         try {
-          gpayData = await gpayRes.json();
+          razorpayData = await razorpayRes.json();
         } catch (e) {
           console.error(e);
         }
         setMenuItems(Array.isArray(items) ? items : []);
         setCategories(['All', ...(Array.isArray(cats) ? cats.map(c => c.name) : [])]);
-        setGpayId(gpayData.gpayId || '');
+        setRazorpayKeyId(razorpayData.razorpayKeyId || '');
 
         if (ipRes && ipRes.ok) {
           const ipData = await ipRes.json();
@@ -246,47 +244,7 @@ function MenuPage() {
     }).then(setQrCode);
   }, [isCheckoutOpen, orderPayload]);
 
-  const upiUrl = useMemo(() => {
-    if (!gpayId) return '';
-    
-    // Check if we have verified unpaid orders to charge.
-    const unpaidList = unpaidOrders;
-    const unpaidTotalAmt = unpaidTotal;
-    
-    const activeTotal = unpaidTotalAmt > 0 ? unpaidTotalAmt : (activeOrder ? activeOrder.total : cartTotal);
-    if (!activeTotal) return '';
-
-    const activeItems = unpaidList.length > 0 
-      ? unpaidList.flatMap(o => o.items) 
-      : (activeOrder ? activeOrder.items : cart);
-
-    // Group items by name to avoid duplicate lines in compact note
-    const groupedItems = {};
-    activeItems.forEach(item => {
-      groupedItems[item.name] = (groupedItems[item.name] || 0) + item.quantity;
-    });
-
-    const itemsSummary = Object.entries(groupedItems).map(([name, qty]) => `${qty}x ${name}`).join(', ');
-    const prefix = `T${selectedTable} Order: `;
-    const maxNoteLength = 80; // Standard UPI note limit
-    let note = prefix + itemsSummary;
-    if (note.length > maxNoteLength) {
-      note = note.substring(0, maxNoteLength - 3) + '...';
-    }
-    return `upi://pay?pa=${gpayId}&pn=${encodeURIComponent("Aurum Table")}&am=${activeTotal.toFixed(2)}&cu=INR&tn=${encodeURIComponent(note)}`;
-  }, [gpayId, cartTotal, selectedTable, cart, activeOrder, activeOrders]);
-
-  useEffect(() => {
-    if (!isCheckoutOpen || !upiUrl) {
-      setPaymentQrCode('');
-      return;
-    }
-    QRCode.toDataURL(upiUrl, {
-      margin: 1,
-      width: 280,
-      color: { dark: '#000000', light: '#ffffff' },
-    }).then(setPaymentQrCode);
-  }, [isCheckoutOpen, upiUrl]);
+  // Razorpay handles checkout overlay directly
 
   // Poll backend to check if the waiter has scanned/confirmed this table's order
   useEffect(() => {
@@ -343,30 +301,72 @@ function MenuPage() {
     return () => clearInterval(interval);
   }, [selectedTable, deviceId, cart.length, checkoutSessionId]);
 
-  const handlePayNow = () => {
+  const handlePayNow = async () => {
     if (!isOrderVerified && !activeOrder) {
       showNotification('Awaiting waiter verification. Please let staff scan your QR code first.');
       return;
     }
 
-    if (!gpayId) {
+    if (!razorpayKeyId) {
       showNotification('Online payments are currently disabled. Please choose Pay Later.');
       return;
     }
 
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    if (isMobile) {
-      window.location.href = upiUrl;
-      setTimeout(() => {
-        setIsCheckoutOpen(false);
-        if (!activeOrder) {
-          setCart([]);
-          localStorage.removeItem('aurum_cart');
+    try {
+      const activeTotal = unpaidTotal > 0 ? unpaidTotal : (activeOrder ? activeOrder.total : cartTotal);
+      const targetOrderId = activeOrder ? activeOrder._id : (activeOrders[0] ? activeOrders[0]._id : null);
+
+      const response = await fetch('/api/orders/razorpay-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: activeTotal,
+          orderId: targetOrderId
+        })
+      });
+
+      const orderData = await response.json();
+      if (!response.ok) throw new Error(orderData.error || 'Failed to create payment order');
+
+      const options = {
+        key: razorpayKeyId,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: "Aurum Table",
+        description: `Table ${selectedTable} Order Payment`,
+        order_id: orderData.id,
+        handler: async function (rzpResponse) {
+          try {
+            const verifyRes = await fetch(`/api/orders/${targetOrderId}/verify-payment`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_order_id: rzpResponse.razorpay_order_id,
+                razorpay_payment_id: rzpResponse.razorpay_payment_id,
+                razorpay_signature: rzpResponse.razorpay_signature
+              })
+            });
+
+            const verifyData = await verifyRes.json();
+            if (!verifyRes.ok) throw new Error(verifyData.error || 'Payment verification failed');
+
+            showNotification('Payment successful! Your order is being prepared.');
+            setIsCheckoutOpen(false);
+          } catch (err) {
+            console.error(err);
+            showNotification(err.message || 'Payment verification failed');
+          }
+        },
+        theme: {
+          color: "#D4AF37"
         }
-        showNotification('Initiating payment... Thank you for your order!');
-      }, 1000);
-    } else {
-      setShowPaymentModal(true);
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (err) {
+      console.error(err);
+      showNotification(err.message || 'Failed to initiate Razorpay checkout');
     }
   };
 
@@ -1210,110 +1210,7 @@ function MenuPage() {
           </motion.div>
         )}
       </AnimatePresence>
-      {/* Payment QR Code Modal (Desktop fallback) */}
-      <AnimatePresence>
-        {showPaymentModal && (
-          <div 
-            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-            role="dialog"
-            aria-modal="true"
-            aria-label="UPI Payment QR Code"
-          >
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="bg-surface-container rounded-2xl border border-primary/20 shadow-2xl w-full max-w-md overflow-hidden text-center"
-            >
-              <div className="p-6 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-lowest">
-                <h3 className="font-headline-sm text-primary flex items-center gap-2">
-                  <span className="material-symbols-outlined">qr_code_scanner</span>
-                  Pay with Google Pay / UPI
-                </h3>
-                <button 
-                  onClick={() => setShowPaymentModal(false)} 
-                  aria-label="Close payment modal"
-                  className="text-on-surface-variant hover:text-primary transition-colors focus-ring-gold focus:outline-none rounded-full p-1"
-                >
-                  <span className="material-symbols-outlined">close</span>
-                </button>
-              </div>
 
-              <div className="p-8 flex flex-col items-center justify-center">
-                {/* Order Summary */}
-                <div className="mb-6">
-                  <span className="font-label-caps text-label-caps text-on-surface-variant block mb-1">Amount to Pay</span>
-                  <strong className="font-price-display text-4xl text-primary font-bold">
-                    ₹{(activeOrder ? activeOrder.total : cartTotal).toFixed(2)}
-                  </strong>
-                </div>
-
-                {/* Detailed Receipt Slip */}
-                <div className="w-full bg-surface-container-lowest border border-outline-variant/10 rounded-xl p-4 mb-6 text-left max-h-40 overflow-y-auto hide-scrollbar">
-                  <h4 className="font-label-caps text-[11px] text-primary border-b border-outline-variant/10 pb-2 mb-2 uppercase tracking-wider flex justify-between items-center">
-                    <span>Receipt Slip</span>
-                    <span className="text-on-surface-variant/70">Table {selectedTable}</span>
-                  </h4>
-                  <div className="space-y-1.5 text-sm font-body-md text-on-surface-variant/90">
-                    {(activeOrder ? activeOrder.items : cart).map((item, idx) => (
-                      <div key={item._id || item.id || idx} className="flex justify-between items-center gap-4 text-[13px]">
-                        <span className="truncate flex-1">
-                          <span className="text-primary font-semibold font-mono">{item.quantity}x</span> {item.name}
-                        </span>
-                        <span className="font-semibold shrink-0">₹{(item.price * item.quantity).toFixed(2)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* QR Code */}
-                <div className="bg-white p-2 rounded-xl mb-6 border-2 border-primary-container/30 gold-glow">
-                  {paymentQrCode ? (
-                    <img src={paymentQrCode} alt="UPI Payment QR Code" className="w-64 h-64 rounded-lg" />
-                  ) : (
-                    <div className="w-64 h-64 flex items-center justify-center text-on-primary font-label-caps">Generating QR...</div>
-                  )}
-                </div>
-
-                <div className="w-full bg-surface-container-lowest/50 border border-outline-variant/15 rounded-xl p-4 mb-6 text-left">
-                  <div className="flex gap-2.5 items-start">
-                    <span className="material-symbols-outlined text-primary text-xl shrink-0 mt-0.5">info</span>
-                    <div>
-                      <h4 className="font-title-sm text-[13px] text-on-surface font-semibold">Instructions</h4>
-                      <p className="font-body-sm text-[12px] text-on-surface-variant/80 mt-1 leading-relaxed">
-                        Scan this QR code using Google Pay, PhonePe, Paytm, or any UPI-enabled banking app to transfer the exact amount directly to our restaurant account.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="w-full flex gap-3">
-                  <button 
-                    onClick={() => setShowPaymentModal(false)}
-                    className="flex-1 bg-surface-container-high border border-outline-variant/50 text-on-surface py-3 rounded font-body-md text-sm hover:border-primary/50 transition-colors cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    onClick={() => {
-                      setShowPaymentModal(false);
-                      setIsCheckoutOpen(false);
-                      if (!activeOrder) {
-                        setCart([]);
-                        localStorage.removeItem('aurum_cart');
-                      }
-                      showNotification('Thank you! Your order has been placed and payment is initiated.');
-                    }}
-                    className="flex-1 bg-gold-metallic text-on-primary py-3 rounded font-label-caps text-[12px] uppercase tracking-widest gold-glow cursor-pointer"
-                  >
-                    I Have Paid
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       {/* Footer */}
       <footer className="mt-20 border-t border-outline-variant/15 py-10 bg-surface-container-lowest/80 backdrop-blur-md">

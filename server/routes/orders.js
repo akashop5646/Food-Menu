@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { ObjectId } from 'mongodb';
+import crypto from 'crypto';
 import { getDB } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { broadcast } from '../websocket.js';
@@ -186,6 +187,95 @@ router.patch('/:id/payment', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Failed to update payment status:', error);
     res.status(500).json({ error: 'Failed to update payment status.' });
+  }
+});
+
+// Create a Razorpay Order (Public/Customer endpoint)
+router.post('/razorpay-order', async (req, res) => {
+  try {
+    const { amount, orderId } = req.body;
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: 'Invalid amount' });
+    }
+
+    const keyId = process.env.RAZORPAY_KEY_ID;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+
+    if (!keyId || !keySecret) {
+      return res.status(500).json({ error: 'Razorpay keys not configured' });
+    }
+
+    // ponytail: use standard library fetch to avoid extra dependencies
+    const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+    const response = await fetch('https://api.razorpay.com/v1/orders', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Basic ${auth}`
+      },
+      body: JSON.stringify({
+        amount: Math.round(Number(amount) * 100), // convert to paise
+        currency: 'INR',
+        receipt: orderId ? `ord_${orderId}` : `rcpt_${Date.now()}`
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      return res.status(response.status).json({ error: data.error?.description || 'Razorpay order creation failed' });
+    }
+
+    res.json(data);
+  } catch (error) {
+    console.error('Failed to create Razorpay order:', error);
+    res.status(500).json({ error: 'Failed to create Razorpay order' });
+  }
+});
+
+// Verify payment signature and update order (Public/Customer endpoint)
+router.post('/:id/verify-payment', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!keySecret) {
+      return res.status(500).json({ error: 'Razorpay secret key not configured' });
+    }
+
+    // Verify signature using crypto
+    const hmac = crypto.createHmac('sha256', keySecret);
+    hmac.update(`${razorpay_order_id}|${razorpay_payment_id}`);
+    const generatedSignature = hmac.digest('hex');
+
+    if (generatedSignature !== razorpay_signature) {
+      return res.status(400).json({ error: 'Invalid payment signature' });
+    }
+
+    const db = await getDB();
+    const result = await db.collection('orders').updateOne(
+      { _id: new ObjectId(id) },
+      { 
+        $set: { 
+          paymentStatus: 'PAID',
+          paymentType: 'RAZORPAY',
+          razorpayOrderId: razorpay_order_id,
+          razorpayPaymentId: razorpay_payment_id
+        } 
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // Broadcast payment status change to waiter and KDS
+    broadcast('PAYMENT_UPDATED', { id, paymentStatus: 'PAID' });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to verify payment:', error);
+    res.status(500).json({ error: 'Failed to verify payment' });
   }
 });
 

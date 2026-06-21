@@ -121,33 +121,30 @@ router.delete('/staff/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// Get Google Pay ID (Public endpoint)
-router.get('/gpay', async (req, res) => {
+// Get Razorpay Key ID (Public endpoint)
+router.get('/razorpay', async (req, res) => {
   try {
     const db = await getDB();
-    const config = await db.collection('configs').findOne({ key: 'gpay_id' });
-    res.json({ gpayId: config ? config.value : '' });
+    const config = await db.collection('configs').findOne({ key: 'razorpay_key_id' });
+    res.json({ razorpayKeyId: config ? config.value : process.env.RAZORPAY_KEY_ID || '' });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch Google Pay ID' });
+    res.status(500).json({ error: 'Failed to fetch Razorpay settings' });
   }
 });
 
-// Update Google Pay ID (Admin only)
-router.post('/gpay', requireAdmin, async (req, res) => {
+// Update Razorpay Key ID (Admin only)
+router.post('/razorpay', requireAdmin, async (req, res) => {
   try {
-    const { gpayId } = req.body;
-    if (gpayId && !gpayId.includes('@')) {
-      return res.status(400).json({ error: 'Invalid UPI VPA format. Must contain @ (e.g. name@bank)' });
-    }
+    const { razorpayKeyId } = req.body;
     const db = await getDB();
     await db.collection('configs').updateOne(
-      { key: 'gpay_id' },
-      { $set: { value: gpayId || '' } },
+      { key: 'razorpay_key_id' },
+      { $set: { value: razorpayKeyId || '' } },
       { upsert: true }
     );
-    res.json({ success: true, gpayId });
+    res.json({ success: true, razorpayKeyId });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to update Google Pay ID' });
+    res.status(500).json({ error: 'Failed to update Razorpay settings' });
   }
 });
 

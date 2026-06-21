@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Html5Qrcode } from 'html5-qrcode';
 
 const PAYMENT_METHODS = [
-  { value: 'UPI', label: 'Google Pay / UPI' },
+  { value: 'ONLINE', label: 'Razorpay / Online' },
   { value: 'CASH', label: 'Cash Payment' },
   { value: 'CARD', label: 'Credit / Debit Card' },
 ];
@@ -23,7 +23,7 @@ export default function OrderScanner() {
   const [qrInput, setQrInput] = useState('');
   const [parsedOrder, setParsedOrder] = useState(null);
   const [error, setError] = useState('');
-  const [paymentType, setPaymentType] = useState('UPI');
+  const [paymentType, setPaymentType] = useState('ONLINE');
   const [paymentStatus, setPaymentStatus] = useState('PENDING');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
@@ -335,7 +335,7 @@ export default function OrderScanner() {
       setQrInput('');
       setParsedOrder(null);
       setPaymentStatus('PENDING');
-      setPaymentType('UPI');
+      setPaymentType('ONLINE');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -379,7 +379,7 @@ export default function OrderScanner() {
       setSuccessMsg(`Manual order created for ${selectedTable.name || `Table ${selectedTable.number}`}.`);
       clearManualOrder();
       setPaymentStatus('PENDING');
-      setPaymentType('UPI');
+      setPaymentType('ONLINE');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -391,7 +391,7 @@ export default function OrderScanner() {
     setQrInput('');
     setParsedOrder(null);
     setPaymentStatus('PENDING');
-    setPaymentType('UPI');
+    setPaymentType('ONLINE');
     setError('');
   };
 
