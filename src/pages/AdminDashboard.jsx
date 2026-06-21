@@ -633,7 +633,7 @@ export default function AdminDashboard() {
         </header>
 
         {/* Dynamic Content */}
-        <main className="flex-1 p-margin-mobile md:p-margin-desktop overflow-y-auto mt-20 md:mt-0 pb-24 md:pb-8 relative z-10">
+        <main className="flex-1 p-margin-mobile md:p-margin-desktop overflow-y-auto pb-24 md:pb-8 relative z-10">
           {activeTab === 'dashboard' && (
             <div className="flex flex-col md:flex-row gap-gutter h-auto md:h-full md:min-w-[900px]">
               {/* Column 1: New Orders */}
