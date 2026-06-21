@@ -561,19 +561,12 @@ function MenuPage() {
                   <button
                     key={cat}
                     onClick={() => setActiveCategory(cat)}
-                    className={`relative px-5 py-2 text-[10px] md:text-[11px] font-label-caps uppercase tracking-widest transition-colors duration-300 whitespace-nowrap rounded-full font-semibold ${
+                    className={`relative px-5 py-2 text-[10px] md:text-[11px] font-label-caps uppercase tracking-widest transition-all duration-200 whitespace-nowrap rounded-full font-semibold border ${
                       isActive 
-                        ? 'text-on-primary' 
-                        : 'text-on-surface-variant/85 hover:text-primary'
+                        ? 'bg-gold-metallic text-on-primary shadow-sm border-transparent' 
+                        : 'text-on-surface-variant/85 hover:text-primary bg-surface-container-low border-outline-variant/20'
                     }`}
                   >
-                    {isActive && (
-                      <motion.div
-                        layoutId="activeCategoryPill"
-                        className="absolute inset-0 bg-gold-metallic rounded-full -z-10 shadow-sm"
-                        transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                      />
-                    )}
                     {cat}
                   </button>
                 );
