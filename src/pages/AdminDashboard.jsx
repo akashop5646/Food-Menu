@@ -158,6 +158,7 @@ export default function AdminDashboard() {
         credentials: 'include'
       });
       if (!res.ok) throw new Error('Failed to update status');
+      triggerRefresh();
     } catch (e) {
       console.error(e);
       alert('Failed to update KDS status.');
@@ -173,6 +174,7 @@ export default function AdminDashboard() {
         credentials: 'include'
       });
       if (!res.ok) throw new Error('Failed to update payment');
+      triggerRefresh();
     } catch (e) {
       console.error(e);
       alert('Failed to update payment status.');
