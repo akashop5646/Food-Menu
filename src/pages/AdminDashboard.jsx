@@ -32,8 +32,13 @@ export default function AdminDashboard() {
 
   const triggerRefresh = () => setRefreshKey(prev => prev + 1);
 
-  // Setup WebSocket connection for real-time dashboard updates
+  // Setup WebSocket and fallback polling for real-time dashboard updates
   useEffect(() => {
+    // ponytail: fallback polling runs unconditionally to guarantee 3-second freshness on serverless Vercel
+    const pollInterval = setInterval(() => {
+      triggerRefresh();
+    }, 3000);
+
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
     let wsUrl = `${protocol}://${window.location.host}`;
     if (window.location.port === '3000') {
@@ -42,60 +47,43 @@ export default function AdminDashboard() {
     
     let ws;
     let reconnectTimer;
-    let fallbackPoll;
-    
-    const startPolling = () => {
-      if (!fallbackPoll) {
-        // ponytail: fallback polling if WebSocket is not available (e.g., on serverless platforms like Vercel)
-        fallbackPoll = setInterval(triggerRefresh, 3000);
-      }
-    };
-    
-    const stopPolling = () => {
-      if (fallbackPoll) {
-        clearInterval(fallbackPoll);
-        fallbackPoll = null;
-      }
-    };
     
     const connect = () => {
-      console.log('🔌 Connecting to WebSocket:', wsUrl);
-      ws = new WebSocket(wsUrl);
-      
-      ws.onopen = () => {
-        console.log('🔌 WebSocket connected, stopping fallback polling');
-        stopPolling();
-      };
-      
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg.type === 'ORDER_CREATED' || msg.type === 'ORDER_STATUS_CHANGED' || msg.type === 'PAYMENT_UPDATED') {
-            triggerRefresh();
+      try {
+        console.log('🔌 Connecting to WebSocket:', wsUrl);
+        ws = new WebSocket(wsUrl);
+        
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'ORDER_CREATED' || msg.type === 'ORDER_STATUS_CHANGED' || msg.type === 'PAYMENT_UPDATED') {
+              triggerRefresh();
+            }
+          } catch (e) {
+            console.error('WebSocket parse error:', e);
           }
-        } catch (e) {
-          console.error('WebSocket parse error:', e);
-        }
-      };
-      
-      ws.onclose = () => {
-        console.log('🔌 WebSocket connection closed. Starting fallback polling and reconnecting in 3s...');
-        startPolling();
-        reconnectTimer = setTimeout(connect, 3000);
-      };
-      
-      ws.onerror = (err) => {
-        console.error('WebSocket error:', err);
-        ws.close();
-      };
+        };
+        
+        ws.onclose = () => {
+          console.log('🔌 WebSocket connection closed. Reconnecting in 10s...');
+          // ponytail: retry slowly to avoid spamming Vercel console logs with errors
+          reconnectTimer = setTimeout(connect, 10000);
+        };
+        
+        ws.onerror = (err) => {
+          ws.close();
+        };
+      } catch (err) {
+        console.error('WebSocket creation error:', err);
+      }
     };
     
     connect();
     
     return () => {
+      clearInterval(pollInterval);
       if (ws) ws.close();
       clearTimeout(reconnectTimer);
-      stopPolling();
     };
   }, []);
 
@@ -150,6 +138,10 @@ export default function AdminDashboard() {
     const nextStatus = nextStatusMap[currentStatus];
     if (!nextStatus) return;
 
+    // ponytail: optimistic UI updates for instant status change feedback on dashboard
+    const prevOrders = [...orders];
+    setOrders(prev => prev.map(o => o._id === orderId ? { ...o, status: nextStatus } : o));
+
     try {
       const res = await fetch(`/api/orders/${orderId}/status`, {
         method: 'PATCH',
@@ -158,14 +150,19 @@ export default function AdminDashboard() {
         credentials: 'include'
       });
       if (!res.ok) throw new Error('Failed to update status');
-      triggerRefresh();
+      fetchActiveOrders(); // fetch latest server state immediately
     } catch (e) {
       console.error(e);
+      setOrders(prevOrders);
       alert('Failed to update KDS status.');
     }
   };
 
   const handleMarkAsPaid = async (orderId) => {
+    // ponytail: optimistic UI updates for instant verification change feedback in payments list
+    const prevPaymentOrders = [...paymentOrders];
+    setPaymentOrders(prev => prev.map(o => o._id === orderId ? { ...o, paymentStatus: 'PAID' } : o));
+
     try {
       const res = await fetch(`/api/orders/${orderId}/payment`, {
         method: 'PATCH',
@@ -174,9 +171,10 @@ export default function AdminDashboard() {
         credentials: 'include'
       });
       if (!res.ok) throw new Error('Failed to update payment');
-      triggerRefresh();
+      fetchAllOrders(); // fetch latest server state immediately
     } catch (e) {
       console.error(e);
+      setPaymentOrders(prevPaymentOrders);
       alert('Failed to update payment status.');
     }
   };
