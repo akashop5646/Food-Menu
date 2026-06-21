@@ -124,9 +124,7 @@ router.delete('/staff/:id', requireAdmin, async (req, res) => {
 // Get Razorpay Key ID (Public endpoint)
 router.get('/razorpay', async (req, res) => {
   try {
-    const db = await getDB();
-    const config = await db.collection('configs').findOne({ key: 'razorpay_key_id' });
-    res.json({ razorpayKeyId: config ? config.value : process.env.RAZORPAY_KEY_ID || '' });
+    res.json({ razorpayKeyId: process.env.RAZORPAY_KEY_ID || '' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch Razorpay settings' });
   }
