@@ -35,15 +35,12 @@ export default function AdminDashboard() {
   const [paymentsStatusFilter, setPaymentsStatusFilter] = useState('ALL'); // ALL, PAID, PENDING
   const [paymentsTypeFilter, setPaymentsTypeFilter] = useState('ALL'); // ALL, RAZORPAY, LATER, UPI
 
+  const [wsConnected, setWsConnected] = useState(false);
+
   const triggerRefresh = () => setRefreshKey(prev => prev + 1);
 
-  // Setup WebSocket and fallback polling for real-time dashboard updates
+  // Setup WebSocket for real-time dashboard updates
   useEffect(() => {
-    // ponytail: fallback polling runs unconditionally to guarantee 3-second freshness on serverless Vercel
-    const pollInterval = setInterval(() => {
-      triggerRefresh();
-    }, 3000);
-
     const wsUrl = getWebSocketUrl();
     
     let ws;
@@ -53,6 +50,11 @@ export default function AdminDashboard() {
       try {
         console.log('🔌 Connecting to WebSocket:', wsUrl);
         ws = new WebSocket(wsUrl);
+        
+        ws.onopen = () => {
+          console.log('🔌 WebSocket connected');
+          setWsConnected(true);
+        };
         
         ws.onmessage = (event) => {
           try {
@@ -67,6 +69,7 @@ export default function AdminDashboard() {
         
         ws.onclose = () => {
           console.log('🔌 WebSocket connection closed. Reconnecting in 10s...');
+          setWsConnected(false);
           // ponytail: retry slowly to avoid spamming Vercel console logs with errors
           reconnectTimer = setTimeout(connect, 10000);
         };
@@ -82,11 +85,20 @@ export default function AdminDashboard() {
     connect();
     
     return () => {
-      clearInterval(pollInterval);
       if (ws) ws.close();
       clearTimeout(reconnectTimer);
     };
   }, []);
+
+  // ponytail: fallback polling runs only slowly (30s) if WebSocket is connected, or faster (5s) if disconnected
+  useEffect(() => {
+    const intervalTime = wsConnected ? 30000 : 5000;
+    const pollInterval = setInterval(() => {
+      triggerRefresh();
+    }, intervalTime);
+
+    return () => clearInterval(pollInterval);
+  }, [wsConnected]);
 
   // Fetch KDS active orders
   const fetchActiveOrders = async () => {

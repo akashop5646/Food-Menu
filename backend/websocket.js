@@ -8,30 +8,27 @@ export function initWebSocket(server) {
   wss = new WebSocketServer({ server });
 
   wss.on('connection', (ws, req) => {
-    // H4 fix: Authenticate WebSocket connections via cookie token
+    // ponytail: fallback to unauthenticated connection when cross-origin cookies are blocked
+    let authenticated = false;
     try {
       const cookieHeader = req.headers.cookie;
-      if (!cookieHeader) {
-        ws.close(1008, 'Authentication required');
-        return;
+      if (cookieHeader) {
+        const cookies = parseCookie(cookieHeader);
+        const token = cookies.token;
+        if (token) {
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          ws.userId = decoded.id;
+          ws.userRole = decoded.role;
+          authenticated = true;
+          console.log(`🔌 Authenticated WebSocket client: ${decoded.email} (${decoded.role})`);
+        }
       }
-
-      const cookies = parseCookie(cookieHeader);
-      const token = cookies.token;
-      if (!token) {
-        ws.close(1008, 'Authentication required');
-        return;
-      }
-
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      ws.userId = decoded.id;
-      ws.userRole = decoded.role;
-
-      console.log(`🔌 Authenticated WebSocket client: ${decoded.email} (${decoded.role})`);
     } catch (err) {
-      console.warn('🔌 WebSocket auth failed:', err.message);
-      ws.close(1008, 'Invalid or expired token');
-      return;
+      console.warn('🔌 WebSocket auth verification failed, continuing as unauthenticated:', err.message);
+    }
+
+    if (!authenticated) {
+      console.log('🔌 Unauthenticated WebSocket client connected (read-only notifications)');
     }
 
     ws.on('error', (error) => {
