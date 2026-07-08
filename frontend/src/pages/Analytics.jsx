@@ -438,53 +438,197 @@ export default function Analytics() {
               <p className="text-xs text-on-surface-variant/60 mt-1">Paid customer collections over the past week.</p>
             </div>
 
-            <div className="h-56 mt-6 flex items-end justify-between relative px-2">
-              {/* Grid Lines */}
-              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none border-b border-outline-variant/10 pb-6">
-                {[1, 0.75, 0.5, 0.25, 0].map((ratio) => (
-                  <div key={ratio} className="w-full border-t border-outline-variant/10 text-[11px] font-mono text-on-surface-variant/50 pt-1 font-medium">
-                    ₹{((maxTrendValue * ratio) / 1000).toFixed(1)}k
-                  </div>
-                ))}
-              </div>
+            <div className="w-full h-56 mt-6 relative">
+              {(() => {
+                const chartWidth = 500;
+                const chartHeight = 200;
+                const paddingX = 55;
+                const paddingY = 25;
 
-              {/* Bars */}
-              {dailyTrend.map((data, index) => {
-                const barHeight = (data.value / maxTrendValue) * 100;
+                const points = dailyTrend.map((data, index) => {
+                  const x = paddingX + (index * (chartWidth - paddingX * 2)) / (dailyTrend.length - 1);
+                  const y = chartHeight - paddingY - (data.value / maxTrendValue) * (chartHeight - paddingY * 2);
+                  return { x, y, day: data.day, value: data.value };
+                });
+
+                const getCurvePath = (pts) => {
+                  if (pts.length === 0) return '';
+                  let d = `M ${pts[0].x} ${pts[0].y}`;
+                  for (let i = 0; i < pts.length - 1; i++) {
+                    const p0 = pts[i];
+                    const p1 = pts[i + 1];
+                    const cpX1 = p0.x + (p1.x - p0.x) / 3;
+                    const cpY1 = p0.y;
+                    const cpX2 = p0.x + 2 * (p1.x - p0.x) / 3;
+                    const cpY2 = p1.y;
+                    d += ` C ${cpX1} ${cpY1}, ${cpX2} ${cpY2}, ${p1.x} ${p1.y}`;
+                  }
+                  return d;
+                };
+
+                const getAreaPath = (pts) => {
+                  const curve = getCurvePath(pts);
+                  if (!curve) return '';
+                  return `${curve} L ${pts[pts.length - 1].x} ${chartHeight - paddingY} L ${pts[0].x} ${chartHeight - paddingY} Z`;
+                };
+
                 return (
-                  <div 
-                    key={data.day} 
-                    className="flex flex-col items-center flex-1 z-10 group relative"
-                    onMouseEnter={() => setActiveBarIndex(index)}
-                    onMouseLeave={() => setActiveBarIndex(null)}
-                  >
-                    {/* Tooltip */}
-                    <AnimatePresence>
-                      {activeBarIndex === index && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -10, scale: 0.9 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: -10 }}
-                          className="absolute -top-12 bg-surface-container-highest border border-primary/30 px-2.5 py-1.5 rounded-lg shadow-lg z-20 text-xs font-bold text-primary font-mono whitespace-nowrap"
-                        >
-                          ₹{data.value.toLocaleString()}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                  <svg className="w-full h-full text-on-surface" viewBox={`0 0 ${chartWidth} ${chartHeight}`} preserveAspectRatio="xMidYMid meet">
+                    <defs>
+                      <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#d4af37" stopOpacity="0.25" />
+                        <stop offset="100%" stopColor="#d4af37" stopOpacity="0.0" />
+                      </linearGradient>
+                      <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor="#ffe088" />
+                        <stop offset="50%" stopColor="#d4af37" />
+                        <stop offset="100%" stopColor="#f2ca50" />
+                      </linearGradient>
+                    </defs>
 
-                    {/* Bar Cylinder */}
-                    <div className="w-8 bg-surface-container-high rounded-t-lg h-36 flex items-end overflow-hidden border border-outline-variant/10">
-                      <motion.div
-                        initial={{ height: 0 }}
-                        animate={{ height: `${barHeight}%` }}
-                        transition={{ duration: 0.8, ease: 'easeOut' }}
-                        className="w-full bg-gradient-to-t from-primary/60 to-primary group-hover:brightness-110 transition-all rounded-t-lg"
+                    {/* Y-Axis Grid Lines & Labels */}
+                    {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+                      const yVal = chartHeight - paddingY - ratio * (chartHeight - paddingY * 2);
+                      const labelVal = ratio * maxTrendValue;
+                      return (
+                        <g key={ratio} className="opacity-75">
+                          <text
+                            x={10}
+                            y={yVal + 4}
+                            fill="currentColor"
+                            className="text-[11px] font-mono font-bold text-on-surface-variant/50"
+                          >
+                            ₹{(labelVal / 1000).toFixed(1)}k
+                          </text>
+                          <line
+                            x1={paddingX}
+                            y1={yVal}
+                            x2={chartWidth - paddingX}
+                            y2={yVal}
+                            stroke="currentColor"
+                            strokeWidth="0.5"
+                            className="text-outline-variant/10"
+                          />
+                        </g>
+                      );
+                    })}
+
+                    {/* Gradient Fill Under Line */}
+                    {points.length > 0 && (
+                      <path d={getAreaPath(points)} fill="url(#chartGradient)" />
+                    )}
+
+                    {/* Glowing Stroke Path */}
+                    {points.length > 0 && (
+                      <motion.path
+                        d={getCurvePath(points)}
+                        fill="none"
+                        stroke="url(#lineGradient)"
+                        strokeWidth="3.5"
+                        strokeLinecap="round"
+                        initial={{ pathLength: 0 }}
+                        animate={{ pathLength: 1 }}
+                        transition={{ duration: 1.2, ease: 'easeOut' }}
                       />
-                    </div>
-                    <span className="text-xs font-label-caps uppercase tracking-wider font-bold text-on-surface-variant mt-2">{data.day}</span>
-                  </div>
+                    )}
+
+                    {/* Active Vertical Crosshair */}
+                    {activeBarIndex !== null && points[activeBarIndex] && (
+                      <line
+                        x1={points[activeBarIndex].x}
+                        y1={paddingY}
+                        x2={points[activeBarIndex].x}
+                        y2={chartHeight - paddingY}
+                        stroke="#d4af37"
+                        strokeWidth="1"
+                        strokeDasharray="4,4"
+                        className="opacity-70"
+                      />
+                    )}
+
+                    {/* Vertex Points & Hover Indicators */}
+                    {points.map((pt, idx) => (
+                      <g key={pt.day}>
+                        <circle
+                          cx={pt.x}
+                          cy={pt.y}
+                          r="4"
+                          fill="#1c1d22"
+                          stroke="#d4af37"
+                          strokeWidth="2.5"
+                          className="transition-transform duration-200"
+                        />
+                        {activeBarIndex === idx && (
+                          <>
+                            <circle
+                              cx={pt.x}
+                              cy={pt.y}
+                              r="8"
+                              fill="transparent"
+                              stroke="#d4af37"
+                              strokeWidth="1.5"
+                              className="animate-ping"
+                            />
+                            <circle
+                              cx={pt.x}
+                              cy={pt.y}
+                              r="5"
+                              fill="#ffe088"
+                              stroke="#d4af37"
+                              strokeWidth="1.5"
+                            />
+                          </>
+                        )}
+                      </g>
+                    ))}
+
+                    {/* X-Axis Labels (Days) */}
+                    {points.map((pt) => (
+                      <text
+                        key={pt.day}
+                        x={pt.x}
+                        y={chartHeight - 6}
+                        textAnchor="middle"
+                        fill="currentColor"
+                        className="text-[11px] font-label-caps font-bold text-on-surface-variant"
+                      >
+                        {pt.day}
+                      </text>
+                    ))}
+
+                    {/* Invisible Interactive Columns for Hover Sensitivity */}
+                    {points.map((pt, idx) => (
+                      <rect
+                        key={`hit-${pt.day}`}
+                        x={pt.x - 20}
+                        y={0}
+                        width={40}
+                        height={chartHeight}
+                        fill="transparent"
+                        className="cursor-pointer"
+                        onMouseEnter={() => setActiveBarIndex(idx)}
+                        onMouseLeave={() => setActiveBarIndex(null)}
+                      />
+                    ))}
+
+                    {/* Interactive ForeignObject Tooltip */}
+                    {activeBarIndex !== null && points[activeBarIndex] && (
+                      <foreignObject
+                        x={Math.max(10, Math.min(chartWidth - 130, points[activeBarIndex].x - 60))}
+                        y={Math.max(5, points[activeBarIndex].y - 55)}
+                        width={120}
+                        height={50}
+                        className="overflow-visible pointer-events-none"
+                      >
+                        <div className="bg-surface-container-highest/95 border border-primary/30 px-2.5 py-1 rounded-xl shadow-xl text-center backdrop-blur-md w-full">
+                          <p className="text-[9px] font-bold text-on-surface-variant/80 uppercase tracking-widest font-label-caps">{points[activeBarIndex].day}</p>
+                          <p className="text-xs font-bold text-primary font-mono mt-0.5">₹{points[activeBarIndex].value.toLocaleString()}</p>
+                        </div>
+                      </foreignObject>
+                    )}
+                  </svg>
                 );
-              })}
+              })()}
             </div>
           </motion.div>
 
