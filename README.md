@@ -91,19 +91,27 @@ npm run install:all
 This automatically executes `npm install` inside the `frontend/` and `backend/` directories.
 
 ### 2. Run Locally in Development Mode
-You can run the frontend and backend servers separately or using the root scripts:
+You can run both frontend and backend concurrently with a single command from the root directory:
 
-#### Run Frontend Client
+```bash
+npm run dev
+```
+* This boots the Express backend server (on http://localhost:5000) and the Vite frontend client (on http://localhost:3000) simultaneously.
+
+Alternatively, you can run them individually:
+
+#### Run Frontend Client Only
 ```bash
 npm run dev:frontend
 ```
 * Runs the Vite dev server at http://localhost:3000
 
-#### Run Backend API Server
+#### Run Backend API Server Only
 ```bash
 npm run dev:backend
 ```
 * Runs the Express API server with hot-reload watch at http://localhost:5000
+
 
 ---
 
