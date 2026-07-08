@@ -7,16 +7,17 @@ import { broadcast } from '../websocket.js';
 
 const router = Router();
 
-// Ensure TTL index on checkout_codes collection (auto-expire after 30 minutes)
+// Drop TTL index on checkout_codes collection to remove code expiration
 (async () => {
   try {
     const db = await getDB();
-    await db.collection('checkout_codes').createIndex(
-      { createdAt: 1 },
-      { expireAfterSeconds: 1800 }
-    );
+    await db.collection('checkout_codes').dropIndex('createdAt_1');
+    console.log('Successfully dropped TTL index on checkout_codes');
   } catch (err) {
-    console.error('Failed to create TTL index on checkout_codes:', err);
+    // If the index doesn't exist, MongoDB returns an IndexNotFound error, which we can ignore
+    if (err.codeName !== 'IndexNotFound') {
+      console.error('Failed to drop TTL index on checkout_codes:', err);
+    }
   }
 })();
 
@@ -88,7 +89,7 @@ router.post('/verify-code', requireAuth, async (req, res) => {
     const entry = await db.collection('checkout_codes').findOne({ code: String(code), used: false });
 
     if (!entry) {
-      return res.status(404).json({ error: 'Invalid or expired code. Please check and try again.' });
+      return res.status(404).json({ error: 'Invalid or already used code. Please check and try again.' });
     }
 
     // Mark as used
