@@ -330,11 +330,11 @@ export default function Analytics() {
             >
               <div>
                 <span className="material-symbols-outlined text-primary text-3xl group-hover:scale-110 transition-transform">monetization_on</span>
-                <p className="text-on-surface-variant/60 font-label-caps text-xs uppercase tracking-widest mt-4">Total Revenue</p>
+                <p className="text-on-surface-variant font-label-caps text-sm font-bold uppercase tracking-wider mt-4">Total Revenue</p>
                 <h3 className="font-headline-md text-3xl text-primary font-bold mt-2">₹{totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
               </div>
-              <p className="text-[11px] text-green-500 flex items-center gap-1 mt-4">
-                <span className="material-symbols-outlined text-[12px]">trending_up</span>
+              <p className="text-xs text-green-500 flex items-center gap-1 mt-4 font-semibold">
+                <span className="material-symbols-outlined text-[13px]">trending_up</span>
                 <span>+12.4% vs last period</span>
               </p>
             </motion.div>
@@ -348,11 +348,11 @@ export default function Analytics() {
             >
               <div>
                 <span className="material-symbols-outlined text-primary text-3xl group-hover:scale-110 transition-transform">pending_actions</span>
-                <p className="text-on-surface-variant/60 font-label-caps text-xs uppercase tracking-widest mt-4">Active Orders</p>
+                <p className="text-on-surface-variant font-label-caps text-sm font-bold uppercase tracking-wider mt-4">Active Orders</p>
                 <h3 className="font-headline-md text-3xl text-on-surface font-bold mt-2">{activeOrdersCount}</h3>
               </div>
-              <p className="text-[11px] text-on-surface-variant/70 flex items-center gap-1 mt-4">
-                <span className="material-symbols-outlined text-[12px]">info</span>
+              <p className="text-xs text-on-surface-variant/80 flex items-center gap-1 mt-4 font-medium">
+                <span className="material-symbols-outlined text-[13px]">info</span>
                 <span>Currently in preparation or ready</span>
               </p>
             </motion.div>
@@ -366,11 +366,11 @@ export default function Analytics() {
             >
               <div>
                 <span className="material-symbols-outlined text-primary text-3xl group-hover:scale-110 transition-transform">shopping_bag</span>
-                <p className="text-on-surface-variant/60 font-label-caps text-xs uppercase tracking-widest mt-4">Avg Order Value</p>
+                <p className="text-on-surface-variant font-label-caps text-sm font-bold uppercase tracking-wider mt-4">Avg Order Value</p>
                 <h3 className="font-headline-md text-3xl text-on-surface font-bold mt-2">₹{avgOrderValue.toFixed(2)}</h3>
               </div>
-              <p className="text-[11px] text-on-surface-variant/70 flex items-center gap-1 mt-4">
-                <span className="material-symbols-outlined text-[12px]">tag</span>
+              <p className="text-xs text-on-surface-variant/80 flex items-center gap-1 mt-4 font-medium">
+                <span className="material-symbols-outlined text-[13px]">tag</span>
                 <span>Calculated per customer transaction</span>
               </p>
             </motion.div>
@@ -384,11 +384,11 @@ export default function Analytics() {
             >
               <div>
                 <span className="material-symbols-outlined text-primary text-3xl group-hover:scale-110 transition-transform">table_bar</span>
-                <p className="text-on-surface-variant/60 font-label-caps text-xs uppercase tracking-widest mt-4">Occupied Tables</p>
+                <p className="text-on-surface-variant font-label-caps text-sm font-bold uppercase tracking-wider mt-4">Occupied Tables</p>
                 <h3 className="font-headline-md text-3xl text-on-surface font-bold mt-2">{activeTablesCount}</h3>
               </div>
-              <p className="text-[11px] text-primary flex items-center gap-1 mt-4">
-                <span className="material-symbols-outlined text-[12px]">qr_code</span>
+              <p className="text-xs text-primary flex items-center gap-1 mt-4 font-semibold">
+                <span className="material-symbols-outlined text-[13px]">qr_code</span>
                 <span>Active sessions via QR scans</span>
               </p>
             </motion.div>
@@ -442,7 +442,7 @@ export default function Analytics() {
               {/* Grid Lines */}
               <div className="absolute inset-0 flex flex-col justify-between pointer-events-none border-b border-outline-variant/10 pb-6">
                 {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
-                  <div key={ratio} className="w-full border-t border-outline-variant/10 text-[9px] font-mono text-on-surface-variant/40 pt-1">
+                  <div key={ratio} className="w-full border-t border-outline-variant/10 text-[11px] font-mono text-on-surface-variant/50 pt-1 font-medium">
                     ₹{((maxTrendValue * ratio) / 1000).toFixed(1)}k
                   </div>
                 ))}
@@ -465,7 +465,7 @@ export default function Analytics() {
                           initial={{ opacity: 0, y: -10, scale: 0.9 }}
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: -10 }}
-                          className="absolute -top-12 bg-surface-container-highest border border-primary/30 px-2 py-1 rounded shadow-lg z-20 text-[10px] font-bold text-primary font-mono whitespace-nowrap"
+                          className="absolute -top-12 bg-surface-container-highest border border-primary/30 px-2.5 py-1.5 rounded-lg shadow-lg z-20 text-xs font-bold text-primary font-mono whitespace-nowrap"
                         >
                           ₹{data.value.toLocaleString()}
                         </motion.div>
@@ -481,7 +481,7 @@ export default function Analytics() {
                         className="w-full bg-gradient-to-t from-primary/60 to-primary group-hover:brightness-110 transition-all rounded-t-lg"
                       />
                     </div>
-                    <span className="text-[10px] font-label-caps uppercase tracking-wider font-semibold text-on-surface-variant/80 mt-2">{data.day}</span>
+                    <span className="text-xs font-label-caps uppercase tracking-wider font-bold text-on-surface-variant mt-2">{data.day}</span>
                   </div>
                 );
               })}
@@ -542,10 +542,10 @@ export default function Analytics() {
                   </svg>
                   {/* Center Text */}
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span className="text-[10px] font-label-caps text-on-surface-variant/60 uppercase tracking-widest">
+                    <span className="text-[11px] font-label-caps text-on-surface-variant/75 uppercase tracking-widest font-semibold">
                       {activeCategoryIndex !== null ? categoryData[activeCategoryIndex].name : 'Revenue'}
                     </span>
-                    <span className="text-xs font-bold text-primary font-mono mt-0.5">
+                    <span className="text-sm font-bold text-primary font-mono mt-0.5">
                       {activeCategoryIndex !== null 
                         ? `₹${categoryData[activeCategoryIndex].value.toLocaleString()}`
                         : `₹${totalCatRevenue.toLocaleString()}`
@@ -555,17 +555,17 @@ export default function Analytics() {
                 </div>
 
                 {/* Legend */}
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-4 w-full text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant/80">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-5 w-full text-xs font-bold uppercase tracking-wider text-on-surface-variant">
                   {categoryData.map((slice, index) => (
                     <div 
                       key={slice.name} 
-                      className={`flex items-center gap-1.5 cursor-pointer transition-opacity ${
+                      className={`flex items-center gap-2 cursor-pointer transition-opacity ${
                         activeCategoryIndex !== null && activeCategoryIndex !== index ? 'opacity-40' : 'opacity-100'
                       }`}
                       onMouseEnter={() => setActiveCategoryIndex(index)}
                       onMouseLeave={() => setActiveCategoryIndex(null)}
                     >
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: slice.color }} />
+                      <span className="w-3.5 h-3.5 rounded-full shrink-0 border border-black/10" style={{ backgroundColor: slice.color }} />
                       <span className="truncate">{slice.name}</span>
                     </div>
                   ))}
