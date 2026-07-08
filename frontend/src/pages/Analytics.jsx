@@ -441,7 +441,7 @@ export default function Analytics() {
             <div className="h-56 mt-6 flex items-end justify-between relative px-2">
               {/* Grid Lines */}
               <div className="absolute inset-0 flex flex-col justify-between pointer-events-none border-b border-outline-variant/10 pb-6">
-                {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
+                {[1, 0.75, 0.5, 0.25, 0].map((ratio) => (
                   <div key={ratio} className="w-full border-t border-outline-variant/10 text-[11px] font-mono text-on-surface-variant/50 pt-1 font-medium">
                     ₹{((maxTrendValue * ratio) / 1000).toFixed(1)}k
                   </div>
