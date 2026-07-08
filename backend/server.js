@@ -23,7 +23,7 @@ const PORT = process.env.PORT || 5000;
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5000',
-  process.env.FRONTEND_URL, // Set this in .env for production
+  process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : null,
 ].filter(Boolean);
 
 // Security Middleware
@@ -57,8 +57,9 @@ app.use(cors({
     
     const isLocal = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
     const isVercel = origin.endsWith('.vercel.app');
+    const cleanedOrigin = origin.replace(/\/$/, '');
     
-    if (isLocal || isVercel || allowedOrigins.includes(origin)) {
+    if (isLocal || isVercel || allowedOrigins.includes(cleanedOrigin)) {
       return callback(null, true);
     }
     callback(new Error('Not allowed by CORS'));

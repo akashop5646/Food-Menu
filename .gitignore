@@ -1,5 +1,7 @@
-.env
-node_modules
-dist
-*.log
-test-db.js
+node_modules/
+**/node_modules/
+**/dist/
+**/.env
+**/.env.local
+**/*.log
+graphify-out/

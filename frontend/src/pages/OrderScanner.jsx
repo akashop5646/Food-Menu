@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Html5Qrcode } from 'html5-qrcode';
+import { API_BASE } from '../config';
 
 const PAYMENT_METHODS = [
   { value: 'ONLINE', label: 'Razorpay / Online' },
@@ -173,9 +174,9 @@ export default function OrderScanner() {
     const loadCatalog = async () => {
       try {
         const [menuRes, tablesRes, locationsRes] = await Promise.all([
-          fetch('/api/menu'),
-          fetch('/api/tables'),
-          fetch('/api/locations')
+          fetch(API_BASE + '/api/menu'),
+          fetch(API_BASE + '/api/tables'),
+          fetch(API_BASE + '/api/locations')
         ]);
 
         const [menuData, tablesData, locationsData] = await Promise.all([
@@ -288,7 +289,7 @@ export default function OrderScanner() {
   };
 
   const submitOrder = async ({ tableName, locationName, items, total }) => {
-    const res = await fetch('/api/orders', {
+    const res = await fetch(API_BASE + '/api/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

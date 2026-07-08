@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { API_BASE } from '../config';
 
 export default function MenuManager() {
   const [items, setItems] = useState([]);
@@ -87,7 +88,7 @@ export default function MenuManager() {
 
   const fetchCategories = async () => {
     try {
-      const res = await fetch('/api/categories');
+      const res = await fetch(API_BASE + '/api/categories');
       const data = await res.json();
       setCategories(Array.isArray(data) ? data : []);
       
@@ -112,7 +113,7 @@ export default function MenuManager() {
       // Wait, the GET /api/menu route filters `available: { $ne: false }`.
       // Let's create an admin endpoint or modify the query if a specific param is passed?
       // Actually we can add an admin route or pass `?all=true`. Let's assume we update the backend shortly to support `?all=true`.
-      const res = await fetch('/api/menu?all=true');
+      const res = await fetch(API_BASE + '/api/menu?all=true');
       const data = await res.json();
       setItems(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -159,7 +160,7 @@ export default function MenuManager() {
     setIsSaving(true);
     try {
       const method = editingItem ? 'PUT' : 'POST';
-      const url = editingItem ? `/api/menu/${editingItem._id}` : '/api/menu';
+      const url = editingItem ? `${API_BASE}/api/menu/${editingItem._id}` : `${API_BASE}/api/menu`;
 
       const payload = new FormData();
       payload.append('name', formData.name);
@@ -198,7 +199,7 @@ export default function MenuManager() {
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this item?')) return;
     try {
-      const res = await fetch(`/api/menu/${id}`, { 
+      const res = await fetch(`${API_BASE}/api/menu/${id}`, { 
         method: 'DELETE',
         credentials: 'include'
       });
@@ -213,7 +214,7 @@ export default function MenuManager() {
   const toggleStatus = async (item) => {
     try {
       const newStatus = item.available === false ? true : false;
-      const res = await fetch(`/api/menu/${item._id}`, {
+      const res = await fetch(`${API_BASE}/api/menu/${item._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ available: newStatus }),
@@ -245,7 +246,7 @@ export default function MenuManager() {
     e.preventDefault();
     if (!newCategoryName.trim()) return;
     try {
-      const res = await fetch('/api/categories', {
+      const res = await fetch(API_BASE + '/api/categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newCategoryName }),
@@ -267,7 +268,7 @@ export default function MenuManager() {
   const handleDeleteCategory = async (id) => {
     if (!window.confirm('Delete this category? Items in this category will not be deleted, but may not display properly.')) return;
     try {
-      const res = await fetch(`/api/categories/${id}`, { 
+      const res = await fetch(`${API_BASE}/api/categories/${id}`, { 
         method: 'DELETE',
         credentials: 'include'
       });

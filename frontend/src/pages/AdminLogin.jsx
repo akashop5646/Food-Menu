@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { API_BASE } from '../config';
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -31,7 +32,7 @@ export default function AdminLogin() {
     setError('');
     setLoading(true);
 
-    const endpoint = '/api/auth/login';
+    const endpoint = API_BASE + '/api/auth/login';
     const body = { email, password };
 
     try {
@@ -73,7 +74,7 @@ export default function AdminLogin() {
     const hash = window.location.hash;
     if (hash && hash.includes('id_token=')) return;
 
-    fetch('/api/auth/me', { credentials: 'include' })
+    fetch(API_BASE + '/api/auth/me', { credentials: 'include' })
       .then(res => {
         if (res.ok) {
           navigate('/admin/dashboard');
@@ -97,7 +98,7 @@ export default function AdminLogin() {
           try {
             setError('');
             setLoading(true);
-            const res = await fetch('/api/auth/google', {
+            const res = await fetch(API_BASE + '/api/auth/google', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',

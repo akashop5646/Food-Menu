@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { API_BASE } from '../config';
 
 export default function TablesAndQR() {
   const [tables, setTables] = useState([]);
@@ -35,7 +36,7 @@ export default function TablesAndQR() {
     e.preventDefault();
     if (!editingTable) return;
     try {
-      const res = await fetch(`/api/tables/${editingTable._id}`, {
+      const res = await fetch(`${API_BASE}/api/tables/${editingTable._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...editFormData, baseUrl: window.location.origin }),
@@ -54,8 +55,8 @@ export default function TablesAndQR() {
   const fetchData = async () => {
     try {
       const [tablesRes, locsRes] = await Promise.all([
-        fetch('/api/tables'),
-        fetch('/api/locations')
+        fetch(API_BASE + '/api/tables'),
+        fetch(API_BASE + '/api/locations')
       ]);
       const tablesData = await tablesRes.json();
       const locsData = await locsRes.json();
@@ -82,7 +83,7 @@ export default function TablesAndQR() {
   const submitGenerateQR = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/tables', {
+      const res = await fetch(API_BASE + '/api/tables', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...formData, baseUrl: window.location.origin }),
@@ -103,7 +104,7 @@ export default function TablesAndQR() {
     e.preventDefault();
     if (!newLocationName.trim()) return;
     try {
-      const res = await fetch('/api/locations', {
+      const res = await fetch(API_BASE + '/api/locations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newLocationName }),
@@ -126,7 +127,7 @@ export default function TablesAndQR() {
   const handleDeleteTable = async (id) => {
     if (!window.confirm('Are you sure you want to delete this table?')) return;
     try {
-      const res = await fetch(`/api/tables/${id}`, { 
+      const res = await fetch(`${API_BASE}/api/tables/${id}`, { 
         method: 'DELETE',
         credentials: 'include'
       });

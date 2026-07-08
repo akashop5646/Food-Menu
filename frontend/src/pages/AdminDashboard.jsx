@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import TablesAndQR from './TablesAndQR';
 import MenuManager from './MenuManager';
 import Settings from './Settings';
+import { API_BASE, getWebSocketUrl } from '../config';
 import OrderScanner from './OrderScanner';
 
 const SIDEBAR_ITEMS = [
@@ -43,11 +44,7 @@ export default function AdminDashboard() {
       triggerRefresh();
     }, 3000);
 
-    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    let wsUrl = `${protocol}://${window.location.host}`;
-    if (window.location.port === '3000') {
-      wsUrl = `${protocol}://${window.location.hostname}:5000`;
-    }
+    const wsUrl = getWebSocketUrl();
     
     let ws;
     let reconnectTimer;
@@ -94,7 +91,7 @@ export default function AdminDashboard() {
   // Fetch KDS active orders
   const fetchActiveOrders = async () => {
     try {
-      const res = await fetch('/api/orders?active=true', { credentials: 'include' });
+      const res = await fetch(API_BASE + '/api/orders?active=true', { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setOrders(data);
@@ -109,7 +106,7 @@ export default function AdminDashboard() {
   // Fetch Payment orders
   const fetchAllOrders = async () => {
     try {
-      const res = await fetch('/api/orders', { credentials: 'include' });
+      const res = await fetch(API_BASE + '/api/orders', { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setPaymentOrders(data);
@@ -147,7 +144,7 @@ export default function AdminDashboard() {
     setOrders(prev => prev.map(o => o._id === orderId ? { ...o, status: nextStatus } : o));
 
     try {
-      const res = await fetch(`/api/orders/${orderId}/status`, {
+      const res = await fetch(`${API_BASE}/api/orders/${orderId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus }),
@@ -168,7 +165,7 @@ export default function AdminDashboard() {
     setPaymentOrders(prev => prev.map(o => o._id === orderId ? { ...o, paymentStatus: 'PAID' } : o));
 
     try {
-      const res = await fetch(`/api/orders/${orderId}/payment`, {
+      const res = await fetch(`${API_BASE}/api/orders/${orderId}/payment`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ paymentStatus: 'PAID' }),
@@ -195,7 +192,7 @@ export default function AdminDashboard() {
 
   // Authentication Check
   useEffect(() => {
-    fetch('/api/auth/me', { credentials: 'include' })
+    fetch(API_BASE + '/api/auth/me', { credentials: 'include' })
       .then(res => {
         if (!res.ok) throw new Error('Not authenticated');
         return res.json();
@@ -596,7 +593,7 @@ export default function AdminDashboard() {
             </div>
             <button 
               onClick={async () => {
-                await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+                await fetch(API_BASE + '/api/auth/logout', { method: 'POST', credentials: 'include' });
                 navigate('/admin');
               }}
               className="text-[#7d9093] dark:text-on-surface-variant hover:text-error dark:hover:text-error hover:bg-error/10 p-2 rounded-xl transition-all duration-200 flex items-center justify-center"
@@ -806,7 +803,7 @@ export default function AdminDashboard() {
                   <button 
                     onClick={async () => {
                       setIsMobileMenuOpen(false);
-                      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+                      await fetch(API_BASE + '/api/auth/logout', { method: 'POST', credentials: 'include' });
                       navigate('/admin');
                     }}
                     className="text-[#7d9093] dark:text-on-surface-variant hover:text-error dark:hover:text-error hover:bg-error/10 p-2 rounded-xl transition-all duration-200 flex items-center justify-center"

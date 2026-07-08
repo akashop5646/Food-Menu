@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { API_BASE } from '../config';
 
 export default function Settings({ user }) {
   const [staff, setStaff] = useState([]);
@@ -17,7 +18,7 @@ export default function Settings({ user }) {
 
   const fetchStaff = async () => {
     try {
-      const res = await fetch('/api/settings/staff', { credentials: 'include' });
+      const res = await fetch(API_BASE + '/api/settings/staff', { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
       setStaff(data);
@@ -36,7 +37,7 @@ export default function Settings({ user }) {
     setIsUpdatingRole(true);
     setActionError('');
     try {
-      const res = await fetch(`/api/settings/staff/${memberId}/role`, {
+      const res = await fetch(`${API_BASE}/api/settings/staff/${memberId}/role`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: newRole }),
@@ -62,7 +63,7 @@ export default function Settings({ user }) {
     setIsDeleting(true);
     setActionError('');
     try {
-      const res = await fetch(`/api/settings/staff/${memberId}`, {
+      const res = await fetch(`${API_BASE}/api/settings/staff/${memberId}`, {
         method: 'DELETE',
         credentials: 'include'
       });
@@ -84,7 +85,7 @@ export default function Settings({ user }) {
     setError('');
 
     try {
-      const res = await fetch('/api/settings/staff', {
+      const res = await fetch(API_BASE + '/api/settings/staff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),

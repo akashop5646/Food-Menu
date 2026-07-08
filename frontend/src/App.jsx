@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import QRCode from 'qrcode';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
+import { API_BASE } from './config';
 
 function MenuPage() {
   const [searchParams] = useSearchParams();
@@ -129,10 +130,10 @@ function MenuPage() {
     const fetchMenu = async () => {
       try {
         const [itemsRes, catsRes, razorpayRes, ipRes] = await Promise.all([
-          fetch('/api/menu'),
-          fetch('/api/categories'),
-          fetch('/api/settings/razorpay'),
-          fetch('/api/auth/ip').catch(() => null)
+          fetch(API_BASE + '/api/menu'),
+          fetch(API_BASE + '/api/categories'),
+          fetch(API_BASE + '/api/settings/razorpay'),
+          fetch(API_BASE + '/api/auth/ip').catch(() => null)
         ]);
         const items = await itemsRes.json();
         const cats = await catsRes.json();
@@ -264,7 +265,7 @@ function MenuPage() {
       };
 
       try {
-        let url = `/api/orders/active?table=${encodeURIComponent(selectedTable)}&deviceId=${encodeURIComponent(deviceId)}`;
+        let url = `${API_BASE}/api/orders/active?table=${encodeURIComponent(selectedTable)}&deviceId=${encodeURIComponent(deviceId)}`;
         if (cart.length > 0 && checkoutSessionId) {
           url += `&checkoutSessionId=${encodeURIComponent(checkoutSessionId)}`;
         }
@@ -316,7 +317,7 @@ function MenuPage() {
       const activeTotal = unpaidTotal > 0 ? unpaidTotal : (activeOrder ? activeOrder.total : cartTotal);
       const targetOrderId = activeOrder ? activeOrder._id : (activeOrders[0] ? activeOrders[0]._id : null);
 
-      const response = await fetch('/api/orders/razorpay-order', {
+      const response = await fetch(API_BASE + '/api/orders/razorpay-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -337,7 +338,7 @@ function MenuPage() {
         order_id: orderData.id,
         handler: async function (rzpResponse) {
           try {
-            const verifyRes = await fetch(`/api/orders/${targetOrderId}/verify-payment`, {
+            const verifyRes = await fetch(`${API_BASE}/api/orders/${targetOrderId}/verify-payment`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
