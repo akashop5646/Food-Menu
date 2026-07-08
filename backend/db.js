@@ -15,6 +15,12 @@ export async function connectDB() {
   if (db) return db;
   const uri = process.env.MONGODB_URI;
   const dbName = process.env.MONGODB_DB;
+  if (!uri) {
+    throw new Error('MONGODB_URI environment variable is missing. Please configure it in your deployment environment variables.');
+  }
+  if (!dbName) {
+    throw new Error('MONGODB_DB environment variable is missing. Please configure it in your deployment environment variables.');
+  }
   client = new MongoClient(uri);
   await client.connect();
   db = client.db(dbName);
