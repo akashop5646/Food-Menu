@@ -77,21 +77,64 @@ function uploadBufferToCloudinary(buffer) {
   });
 }
 
-// GET all menu items (public, supports ?all=true parameter)
+// GET menu items (public, supports ?all=true, ?limit, ?offset, ?search, ?category, ?status parameters)
 router.get('/', async (req, res) => {
   try {
-    const { all } = req.query;
+    const { all, limit, offset, search, category, status } = req.query;
     const db = await getDB();
     
     const query = {};
     if (all !== 'true') {
       query.available = { $ne: false };
+    } else if (status === 'In Stock') {
+      query.available = { $ne: false };
+    } else if (status === 'Out of Stock') {
+      query.available = false;
     }
 
-    let items = await db.collection('menu_items')
+    if (category && category !== 'All') {
+      query.$or = [
+        { categories: category },
+        { category: category }
+      ];
+    }
+
+    if (search) {
+      const escapedSearch = search.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'); // regex escape
+      if (query.$or) {
+        // If we already have $or for categories, we should wrap them in an $and
+        const categoryOr = query.$or;
+        delete query.$or;
+        query.$and = [
+          { $or: categoryOr },
+          {
+            $or: [
+              { name: { $regex: escapedSearch, $options: 'i' } },
+              { description: { $regex: escapedSearch, $options: 'i' } }
+            ]
+          }
+        ];
+      } else {
+        query.$or = [
+          { name: { $regex: escapedSearch, $options: 'i' } },
+          { description: { $regex: escapedSearch, $options: 'i' } }
+        ];
+      }
+    }
+
+    let cursor = db.collection('menu_items')
       .find(query)
-      .sort({ chefPick: -1, createdAt: -1 })
-      .toArray();
+      .sort({ chefPick: -1, createdAt: -1 });
+
+    if (limit) {
+      const parsedLimit = parseInt(limit, 10);
+      const parsedOffset = parseInt(offset, 10) || 0;
+      if (!isNaN(parsedLimit) && parsedLimit > 0) {
+        cursor = cursor.skip(parsedOffset).limit(parsedLimit);
+      }
+    }
+
+    let items = await cursor.toArray();
       
     // Migration for legacy data
     items = items.map(item => {

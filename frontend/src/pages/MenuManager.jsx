@@ -19,24 +19,24 @@ export default function MenuManager() {
   
   // Search & Filter States
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
+  
+  // Pagination & Loading States
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const observerTarget = useRef(null);
 
-  const filteredItems = items.filter(item => {
-    const matchesSearch = 
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()));
+  // Debounce search query changes to prevent rapid API requests
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-    const itemCats = item.categories || (item.category ? [item.category] : []);
-    const matchesCategory = selectedCategory === 'All' || itemCats.includes(selectedCategory);
-
-    const matchesStatus = 
-      selectedStatus === 'All' ||
-      (selectedStatus === 'In Stock' && item.available !== false) ||
-      (selectedStatus === 'Out of Stock' && item.available === false);
-
-    return matchesSearch && matchesCategory && matchesStatus;
-  });
+  const filteredItems = items;
 
   const [formData, setFormData] = useState({
     name: '',
@@ -106,27 +106,84 @@ export default function MenuManager() {
     setTimeout(() => setNotification(''), 3000);
   };
 
-  const fetchMenu = async () => {
+  const fetchMenu = async (reset = false) => {
+    const currentOffset = reset ? 0 : items.length;
+    if (reset) {
+      setLoading(true);
+      setHasMore(true);
+    } else {
+      setLoadingMore(true);
+    }
+
     try {
-      // Fetch all items, including unavailable ones
-      // Since our public endpoint filters out unavailable, let's just fetch directly from db
-      // Wait, the GET /api/menu route filters `available: { $ne: false }`.
-      // Let's create an admin endpoint or modify the query if a specific param is passed?
-      // Actually we can add an admin route or pass `?all=true`. Let's assume we update the backend shortly to support `?all=true`.
-      const res = await fetch(API_BASE + '/api/menu?all=true');
+      const params = new URLSearchParams({
+        all: 'true',
+        limit: '10',
+        offset: String(currentOffset),
+        search: debouncedSearch,
+        category: selectedCategory,
+        status: selectedStatus
+      });
+
+      const res = await fetch(`${API_BASE}/api/menu?${params.toString()}`);
       const data = await res.json();
-      setItems(Array.isArray(data) ? data : []);
+      
+      const newItems = Array.isArray(data) ? data : [];
+      if (reset) {
+        setItems(newItems);
+      } else {
+        setItems(prev => {
+          const existingIds = new Set(prev.map(i => i._id));
+          const filteredNew = newItems.filter(i => !existingIds.has(i._id));
+          return [...prev, ...filteredNew];
+        });
+      }
+      
+      if (newItems.length < 10) {
+        setHasMore(false);
+      }
     } catch (err) {
       console.error('Failed to fetch menu:', err);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
+  // Fetch categories on mount
   useEffect(() => {
     fetchCategories();
-    fetchMenu();
   }, []);
+
+  // Trigger page load or reset when search parameters change
+  useEffect(() => {
+    fetchMenu(true);
+  }, [debouncedSearch, selectedCategory, selectedStatus]);
+
+  // Setup intersection observer for infinite scrolling
+  useEffect(() => {
+    if (!hasMore || loading || loadingMore) return;
+
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting && !loadingMore) {
+          fetchMenu(false);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentTarget = observerTarget.current;
+    if (currentTarget) {
+      observer.observe(currentTarget);
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget);
+      }
+    };
+  }, [hasMore, loading, loadingMore, items.length]);
 
   const handleOpenModal = (item = null) => {
     if (item) {
@@ -183,7 +240,7 @@ export default function MenuManager() {
         handleCloseModal();
         setEditingItem(null);
         showNotification(editingItem ? 'Item updated successfully!' : 'Item added successfully!');
-        fetchMenu();
+        fetchMenu(true);
       } else {
         const data = await res.json().catch(() => ({}));
         alert(data.error || 'Failed to save item');
@@ -517,6 +574,23 @@ export default function MenuManager() {
               </div>
             ))}
           </div>
+
+          {/* Infinite Scroll Loader Target */}
+          {hasMore && (
+            <div ref={observerTarget} className="flex justify-center items-center py-8">
+              {loadingMore ? (
+                <span className="material-symbols-outlined text-primary text-3xl animate-spin">progress_activity</span>
+              ) : (
+                <span className="text-[11px] text-on-surface-variant/40 font-mono tracking-widest uppercase animate-pulse">Scroll down to load more</span>
+              )}
+            </div>
+          )}
+
+          {!hasMore && items.length > 0 && (
+            <div className="text-center py-8 text-[11px] text-on-surface-variant/40 font-mono tracking-widest uppercase border-t border-outline-variant/10 mt-6">
+              All menu items loaded ({items.length} total)
+            </div>
+          )}
         </>
       )}
 

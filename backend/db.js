@@ -25,6 +25,18 @@ export async function connectDB() {
   await client.connect();
   db = client.db(dbName);
   console.log(`✅ Connected to MongoDB — database: ${dbName}`);
+  
+  // Database Optimizer: Create indexes on menu_items to speed up sorting, searching, and pagination queries
+  try {
+    await db.collection('menu_items').createIndex({ available: 1, chefPick: -1, createdAt: -1 });
+    await db.collection('menu_items').createIndex({ chefPick: -1, createdAt: -1 });
+    await db.collection('menu_items').createIndex({ categories: 1 });
+    await db.collection('menu_items').createIndex({ name: 1 });
+    console.log('✅ MongoDB Indexes verified/created successfully.');
+  } catch (err) {
+    console.warn('⚠️ Non-blocking index creation error:', err.message);
+  }
+
   return db;
 }
 
