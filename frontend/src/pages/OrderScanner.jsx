@@ -57,19 +57,13 @@ export default function OrderScanner() {
     return null;
   }, [locations, selectedLocationId, selectedTable]);
 
-  const visibleMenuItems = useMemo(() => {
-    const query = manualSearch.trim().toLowerCase();
-    return menuItems.filter(item => {
-      const haystack = `${item.name || ''} ${item.description || ''} ${(item.categories || []).join(' ')}`.toLowerCase();
-      return !query || haystack.includes(query);
-    });
-  }, [manualSearch, menuItems]);
+  const visibleMenuItems = menuItems;
 
   const manualLineItems = useMemo(() => {
-    return menuItems
-      .map(item => ({ ...item, quantity: manualOrderItems[item._id] || 0 }))
+    return Object.values(manualOrderItems)
+      .map(sel => ({ ...sel.item, quantity: sel.quantity }))
       .filter(item => item.quantity > 0);
-  }, [manualOrderItems, menuItems]);
+  }, [manualOrderItems]);
 
   const manualItemCount = useMemo(
     () => manualLineItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
@@ -93,14 +87,17 @@ export default function OrderScanner() {
 
   const setItemQuantity = useCallback((item, delta) => {
     setManualOrderItems(prev => {
-      const current = Number(prev[item._id] || 0);
+      const current = prev[item._id] ? Number(prev[item._id].quantity || 0) : 0;
       const next = Math.max(0, current + delta);
       if (next === 0) {
         const clone = { ...prev };
         delete clone[item._id];
         return clone;
       }
-      return { ...prev, [item._id]: next };
+      return {
+        ...prev,
+        [item._id]: { item, quantity: next }
+      };
     });
   }, []);
 
@@ -145,17 +142,43 @@ export default function OrderScanner() {
     }
   };
 
+  const [debouncedManualSearch, setDebouncedManualSearch] = useState('');
+
+  // Debounce the manual search text
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedManualSearch(manualSearch);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [manualSearch]);
+
+  // Load menu items when manual search changes (limited to 6 items)
+  useEffect(() => {
+    const fetchFilteredMenu = async () => {
+      try {
+        setCatalogLoading(true);
+        const res = await fetch(`${API_BASE}/api/menu?limit=6&search=${encodeURIComponent(debouncedManualSearch)}`);
+        const data = await res.json();
+        setMenuItems(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('Failed to load menu items:', err);
+      } finally {
+        setCatalogLoading(false);
+      }
+    };
+
+    fetchFilteredMenu();
+  }, [debouncedManualSearch]);
+
   useEffect(() => {
     const loadCatalog = async () => {
       try {
-        const [menuRes, tablesRes, locationsRes] = await Promise.all([
-          fetch(API_BASE + '/api/menu'),
+        const [tablesRes, locationsRes] = await Promise.all([
           fetch(API_BASE + '/api/tables'),
           fetch(API_BASE + '/api/locations')
         ]);
 
-        const [menuData, tablesData, locationsData] = await Promise.all([
-          menuRes.json(),
+        const [tablesData, locationsData] = await Promise.all([
           tablesRes.json(),
           locationsRes.json()
         ]);
@@ -163,7 +186,6 @@ export default function OrderScanner() {
         const normalizedTables = Array.isArray(tablesData) ? tablesData : (tablesData.tables || []);
         const normalizedLocations = Array.isArray(locationsData) ? locationsData : [];
 
-        setMenuItems(Array.isArray(menuData) ? menuData : []);
         setTables(normalizedTables);
         setLocations(normalizedLocations);
 
@@ -180,10 +202,8 @@ export default function OrderScanner() {
           }
         }
       } catch (err) {
-        console.error('Failed to load menu/table catalog:', err);
-        setCatalogError('Could not load menu items or table data.');
-      } finally {
-        setCatalogLoading(false);
+        console.error('Failed to load tables catalog:', err);
+        setCatalogError('Could not load table data.');
       }
     };
 
@@ -714,7 +734,7 @@ export default function OrderScanner() {
                   ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 max-h-[560px] overflow-y-auto pr-1">
                       {visibleMenuItems.map(item => {
-                        const qty = manualOrderItems[item._id] || 0;
+                        const qty = manualOrderItems[item._id] ? manualOrderItems[item._id].quantity : 0;
                         return (
                           <div key={item._id} className="rounded-2xl border border-outline-variant/20 bg-surface-container-high overflow-hidden shadow-sm">
                             <div className="p-4 flex gap-4 items-start">

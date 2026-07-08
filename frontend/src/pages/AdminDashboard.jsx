@@ -271,63 +271,85 @@ export default function AdminDashboard() {
 
   const renderKDSCard = (order) => {
     const minsAgo = Math.max(0, Math.floor((new Date() - new Date(order.createdAt)) / 60000));
+    const isOverdue = minsAgo >= 10;
+    
     return (
-      <div key={order._id} className="bg-surface-container-low border border-outline-variant/30 hover:border-primary/40 rounded-xl p-4 flex flex-col gap-3 transition-all text-left">
+      <motion.div
+        key={order._id}
+        layout
+        initial={{ opacity: 0, y: 15, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9, y: -10 }}
+        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+        className={`bg-surface-container-low/90 border rounded-2xl p-4 flex flex-col gap-3 transition-all text-left shadow-lg hover:shadow-primary/5 ${
+          isOverdue 
+            ? 'border-primary ring-1 ring-primary/40 pulse-glow' 
+            : 'border-outline-variant/20 hover:border-primary/40'
+        }`}
+      >
         {/* Prominent Table Badge */}
-        <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 rounded-lg px-3 py-2">
+        <div className="flex items-center gap-2 bg-surface-container-high border border-outline-variant/30 rounded-xl px-3 py-2">
           <span className="material-symbols-outlined text-primary text-lg">table_restaurant</span>
           <span className="font-headline-sm text-base text-primary font-bold">{order.table}</span>
           {order.location && (
-            <span className="text-[11px] text-on-surface-variant font-medium ml-auto">📍 {order.location}</span>
+            <span className="text-[11px] text-on-surface-variant font-mono font-medium ml-auto bg-surface-container-lowest/80 px-2 py-0.5 rounded-lg border border-outline-variant/10">📍 {order.location}</span>
           )}
         </div>
 
-        <div className="flex justify-between items-start gap-2">
-          <span className="text-[11px] text-on-surface-variant/70">{minsAgo} mins ago • by {order.confirmedBy.split('@')[0]}</span>
+        <div className="flex justify-between items-center gap-2">
+          <span className={`text-[11px] font-mono flex items-center gap-1 ${isOverdue ? 'text-primary font-bold' : 'text-on-surface-variant/70'}`}>
+            <span className="material-symbols-outlined text-[14px]">{isOverdue ? 'alarm' : 'schedule'}</span>
+            {minsAgo} mins ago • by {order.confirmedBy.split('@')[0]}
+          </span>
           
-          <span className={`px-2 py-0.5 rounded text-[10px] font-label-caps tracking-wider uppercase font-semibold border ${
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-label-caps tracking-widest uppercase font-semibold border ${
             order.paymentStatus === 'PAID' 
-              ? 'bg-primary/10 text-primary border-primary/20' 
-              : 'bg-error/10 text-error border-error/20 animate-pulse'
+              ? 'bg-green-500/10 text-green-500 border-green-500/20' 
+              : 'bg-primary/10 text-primary border-primary/20 animate-pulse'
           }`}>
             {order.paymentStatus}
           </span>
         </div>
 
-        <div className="space-y-1 bg-surface-container-lowest/50 rounded-lg p-2.5 border border-outline-variant/10">
+        <div className="space-y-1.5 bg-surface-container-lowest/60 rounded-xl p-2.5 border border-outline-variant/10">
           {order.items.map((item, idx) => (
-            <div key={item.id || idx} className="flex justify-between text-xs font-body-sm text-on-surface-variant">
-              <span><span className="text-primary font-semibold font-mono">{item.quantity}x</span> {item.name}</span>
+            <div key={item.id || idx} className="flex justify-between text-xs font-body-sm text-on-surface-variant group/item py-0.5">
+              <span className="flex items-center gap-1.5 truncate">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary/45 group-hover/item:bg-primary transition-colors shrink-0" />
+                <span className="text-on-surface font-medium truncate">{item.name}</span>
+              </span>
+              <span className="text-primary font-bold font-mono bg-primary/15 px-1.5 py-0.5 rounded text-[10px]">x{item.quantity}</span>
             </div>
           ))}
         </div>
 
         {order.status !== 'COMPLETED' && (
-          <button
+          <motion.button
+            whileTap={{ scale: 0.98 }}
             onClick={() => handleMoveStatus(order._id, order.status)}
-            className="w-full bg-surface-container-high hover:bg-primary/20 hover:text-primary text-on-surface py-2 rounded-lg font-label-caps text-[11px] uppercase tracking-widest border border-outline-variant/50 hover:border-primary/30 transition-all flex items-center justify-center gap-1 cursor-pointer font-semibold"
+            className="w-full bg-surface-container-highest hover:bg-primary/25 hover:text-primary text-on-surface py-2 rounded-xl font-label-caps text-[11px] uppercase tracking-widest border border-outline-variant/50 hover:border-primary/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer font-bold"
           >
             {order.status === 'NEW' && (
               <>
-                <span className="material-symbols-outlined text-sm">soup_kitchen</span>
+                <span className="material-symbols-outlined text-base">soup_kitchen</span>
                 Start Preparing
               </>
             )}
             {order.status === 'PREPARING' && (
               <>
-                <span className="material-symbols-outlined text-sm">notifications_active</span>
+                <span className="material-symbols-outlined text-base">notifications_active</span>
                 Mark as Ready
               </>
             )}
             {order.status === 'READY' && (
               <>
-                <span className="material-symbols-outlined text-sm">done_all</span>
+                <span className="material-symbols-outlined text-base">done_all</span>
                 Complete Order
               </>
             )}
-          </button>
+          </motion.button>
         )}
-      </div>
+      </motion.div>
     );
   };
 
@@ -669,7 +691,9 @@ export default function AdminDashboard() {
                       <p className="font-body-sm text-body-sm">No new orders</p>
                     </div>
                   ) : (
-                    newOrders.map(renderKDSCard)
+                    <AnimatePresence mode="popLayout">
+                      {newOrders.map(renderKDSCard)}
+                    </AnimatePresence>
                   )}
                 </div>
               </section>
@@ -693,7 +717,9 @@ export default function AdminDashboard() {
                       <p className="font-body-sm text-body-sm">No orders in preparation</p>
                     </div>
                   ) : (
-                    preparingOrders.map(renderKDSCard)
+                    <AnimatePresence mode="popLayout">
+                      {preparingOrders.map(renderKDSCard)}
+                    </AnimatePresence>
                   )}
                 </div>
               </section>
@@ -717,7 +743,9 @@ export default function AdminDashboard() {
                       <p className="font-body-sm text-body-sm">No items ready for pickup</p>
                     </div>
                   ) : (
-                    readyOrders.map(renderKDSCard)
+                    <AnimatePresence mode="popLayout">
+                      {readyOrders.map(renderKDSCard)}
+                    </AnimatePresence>
                   )}
                 </div>
               </section>
