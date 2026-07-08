@@ -6,6 +6,7 @@ import MenuManager from './MenuManager';
 import Settings from './Settings';
 import { API_BASE, getWebSocketUrl } from '../config';
 import OrderScanner from './OrderScanner';
+import Analytics from './Analytics';
 
 const SIDEBAR_ITEMS = [
   { id: 'dashboard', icon: 'monitor_heart', label: 'Live KDS', fill: true },
@@ -728,8 +729,9 @@ export default function AdminDashboard() {
           {activeTab === 'tables' && <TablesAndQR />}
           {activeTab === 'settings' && <Settings user={user} />}
           {activeTab === 'payments' && renderPaymentsView()}
+          {activeTab === 'analytics' && <Analytics />}
 
-          {activeTab !== 'dashboard' && activeTab !== 'tables' && activeTab !== 'menu' && activeTab !== 'settings' && activeTab !== 'scanner' && activeTab !== 'payments' && (
+          {activeTab !== 'dashboard' && activeTab !== 'tables' && activeTab !== 'menu' && activeTab !== 'settings' && activeTab !== 'scanner' && activeTab !== 'payments' && activeTab !== 'analytics' && (
              <motion.div
                initial={{ opacity: 0, y: 20 }}
                animate={{ opacity: 1, y: 0 }}
