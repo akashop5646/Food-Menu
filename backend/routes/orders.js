@@ -92,11 +92,8 @@ router.post('/verify-code', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Invalid or already used code. Please check and try again.' });
     }
 
-    // Mark as used
-    await db.collection('checkout_codes').updateOne(
-      { _id: entry._id },
-      { $set: { used: true, verifiedAt: new Date() } }
-    );
+    // Delete the verified code document immediately so it doesn't pile up in the database
+    await db.collection('checkout_codes').deleteOne({ _id: entry._id });
 
     res.json({ orderPayload: entry.orderPayload });
   } catch (error) {
@@ -215,6 +212,11 @@ router.post('/', requireAuth, async (req, res) => {
     const db = await getDB();
     const result = await db.collection('orders').insertOne(newOrder);
     newOrder._id = result.insertedId;
+
+    // Clean up any remaining checkout codes for this checkoutSessionId so they don't pile up
+    if (checkoutSessionId) {
+      await db.collection('checkout_codes').deleteMany({ checkoutSessionId });
+    }
 
     // Broadcast order creation event
     broadcast('ORDER_CREATED', newOrder);
