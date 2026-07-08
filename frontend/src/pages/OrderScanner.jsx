@@ -334,9 +334,9 @@ export default function OrderScanner() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto py-8 px-margin-mobile md:px-0 flex flex-col gap-6">
+    <div className="max-w-6xl mx-auto py-8 px-0 flex flex-col gap-6">
       <div className="bg-surface-container rounded-2xl border border-outline-variant/20 shadow-lg overflow-hidden">
-        <div className="p-6 md:p-8 border-b border-outline-variant/10 bg-surface-container-low">
+        <div className="p-4 md:p-8 border-b border-outline-variant/10 bg-surface-container-low">
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
             <div className="max-w-2xl">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-primary/20 bg-primary/10 text-primary text-[11px] font-label-caps uppercase tracking-widest mb-4">
@@ -379,7 +379,7 @@ export default function OrderScanner() {
           </div>
         </div>
 
-        <div className="p-6 md:p-8 flex flex-col gap-6">
+        <div className="p-4 md:p-8 flex flex-col gap-6">
           {successMsg && (
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
@@ -419,7 +419,7 @@ export default function OrderScanner() {
             <>
               {!parsedOrder && (
                 <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-6">
-                  <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-5 md:p-6">
+                  <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-4 md:p-6">
                     <form onSubmit={handleCodeVerify} className="flex flex-col gap-5">
                       <div>
                         <h3 className="font-headline-sm text-xl text-on-surface flex items-center gap-2">
@@ -431,7 +431,7 @@ export default function OrderScanner() {
                         </p>
                       </div>
 
-                      <div className="flex items-center justify-center gap-3 py-4">
+                      <div className="flex items-center justify-center gap-2 sm:gap-3 py-3">
                         {[0, 1, 2, 3].map((idx) => (
                           <input
                             key={idx}
@@ -469,7 +469,7 @@ export default function OrderScanner() {
                               const target = e.target.parentElement.children[nextIdx];
                               if (target) target.focus();
                             }}
-                            className="w-16 h-20 text-center text-3xl font-bold font-mono bg-surface-container-highest border-2 border-outline-variant/50 rounded-xl text-on-surface focus:border-primary focus:ring-2 focus:ring-primary/30 outline-none transition-all"
+                            className="w-12 h-16 sm:w-16 sm:h-20 text-center text-2xl sm:text-3xl font-bold font-mono bg-surface-container-highest border-2 border-outline-variant/50 rounded-xl text-on-surface focus:border-primary focus:ring-2 focus:ring-primary/30 outline-none transition-all"
                             autoFocus={idx === 0}
                           />
                         ))}
@@ -495,7 +495,7 @@ export default function OrderScanner() {
                     </form>
                   </div>
 
-                  <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-5 md:p-6 flex flex-col gap-4 justify-between">
+                  <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-4 md:p-6 flex flex-col gap-4 justify-between">
                     <div>
                       <h3 className="font-headline-sm text-xl text-on-surface">Verification flow</h3>
                       <p className="text-sm text-on-surface-variant mt-2">
@@ -634,7 +634,7 @@ export default function OrderScanner() {
             </>
           ) : (
             <div className="flex flex-col-reverse xl:grid xl:grid-cols-[1.1fr_0.9fr] gap-6">
-              <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-5 md:p-6 flex flex-col gap-5">
+              <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-4 md:p-6 flex flex-col gap-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <h3 className="font-headline-sm text-xl text-on-surface">Manual order composer</h3>
@@ -790,7 +790,7 @@ export default function OrderScanner() {
                 </div>
               </div>
 
-              <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-5 md:p-6 flex flex-col gap-5">
+              <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-4 md:p-6 flex flex-col gap-5">
                 <div>
                   <h3 className="font-headline-sm text-xl text-on-surface">Order summary</h3>
                   <p className="text-sm text-on-surface-variant mt-1">Review the ticket before sending it to Live KDS.</p>

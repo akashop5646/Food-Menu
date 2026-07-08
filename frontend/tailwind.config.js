@@ -87,9 +87,9 @@ export default {
         "mono-data": ["Plus Jakarta Sans"],
         "headline-lg": ["Plus Jakarta Sans"],
         "price-display": ["Inter"],
-        "headline-sm": ["Playfair Display"],
+        "headline-sm": ["Plus Jakarta Sans"],
         "body-md": ["Inter"],
-        "headline-md": ["Playfair Display"],
+        "headline-md": ["Plus Jakarta Sans"],
         "display-lg-mobile": ["Plus Jakarta Sans"],
       },
       fontSize: {
