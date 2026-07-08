@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Routes, Route, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import QRCode from 'qrcode';
+
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import { API_BASE } from './config';
@@ -107,7 +107,7 @@ function MenuPage() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [notification, setNotification] = useState('');
   const [selectedItem, setSelectedItem] = useState(null);
-  const [qrCode, setQrCode] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
 
   // Razorpay configuration and states
   const [razorpayKeyId, setRazorpayKeyId] = useState('');
@@ -235,14 +235,28 @@ function MenuPage() {
 
   useEffect(() => {
     if (!isCheckoutOpen || !orderPayload) {
-      setQrCode('');
+      setVerificationCode('');
       return;
     }
-    QRCode.toDataURL(JSON.stringify(orderPayload), {
-      margin: 1,
-      width: 280,
-      color: { dark: '#000000', light: '#ffffff' },
-    }).then(setQrCode);
+    // Request a 4-digit verification code from the backend
+    const fetchCode = async () => {
+      try {
+        const res = await fetch(API_BASE + '/api/orders/checkout-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(orderPayload),
+        });
+        const data = await res.json();
+        if (res.ok && data.code) {
+          setVerificationCode(data.code);
+        } else {
+          console.error('Failed to get checkout code:', data.error);
+        }
+      } catch (err) {
+        console.error('Error fetching checkout code:', err);
+      }
+    };
+    fetchCode();
   }, [isCheckoutOpen, orderPayload]);
 
   // Razorpay handles checkout overlay directly
@@ -304,7 +318,7 @@ function MenuPage() {
 
   const handlePayNow = async () => {
     if (!isOrderVerified && !activeOrder) {
-      showNotification('Awaiting waiter verification. Please let staff scan your QR code first.');
+      showNotification('Awaiting waiter verification. Please show your 4-digit code to the staff first.');
       return;
     }
 
@@ -913,33 +927,43 @@ function MenuPage() {
                 </>
               ) : (
                 <>
-                  <p className="font-body-md text-body-md text-on-surface-variant mb-6">Scan the QR code to confirm your order.</p>
-                  
-                  {/* QR Code */}
-                  <div className="relative bg-white p-2 rounded-xl mb-6 border-2 border-primary-container/30 gold-glow shrink-0 overflow-hidden">
-                    {qrCode ? (
-                      <img src={qrCode} alt="Order QR Code" className="w-64 h-64 rounded-lg" />
-                    ) : (
-                      <div className="w-64 h-64 flex items-center justify-center text-on-primary font-label-caps">Generating QR...</div>
-                    )}
-                  </div>
+                  <p className="font-body-md text-body-md text-on-surface-variant mb-6">Show this code to your waiter to confirm your order.</p>
+                   
+                   {/* 4-Digit Verification Code */}
+                   <div className="relative bg-surface-container-high rounded-2xl mb-6 border-2 border-primary/30 gold-glow shrink-0 overflow-hidden px-8 py-6 flex flex-col items-center gap-3">
+                     <span className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">Your Order Code</span>
+                     {verificationCode ? (
+                       <div className="flex items-center gap-3">
+                         {verificationCode.split('').map((digit, i) => (
+                           <span key={i} className="w-14 h-16 flex items-center justify-center bg-surface-container-lowest border-2 border-primary/40 rounded-xl text-3xl font-bold text-primary font-mono shadow-lg">
+                             {digit}
+                           </span>
+                         ))}
+                       </div>
+                     ) : (
+                       <div className="flex items-center gap-2 py-4 text-on-surface-variant">
+                         <span className="material-symbols-outlined animate-spin text-primary">progress_activity</span>
+                         <span className="font-label-caps text-[11px]">Generating code...</span>
+                       </div>
+                     )}
+                   </div>
 
-                  {/* QR Details */}
-                  <div className="w-full bg-surface-container-high border border-outline-variant/20 rounded-lg p-4 mb-6 text-left shrink-0">
-                    <h4 className="font-body-md text-on-surface font-medium mb-1">QR includes</h4>
-                    <p className="font-body-md text-body-md text-on-surface-variant/70">Table number, selected items, quantity, item prices, and total.</p>
-                  </div>
-                  
-                  {/* Verification Status Banner */}
-                  <div className="w-full bg-error/10 border border-error/20 rounded-lg p-3.5 mb-6 text-center shrink-0">
-                    <span className="font-label-caps text-[11px] text-error font-bold flex items-center justify-center gap-1">
-                      <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
-                      Awaiting Waiter Verification
-                    </span>
-                    <p className="text-[10px] text-on-surface-variant/80 mt-1 leading-relaxed">
-                      Show the order QR code above to your waiter. Once verified, payment will unlock.
-                    </p>
-                  </div>
+                   {/* Code Details */}
+                   <div className="w-full bg-surface-container-high border border-outline-variant/20 rounded-lg p-4 mb-6 text-left shrink-0">
+                     <h4 className="font-body-md text-on-surface font-medium mb-1">Code includes</h4>
+                     <p className="font-body-md text-body-md text-on-surface-variant/70">Table number, selected items, quantity, item prices, and total.</p>
+                   </div>
+                   
+                   {/* Verification Status Banner */}
+                   <div className="w-full bg-error/10 border border-error/20 rounded-lg p-3.5 mb-6 text-center shrink-0">
+                     <span className="font-label-caps text-[11px] text-error font-bold flex items-center justify-center gap-1">
+                       <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+                       Awaiting Waiter Verification
+                     </span>
+                     <p className="text-[10px] text-on-surface-variant/80 mt-1 leading-relaxed">
+                       Show the 4-digit code above to your waiter. Once verified, payment will unlock.
+                     </p>
+                   </div>
                 </>
               )}
               

@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Html5Qrcode } from 'html5-qrcode';
 import { API_BASE } from '../config';
 
 const PAYMENT_METHODS = [
@@ -21,14 +20,14 @@ function formatMoney(value) {
 
 export default function OrderScanner() {
   const [mode, setMode] = useState('scan');
-  const [qrInput, setQrInput] = useState('');
+  const [codeInput, setCodeInput] = useState('');
   const [parsedOrder, setParsedOrder] = useState(null);
   const [error, setError] = useState('');
   const [paymentType, setPaymentType] = useState('ONLINE');
   const [paymentStatus, setPaymentStatus] = useState('PENDING');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const [menuItems, setMenuItems] = useState([]);
   const [tables, setTables] = useState([]);
@@ -39,8 +38,6 @@ export default function OrderScanner() {
   const [selectedTableId, setSelectedTableId] = useState('');
   const [selectedLocationId, setSelectedLocationId] = useState('');
   const [manualOrderItems, setManualOrderItems] = useState({});
-
-  const qrScannerRef = useRef(null);
 
   const selectedTable = useMemo(
     () => tables.find(table => String(table._id) === String(selectedTableId)) || null,
@@ -112,63 +109,41 @@ export default function OrderScanner() {
     setManualSearch('');
   }, []);
 
-  const startCamera = () => {
-    setIsCameraOpen(true);
-    setSuccessMsg('');
+  const handleCodeVerify = async (e) => {
+    e.preventDefault();
+    if (codeInput.length !== 4) {
+      setError('Please enter a valid 4-digit code.');
+      return;
+    }
+
+    setIsVerifying(true);
     setError('');
+    setSuccessMsg('');
 
-    const html5QrCode = new Html5Qrcode('qr-reader');
-    qrScannerRef.current = html5QrCode;
-
-    const config = {
-      fps: 15,
-      qrbox: (viewfinderWidth, viewfinderHeight) => {
-        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-        const size = Math.floor(minEdge * 0.75);
-        return { width: size, height: size };
-      },
-      experimentalFeatures: {
-        useBarCodeDetectorIfSupported: true,
-      },
-    };
-
-    html5QrCode.start(
-      { facingMode: 'environment' },
-      config,
-      (decodedText) => {
-        handleInputChange(decodedText);
-        stopCamera();
-      },
-      () => {}
-    ).catch(err => {
-      console.error('Camera start error:', err);
-      qrScannerRef.current = null;
-      setIsCameraOpen(false);
-      setError('Could not access camera. Ensure camera permissions are granted.');
-    });
-  };
-
-  const stopCamera = () => {
-    if (qrScannerRef.current) {
-      qrScannerRef.current.stop().then(() => {
-        setIsCameraOpen(false);
-        qrScannerRef.current = null;
-      }).catch(err => {
-        console.error('Camera stop error:', err);
-        setIsCameraOpen(false);
+    try {
+      const res = await fetch(API_BASE + '/api/orders/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: codeInput }),
+        credentials: 'include'
       });
-    } else {
-      setIsCameraOpen(false);
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Failed to verify code.');
+        return;
+      }
+
+      // Set parsedOrder from the verified payload
+      setParsedOrder(data.orderPayload);
+      setError('');
+    } catch (err) {
+      console.error('Code verification error:', err);
+      setError('Failed to verify code. Please try again.');
+    } finally {
+      setIsVerifying(false);
     }
   };
-
-  useEffect(() => {
-    return () => {
-      if (qrScannerRef.current) {
-        qrScannerRef.current.stop().catch(console.error);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     const loadCatalog = async () => {
@@ -226,67 +201,9 @@ export default function OrderScanner() {
     }
   }, [locations, selectedLocationId, selectedTable]);
 
-  const handleFileChange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
 
-    setError('');
-    setSuccessMsg('');
-    setIsCameraOpen(false);
 
-    if (qrScannerRef.current) {
-      try {
-        await qrScannerRef.current.stop();
-        qrScannerRef.current = null;
-      } catch (err) {
-        console.error(err);
-      }
-    }
 
-    try {
-      const html5QrCode = new Html5Qrcode('qr-reader-file-dummy');
-      const decodedText = await html5QrCode.scanFile(file, true);
-      handleInputChange(decodedText);
-      e.target.value = '';
-    } catch (err) {
-      console.error(err);
-      setError('Failed to read QR code from image/photo. Please ensure the QR code is centered, clear, and well-lit.');
-    }
-  };
-
-  const handleInputChange = (val) => {
-    setQrInput(val);
-    setError('');
-    setSuccessMsg('');
-
-    if (!val.trim()) {
-      setParsedOrder(null);
-      return;
-    }
-
-    try {
-      const cleanVal = val.trim();
-      const parsed = JSON.parse(cleanVal);
-
-      if (!parsed.table) {
-        throw new Error('Missing "table" field.');
-      }
-      if (!parsed.items || !Array.isArray(parsed.items) || parsed.items.length === 0) {
-        throw new Error('Invalid or empty "items" array.');
-      }
-      if (parsed.total === undefined || parsed.total === null) {
-        throw new Error('Missing "total" amount.');
-      }
-
-      setParsedOrder(parsed);
-      setError('');
-    } catch (err) {
-      setParsedOrder(null);
-      if (val.trim().length > 10) {
-        setError('Invalid QR code format. Please scan a valid Aurum Table QR.');
-      }
-    }
-  };
 
   const submitOrder = async ({ tableName, locationName, items, total }) => {
     const res = await fetch(API_BASE + '/api/orders', {
@@ -301,7 +218,7 @@ export default function OrderScanner() {
         total,
         paymentType,
         paymentStatus,
-        source: mode === 'manual' ? 'MANUAL' : 'QR',
+        source: mode === 'manual' ? 'MANUAL' : 'CODE',
         deviceId: mode === 'manual' ? null : parsedOrder?.deviceId || null,
         customerIp: mode === 'manual' ? null : parsedOrder?.customerIp || null,
         checkoutSessionId: mode === 'manual' ? null : parsedOrder?.checkoutSessionId || null,
@@ -333,7 +250,7 @@ export default function OrderScanner() {
       });
 
       setSuccessMsg(`Order for ${parsedOrder.table} verified and sent to Live KDS!`);
-      setQrInput('');
+      setCodeInput('');
       setParsedOrder(null);
       setPaymentStatus('PENDING');
       setPaymentType('ONLINE');
@@ -389,7 +306,7 @@ export default function OrderScanner() {
   };
 
   const handleCancelScan = () => {
-    setQrInput('');
+    setCodeInput('');
     setParsedOrder(null);
     setPaymentStatus('PENDING');
     setPaymentType('ONLINE');
@@ -407,11 +324,11 @@ export default function OrderScanner() {
                 Order Desk
               </div>
               <h2 className="font-headline-md text-2xl md:text-3xl text-on-surface flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary">qr_code_scanner</span>
+                <span className="material-symbols-outlined text-primary">pin</span>
                 Verify or Create Orders
               </h2>
               <p className="font-body-md text-on-surface-variant mt-2 max-w-2xl">
-                Scan a customer's QR payload to confirm an order, or switch to manual mode to pick a table, check its location, and build a ticket from the live menu.
+                Enter a customer's 4-digit order code to verify and confirm, or switch to manual mode to build a ticket from the live menu.
               </p>
             </div>
 
@@ -425,7 +342,7 @@ export default function OrderScanner() {
                     : 'text-on-surface-variant hover:text-on-surface'
                 }`}
               >
-                QR Verification
+                Code Verification
               </button>
               <button
                 type="button"
@@ -483,70 +400,101 @@ export default function OrderScanner() {
               {!parsedOrder && (
                 <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-6">
                   <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-5 md:p-6">
-                    <div className={`${isCameraOpen ? 'flex' : 'hidden'} flex-col gap-4 items-center justify-center p-5 bg-surface-container-lowest border border-outline-variant/30 rounded-2xl`}>
-                      <div id="qr-reader" className="w-full max-w-sm overflow-hidden rounded-xl border-2 border-primary/30 bg-black shadow-inner" />
-                      <button
-                        type="button"
-                        onClick={stopCamera}
-                        className="bg-error/10 hover:bg-error/20 text-error border border-error/20 px-6 py-2.5 rounded-lg font-label-caps text-[11px] uppercase tracking-widest cursor-pointer transition-all flex items-center justify-center gap-1.5"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">videocam_off</span>
-                        Close Camera
-                      </button>
-                    </div>
-
-                    <div className={`${!isCameraOpen ? 'flex' : 'hidden'} flex-col gap-3`}>
-                      <button
-                        type="button"
-                        onClick={startCamera}
-                        className="bg-primary text-on-primary px-6 py-4 rounded-xl font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform hover:scale-[1.02] active:scale-95"
-                      >
-                        <span className="material-symbols-outlined">photo_camera</span>
-                        Scan with Live Camera
-                      </button>
-
-                      <div className="relative">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          onChange={handleFileChange}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                          id="qr-file-input"
-                        />
-                        <button
-                          type="button"
-                          className="w-full bg-surface-container-high border border-outline-variant/50 text-on-surface hover:border-primary/50 px-6 py-4 rounded-xl font-label-caps text-[12px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all cursor-pointer"
-                        >
-                          <span className="material-symbols-outlined">photo_camera_back</span>
-                          Take Photo or Upload QR
-                        </button>
+                    <form onSubmit={handleCodeVerify} className="flex flex-col gap-5">
+                      <div>
+                        <h3 className="font-headline-sm text-xl text-on-surface flex items-center gap-2">
+                          <span className="material-symbols-outlined text-primary">pin</span>
+                          Enter Order Code
+                        </h3>
+                        <p className="text-sm text-on-surface-variant mt-2">
+                          Ask the customer for their 4-digit order code and enter it below.
+                        </p>
                       </div>
-                    </div>
 
-                    <div id="qr-reader-file-dummy" className="hidden" />
+                      <div className="flex items-center justify-center gap-3 py-4">
+                        {[0, 1, 2, 3].map((idx) => (
+                          <input
+                            key={idx}
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={1}
+                            value={codeInput[idx] || ''}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/[^0-9]/g, '');
+                              const newCode = codeInput.split('');
+                              newCode[idx] = val;
+                              // Fill gaps with empty string
+                              for (let i = 0; i < 4; i++) {
+                                if (!newCode[i]) newCode[i] = '';
+                              }
+                              setCodeInput(newCode.join(''));
+                              // Auto-focus next input
+                              if (val && idx < 3) {
+                                const next = e.target.parentElement.children[idx + 1];
+                                if (next) next.focus();
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Backspace' && !codeInput[idx] && idx > 0) {
+                                const prev = e.target.parentElement.children[idx - 1];
+                                if (prev) prev.focus();
+                              }
+                            }}
+                            onPaste={(e) => {
+                              e.preventDefault();
+                              const pasted = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 4);
+                              setCodeInput(pasted);
+                              // Focus last filled input or the next empty one
+                              const nextIdx = Math.min(pasted.length, 3);
+                              const target = e.target.parentElement.children[nextIdx];
+                              if (target) target.focus();
+                            }}
+                            className="w-16 h-20 text-center text-3xl font-bold font-mono bg-surface-container-highest border-2 border-outline-variant/50 rounded-xl text-on-surface focus:border-primary focus:ring-2 focus:ring-primary/30 outline-none transition-all"
+                            autoFocus={idx === 0}
+                          />
+                        ))}
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={codeInput.length !== 4 || isVerifying}
+                        className="bg-primary text-on-primary px-6 py-4 rounded-xl font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isVerifying ? (
+                          <>
+                            <span className="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
+                            Verifying...
+                          </>
+                        ) : (
+                          <>
+                            <span className="material-symbols-outlined">verified</span>
+                            Verify Code
+                          </>
+                        )}
+                      </button>
+                    </form>
                   </div>
 
                   <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-5 md:p-6 flex flex-col gap-4 justify-between">
                     <div>
-                      <h3 className="font-headline-sm text-xl text-on-surface">Scan flow</h3>
+                      <h3 className="font-headline-sm text-xl text-on-surface">Verification flow</h3>
                       <p className="text-sm text-on-surface-variant mt-2">
-                        Scan the QR payload from the guest device and confirm payment or mark it as pending.
+                        Enter the 4-digit code from the customer's device to pull up their order and confirm it.
                       </p>
                     </div>
 
                     <div className="grid grid-cols-1 gap-3">
                       <div className="rounded-xl border border-outline-variant/15 bg-surface-container-high p-4">
                         <div className="text-[10px] uppercase tracking-widest text-on-surface-variant">Step 1</div>
-                        <div className="text-sm text-on-surface mt-1">Open the camera or upload a QR image.</div>
+                        <div className="text-sm text-on-surface mt-1">Ask the customer for their 4-digit order code.</div>
                       </div>
                       <div className="rounded-xl border border-outline-variant/15 bg-surface-container-high p-4">
                         <div className="text-[10px] uppercase tracking-widest text-on-surface-variant">Step 2</div>
-                        <div className="text-sm text-on-surface mt-1">Verify items, payment, and table details.</div>
+                        <div className="text-sm text-on-surface mt-1">Verify items, payment method, and table details.</div>
                       </div>
                       <div className="rounded-xl border border-outline-variant/15 bg-surface-container-high p-4">
                         <div className="text-[10px] uppercase tracking-widest text-on-surface-variant">Step 3</div>
-                        <div className="text-sm text-on-surface mt-1">Send the order to Live KDS.</div>
+                        <div className="text-sm text-on-surface mt-1">Confirm and send the order to Live KDS.</div>
                       </div>
                     </div>
                   </div>
@@ -562,17 +510,21 @@ export default function OrderScanner() {
                     className="overflow-hidden"
                   >
                     <div className="border border-outline-variant/30 rounded-xl bg-surface-container-lowest overflow-hidden">
-                      <div className="p-5 border-b border-outline-variant/20 bg-surface-container-low flex justify-between items-center gap-4">
-                        <div>
-                          <span className="font-label-caps text-[10px] text-primary uppercase tracking-widest block">Scanned Order</span>
-                          <strong className="font-headline-sm text-lg text-on-surface">{parsedOrder.table}</strong>
-                          {parsedOrder.location && (
-                            <span className="text-xs text-on-surface-variant block mt-0.5 font-medium">{parsedOrder.location}</span>
-                          )}
+                      <div className="p-5 border-b border-outline-variant/20 bg-surface-container-low flex flex-col gap-3">
+                        <div className="flex justify-between items-center gap-4">
+                          <span className="font-label-caps text-[10px] text-primary uppercase tracking-widest">Verified Order</span>
+                          <div className="text-right">
+                            <span className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest block">Total Price</span>
+                            <strong className="font-price-display text-lg text-primary">{formatMoney(parsedOrder.total)}</strong>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <span className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest block">Total Price</span>
-                          <strong className="font-price-display text-lg text-primary">{formatMoney(parsedOrder.total)}</strong>
+                        {/* Prominent Table Badge */}
+                        <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 rounded-lg px-3 py-2.5">
+                          <span className="material-symbols-outlined text-primary text-xl">table_restaurant</span>
+                          <strong className="font-headline-sm text-lg text-primary">{parsedOrder.table}</strong>
+                          {parsedOrder.location && (
+                            <span className="text-xs text-on-surface-variant font-medium ml-auto">📍 {parsedOrder.location}</span>
+                          )}
                         </div>
                       </div>
 

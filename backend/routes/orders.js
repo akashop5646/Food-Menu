@@ -7,6 +7,103 @@ import { broadcast } from '../websocket.js';
 
 const router = Router();
 
+// Ensure TTL index on checkout_codes collection (auto-expire after 30 minutes)
+(async () => {
+  try {
+    const db = await getDB();
+    await db.collection('checkout_codes').createIndex(
+      { createdAt: 1 },
+      { expireAfterSeconds: 1800 }
+    );
+  } catch (err) {
+    console.error('Failed to create TTL index on checkout_codes:', err);
+  }
+})();
+
+// Generate a unique 4-digit code for a checkout session (Public endpoint)
+router.post('/checkout-code', async (req, res) => {
+  try {
+    const { table, location, items, total, deviceId, customerIp, checkoutSessionId } = req.body;
+
+    if (!table) return res.status(400).json({ error: 'Table is required.' });
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Items must be a non-empty array.' });
+    }
+    if (total === undefined || total === null) {
+      return res.status(400).json({ error: 'Total amount is required.' });
+    }
+
+    const db = await getDB();
+
+    // If this checkoutSessionId already has an active code, return it
+    if (checkoutSessionId) {
+      const existing = await db.collection('checkout_codes').findOne({
+        checkoutSessionId,
+        used: false
+      });
+      if (existing) {
+        return res.json({ code: existing.code });
+      }
+    }
+
+    // Generate a unique 4-digit code (retry on collision)
+    let code;
+    let attempts = 0;
+    while (attempts < 20) {
+      code = String(Math.floor(1000 + Math.random() * 9000)); // 1000-9999
+      const collision = await db.collection('checkout_codes').findOne({ code, used: false });
+      if (!collision) break;
+      attempts++;
+    }
+
+    if (attempts >= 20) {
+      return res.status(503).json({ error: 'Could not generate a unique code. Please try again.' });
+    }
+
+    await db.collection('checkout_codes').insertOne({
+      code,
+      orderPayload: { table, location, items, total, deviceId, customerIp, checkoutSessionId },
+      checkoutSessionId: checkoutSessionId || null,
+      used: false,
+      createdAt: new Date()
+    });
+
+    res.json({ code });
+  } catch (error) {
+    console.error('Failed to generate checkout code:', error);
+    res.status(500).json({ error: 'Failed to generate checkout code.' });
+  }
+});
+
+// Verify a 4-digit code and return the order payload (Waiter/Auth endpoint)
+router.post('/verify-code', requireAuth, async (req, res) => {
+  try {
+    const { code } = req.body;
+
+    if (!code || code.length !== 4) {
+      return res.status(400).json({ error: 'A valid 4-digit code is required.' });
+    }
+
+    const db = await getDB();
+    const entry = await db.collection('checkout_codes').findOne({ code: String(code), used: false });
+
+    if (!entry) {
+      return res.status(404).json({ error: 'Invalid or expired code. Please check and try again.' });
+    }
+
+    // Mark as used
+    await db.collection('checkout_codes').updateOne(
+      { _id: entry._id },
+      { $set: { used: true, verifiedAt: new Date() } }
+    );
+
+    res.json({ orderPayload: entry.orderPayload });
+  } catch (error) {
+    console.error('Failed to verify checkout code:', error);
+    res.status(500).json({ error: 'Failed to verify code.' });
+  }
+});
+
 // Check if table has an active verified order (Public endpoint)
 router.get('/active', async (req, res) => {
   try {

@@ -260,16 +260,17 @@ export default function AdminDashboard() {
     const minsAgo = Math.max(0, Math.floor((new Date() - new Date(order.createdAt)) / 60000));
     return (
       <div key={order._id} className="bg-surface-container-low border border-outline-variant/30 hover:border-primary/40 rounded-xl p-4 flex flex-col gap-3 transition-all text-left">
+        {/* Prominent Table Badge */}
+        <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 rounded-lg px-3 py-2">
+          <span className="material-symbols-outlined text-primary text-lg">table_restaurant</span>
+          <span className="font-headline-sm text-base text-primary font-bold">{order.table}</span>
+          {order.location && (
+            <span className="text-[11px] text-on-surface-variant font-medium ml-auto">📍 {order.location}</span>
+          )}
+        </div>
+
         <div className="flex justify-between items-start gap-2">
-          <div>
-            <span className="font-headline-sm text-base text-on-surface font-semibold">
-              {order.table}
-              {order.location && (
-                <span className="text-[12px] text-on-surface-variant font-normal ml-1.5">({order.location})</span>
-              )}
-            </span>
-            <span className="text-[11px] text-on-surface-variant/70 block mt-0.5">{minsAgo} mins ago â€¢ by {order.confirmedBy.split('@')[0]}</span>
-          </div>
+          <span className="text-[11px] text-on-surface-variant/70">{minsAgo} mins ago • by {order.confirmedBy.split('@')[0]}</span>
           
           <span className={`px-2 py-0.5 rounded text-[10px] font-label-caps tracking-wider uppercase font-semibold border ${
             order.paymentStatus === 'PAID' 
@@ -465,10 +466,13 @@ export default function AdminDashboard() {
                   return (
                     <tr key={order._id} className="hover:bg-surface-container-lowest/30 transition-colors">
                       <td className="py-3.5 px-4 font-body-sm text-on-surface-variant whitespace-nowrap">{dateStr}</td>
-                      <td className="py-3.5 px-4 font-semibold text-on-surface">
-                        {order.table}
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-primary text-sm">table_restaurant</span>
+                          <span className="font-semibold text-primary">{order.table}</span>
+                        </div>
                         {order.location && (
-                          <span className="text-[11px] text-on-surface-variant font-normal block mt-0.5">({order.location})</span>
+                          <span className="text-[11px] text-on-surface-variant font-normal block mt-0.5 pl-6">📍 {order.location}</span>
                         )}
                       </td>
                       <td className="py-3.5 px-4 max-w-xs truncate text-on-surface-variant" title={itemsText}>{itemsText}</td>

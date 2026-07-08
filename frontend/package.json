@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
+    "food-menu-monorepo": "file:..",
     "framer-motion": "^12.40.0",
     "html5-qrcode": "^2.3.8",
     "qrcode": "^1.5.4",
