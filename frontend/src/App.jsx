@@ -59,14 +59,8 @@ function MenuPage() {
       tags.push({ type: 'veg', label: 'Veg', icon: 'fiber_manual_record', color: 'text-green-500 bg-green-500/10 border-green-500/20' });
     }
 
-    if (
-      nameLower.includes('chicken') || nameLower.includes('mutton') || nameLower.includes('lamb') ||
-      nameLower.includes('fish') || nameLower.includes('prawn') || nameLower.includes('meat') ||
-      nameLower.includes('egg') || nameLower.includes('salmon') || nameLower.includes('beef') ||
-      nameLower.includes('pork') || descLower.includes('chicken') || descLower.includes('mutton')
-    ) {
-      tags.push({ type: 'nonveg', label: 'Non-Veg', icon: 'fiber_manual_record', color: 'text-red-500 bg-red-500/10 border-red-500/20' });
-    }
+    // ponytail: automatic non-veg tag generation removed per user request
+
 
     if (
       nameLower.includes('spicy') || nameLower.includes('chili') || nameLower.includes('chilly') ||

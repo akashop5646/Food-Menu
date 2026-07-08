@@ -66,7 +66,7 @@ async function compressImageLosslessly(buffer) {
 function uploadBufferToCloudinary(buffer) {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      { folder: 'menu-items', resource_type: 'image' },
+      { folder: 'food-menu', resource_type: 'image' }, // ponytail: use food-menu folder
       (error, result) => {
         if (error) return reject(error);
         resolve(result);
