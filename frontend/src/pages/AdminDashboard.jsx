@@ -276,6 +276,7 @@ export default function AdminDashboard() {
     return (
       <motion.div
         key={order._id}
+        layoutId={order._id}
         layout
         initial={{ opacity: 0, y: 15, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}

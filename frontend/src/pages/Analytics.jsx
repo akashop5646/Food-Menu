@@ -5,6 +5,7 @@ import { API_BASE } from '../config';
 
 export default function Analytics() {
   const [orders, setOrders] = useState([]);
+  const [menuItems, setMenuItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState('7d'); // 24h, 7d, 30d
   const [activeCategoryIndex, setActiveCategoryIndex] = useState(null);
@@ -12,25 +13,30 @@ export default function Analytics() {
 
   const mountRef = useRef(null);
 
-  // Fetch all orders from backend
+  // Fetch all orders and menu items from backend
   useEffect(() => {
-    const fetchOrders = async () => {
+    const fetchData = async () => {
       try {
-        const res = await fetch(API_BASE + '/api/orders', { credentials: 'include' });
-        if (res.ok) {
-          const data = await res.json();
-          setOrders(data);
+        const [ordersRes, menuRes] = await Promise.all([
+          fetch(API_BASE + '/api/orders', { credentials: 'include' }),
+          fetch(API_BASE + '/api/menu?all=true')
+        ]);
+        if (ordersRes.ok && menuRes.ok) {
+          const ordersData = await ordersRes.json();
+          const menuData = await menuRes.json();
+          setOrders(ordersData);
+          setMenuItems(menuData);
         }
       } catch (err) {
-        console.error('Failed to fetch analytics orders:', err);
+        console.error('Failed to fetch analytics data:', err);
       } finally {
         setLoading(false);
       }
     };
-    fetchOrders();
+    fetchData();
     
     // Refresh data every 10 seconds to keep live metrics accurate
-    const timer = setInterval(fetchOrders, 10000);
+    const timer = setInterval(fetchData, 10000);
     return () => clearInterval(timer);
   }, []);
 
@@ -207,31 +213,34 @@ export default function Analytics() {
 
   const maxDishCount = popularDishes.length > 0 ? popularDishes[0].count : 1;
 
+  // Map menu item names to their categories
+  const menuLookup = {};
+  menuItems.forEach(item => {
+    menuLookup[item.name] = item.categories || (item.category ? [item.category] : []);
+  });
+
   // Category Distribution (Revenue split)
   const categorySplit = {};
   completedOrders.forEach(order => {
     order.items.forEach(item => {
-      // Mock categories if not present on items (default to Food / Beverage / Dessert)
-      let cat = 'Other';
-      if (item.name.toLowerCase().includes('tea') || item.name.toLowerCase().includes('coffee') || item.name.toLowerCase().includes('beverage') || item.name.toLowerCase().includes('drink')) {
-        cat = 'Beverages';
-      } else if (item.name.toLowerCase().includes('chicken') || item.name.toLowerCase().includes('rice') || item.name.toLowerCase().includes('curry') || item.name.toLowerCase().includes('paneer')) {
-        cat = 'Mains';
-      } else if (item.name.toLowerCase().includes('soup') || item.name.toLowerCase().includes('tikka') || item.name.toLowerCase().includes('fries')) {
-        cat = 'Starters';
+      const itemCats = menuLookup[item.name] || [];
+      if (itemCats && itemCats.length > 0) {
+        itemCats.forEach(cat => {
+          categorySplit[cat] = (categorySplit[cat] || 0) + ((item.price * item.quantity) / itemCats.length);
+        });
       } else {
-        cat = 'Desserts';
+        categorySplit['Uncategorized'] = (categorySplit['Uncategorized'] || 0) + (item.price * item.quantity);
       }
-      categorySplit[cat] = (categorySplit[cat] || 0) + (item.price * item.quantity);
     });
   });
 
   const categoryColors = {
-    'Mains': '#d4af37',      // Primary Gold
-    'Starters': '#f2ca50',   // Light Gold
-    'Beverages': '#ffe088',  // Champagne
-    'Desserts': '#8e8e93',   // Muted Silver
-    'Other': '#4a4b50'       // Dark Charcoal
+    'Starters': '#f2ca50',       // Light Gold
+    'Afternoon meal': '#d4af37',  // Metallic Gold
+    'Evening': '#ffe088',         // Champagne
+    'Veg': '#4caf50',             // Green
+    'Non Veg': '#ef5350',         // Red
+    'Uncategorized': '#8e8e93'    // Muted Gray
   };
 
   const categoryData = Object.entries(categorySplit).map(([name, value]) => ({
