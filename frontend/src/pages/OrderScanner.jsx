@@ -633,7 +633,7 @@ export default function OrderScanner() {
               </AnimatePresence>
             </>
           ) : (
-            <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-6">
+            <div className="flex flex-col-reverse xl:grid xl:grid-cols-[1.1fr_0.9fr] gap-6">
               <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-5 md:p-6 flex flex-col gap-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>

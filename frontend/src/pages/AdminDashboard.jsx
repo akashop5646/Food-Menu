@@ -480,19 +480,80 @@ export default function AdminDashboard() {
               <p className="font-body-sm">Try adjusting your search query or filters.</p>
             </div>
           ) : (
-            <table className="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-outline-variant/20 text-on-surface-variant font-label-caps text-[11px] uppercase tracking-widest bg-surface-container-lowest/50">
-                  <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4">Table</th>
-                  <th className="py-3 px-4">Items Summary</th>
-                  <th className="py-3 px-4">Amount</th>
-                  <th className="py-3 px-4">Type</th>
-                  <th className="py-3 px-4">Payment Status</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-outline-variant/10">
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block">
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-outline-variant/20 text-on-surface-variant font-label-caps text-[11px] uppercase tracking-widest bg-surface-container-lowest/50">
+                      <th className="py-3 px-4">Date</th>
+                      <th className="py-3 px-4">Table</th>
+                      <th className="py-3 px-4">Items Summary</th>
+                      <th className="py-3 px-4">Amount</th>
+                      <th className="py-3 px-4">Type</th>
+                      <th className="py-3 px-4">Payment Status</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-outline-variant/10">
+                    {filteredPaymentOrders.map((order) => {
+                      const dateStr = new Date(order.createdAt).toLocaleString(undefined, {
+                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                      });
+                      const itemsText = order.items.map(item => `${item.quantity}x ${item.name}`).join(', ');
+                      
+                      return (
+                        <tr key={order._id} className="hover:bg-surface-container-lowest/30 transition-colors">
+                          <td className="py-3.5 px-4 font-body-sm text-on-surface-variant whitespace-nowrap">{dateStr}</td>
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-1.5">
+                              <span className="material-symbols-outlined text-primary text-sm">table_restaurant</span>
+                              <span className="font-semibold text-primary">{order.table}</span>
+                            </div>
+                            {order.location && (
+                              <span className="text-[11px] text-on-surface-variant font-normal block mt-0.5 pl-6">📍 {order.location}</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 max-w-xs truncate text-on-surface-variant" title={itemsText}>{itemsText}</td>
+                          <td className="py-3.5 px-4 font-price-display text-primary font-semibold">₹{order.total.toFixed(2)}</td>
+                          <td className="py-3.5 px-4 font-body-sm text-on-surface-variant">
+                            <span className="px-2 py-0.5 rounded bg-surface-container-high border border-outline-variant/30 text-[10px] font-label-caps uppercase tracking-wider font-semibold">
+                              {order.paymentType === 'RAZORPAY' || order.paymentType === 'ONLINE' || order.paymentType === 'NOW'
+                                ? 'RAZORPAY / ONLINE'
+                                : order.paymentType === 'LATER'
+                                  ? 'PAY LATER'
+                                  : (order.paymentType || 'UNKNOWN')}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-label-caps tracking-wider uppercase font-semibold border ${
+                              order.paymentStatus === 'PAID'
+                                ? 'bg-primary/10 text-primary border-primary/20'
+                                : 'bg-error/10 text-error border-error/20 animate-pulse'
+                            }`}>
+                              {order.paymentStatus}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            {order.paymentStatus === 'PENDING' && (
+                              <button
+                                onClick={() => handleMarkAsPaid(order._id)}
+                                className="bg-primary/10 hover:bg-primary text-primary hover:text-on-primary border border-primary/30 px-3 py-1.5 rounded-lg font-label-caps text-[10px] uppercase tracking-wider transition-all cursor-pointer font-semibold inline-flex items-center gap-1"
+                              >
+                                <span className="material-symbols-outlined text-[12px]">check</span>
+                                Verify Paid
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card List View */}
+              <div className="block md:hidden space-y-4">
                 {filteredPaymentOrders.map((order) => {
                   const dateStr = new Date(order.createdAt).toLocaleString(undefined, {
                     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
@@ -500,53 +561,62 @@ export default function AdminDashboard() {
                   const itemsText = order.items.map(item => `${item.quantity}x ${item.name}`).join(', ');
                   
                   return (
-                    <tr key={order._id} className="hover:bg-surface-container-lowest/30 transition-colors">
-                      <td className="py-3.5 px-4 font-body-sm text-on-surface-variant whitespace-nowrap">{dateStr}</td>
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-1.5">
-                          <span className="material-symbols-outlined text-primary text-sm">table_restaurant</span>
-                          <span className="font-semibold text-primary">{order.table}</span>
+                    <div key={order._id} className="bg-surface-container-low border border-outline-variant/20 rounded-2xl p-4 flex flex-col gap-3 shadow-md">
+                      <div className="flex justify-between items-start gap-2">
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="material-symbols-outlined text-primary text-base">table_restaurant</span>
+                            <span className="font-headline-sm text-base text-primary font-bold">{order.table}</span>
+                          </div>
+                          {order.location && (
+                            <span className="text-xs text-on-surface-variant font-normal block mt-0.5">📍 {order.location}</span>
+                          )}
                         </div>
-                        {order.location && (
-                          <span className="text-[11px] text-on-surface-variant font-normal block mt-0.5 pl-6">📍 {order.location}</span>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 max-w-xs truncate text-on-surface-variant" title={itemsText}>{itemsText}</td>
-                      <td className="py-3.5 px-4 font-price-display text-primary font-semibold">₹{order.total.toFixed(2)}</td>
-                      <td className="py-3.5 px-4 font-body-sm text-on-surface-variant">
-                        <span className="px-2 py-0.5 rounded bg-surface-container-high border border-outline-variant/30 text-[10px] font-label-caps uppercase tracking-wider font-semibold">
-                          {order.paymentType === 'RAZORPAY' || order.paymentType === 'ONLINE' || order.paymentType === 'NOW'
-                            ? 'RAZORPAY / ONLINE'
-                            : order.paymentType === 'LATER'
-                              ? 'PAY LATER'
-                              : (order.paymentType || 'UNKNOWN')}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-label-caps tracking-wider uppercase font-semibold border ${
-                          order.paymentStatus === 'PAID'
-                            ? 'bg-primary/10 text-primary border-primary/20'
-                            : 'bg-error/10 text-error border-error/20 animate-pulse'
-                        }`}>
-                          {order.paymentStatus}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
+                        <div className="text-right">
+                          <span className="text-xs text-on-surface-variant/60 block font-mono">{dateStr}</span>
+                          <span className="font-price-display text-primary font-bold text-base mt-0.5 block">₹{order.total.toFixed(2)}</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-surface-container-lowest/60 border border-outline-variant/10 rounded-xl p-2.5 text-xs text-on-surface-variant/80">
+                        <strong className="text-on-surface font-semibold block mb-1">Items Summary:</strong>
+                        <div className="line-clamp-2 leading-relaxed" title={itemsText}>{itemsText}</div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-outline-variant/10">
+                        <div className="flex gap-1.5 items-center">
+                          <span className="px-2 py-0.5 rounded bg-surface-container-high border border-outline-variant/30 text-[10px] font-label-caps uppercase tracking-wider font-semibold">
+                            {order.paymentType === 'RAZORPAY' || order.paymentType === 'ONLINE' || order.paymentType === 'NOW'
+                              ? 'Online'
+                              : order.paymentType === 'LATER'
+                                ? 'Pay Later'
+                                : (order.paymentType || 'Method')}
+                          </span>
+                          
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-label-caps tracking-wider uppercase font-semibold border ${
+                            order.paymentStatus === 'PAID'
+                              ? 'bg-green-500/10 text-green-500 border-green-500/20'
+                              : 'bg-primary/10 text-primary border-primary/20 animate-pulse'
+                          }`}>
+                            {order.paymentStatus}
+                          </span>
+                        </div>
+
                         {order.paymentStatus === 'PENDING' && (
                           <button
                             onClick={() => handleMarkAsPaid(order._id)}
-                            className="bg-primary/10 hover:bg-primary text-primary hover:text-on-primary border border-primary/30 px-3 py-1.5 rounded-lg font-label-caps text-[10px] uppercase tracking-wider transition-all cursor-pointer font-semibold inline-flex items-center gap-1"
+                            className="bg-primary text-on-primary hover:opacity-90 px-3.5 py-2 rounded-xl font-label-caps text-[11px] uppercase tracking-wider font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-md hover:shadow-primary/20"
                           >
-                            <span className="material-symbols-outlined text-[12px]">check</span>
+                            <span className="material-symbols-outlined text-[13px]">check</span>
                             Verify Paid
                           </button>
                         )}
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
+              </div>
+            </>
           )}
         </div>
       </div>

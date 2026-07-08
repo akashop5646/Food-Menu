@@ -326,7 +326,7 @@ export default function Analytics() {
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="bg-surface-container rounded-2xl p-6 border border-outline-variant/10 flex flex-col justify-between hover:border-primary/30 transition-all group"
+              className="bg-surface-container rounded-2xl p-4 md:p-6 border border-outline-variant/10 flex flex-col justify-between hover:border-primary/30 transition-all group"
             >
               <div>
                 <span className="material-symbols-outlined text-primary text-3xl group-hover:scale-110 transition-transform">monetization_on</span>
@@ -344,7 +344,7 @@ export default function Analytics() {
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="bg-surface-container rounded-2xl p-6 border border-outline-variant/10 flex flex-col justify-between hover:border-primary/30 transition-all group"
+              className="bg-surface-container rounded-2xl p-4 md:p-6 border border-outline-variant/10 flex flex-col justify-between hover:border-primary/30 transition-all group"
             >
               <div>
                 <span className="material-symbols-outlined text-primary text-3xl group-hover:scale-110 transition-transform">pending_actions</span>
@@ -362,7 +362,7 @@ export default function Analytics() {
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="bg-surface-container rounded-2xl p-6 border border-outline-variant/10 flex flex-col justify-between hover:border-primary/30 transition-all group"
+              className="bg-surface-container rounded-2xl p-4 md:p-6 border border-outline-variant/10 flex flex-col justify-between hover:border-primary/30 transition-all group"
             >
               <div>
                 <span className="material-symbols-outlined text-primary text-3xl group-hover:scale-110 transition-transform">shopping_bag</span>
@@ -380,7 +380,7 @@ export default function Analytics() {
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
-              className="bg-surface-container rounded-2xl p-6 border border-outline-variant/10 flex flex-col justify-between hover:border-primary/30 transition-all group"
+              className="bg-surface-container rounded-2xl p-4 md:p-6 border border-outline-variant/10 flex flex-col justify-between hover:border-primary/30 transition-all group"
             >
               <div>
                 <span className="material-symbols-outlined text-primary text-3xl group-hover:scale-110 transition-transform">table_bar</span>
@@ -398,7 +398,7 @@ export default function Analytics() {
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="md:col-span-3 lg:col-span-1 bg-surface-container rounded-2xl p-6 border border-outline-variant/10 flex flex-col items-center justify-between relative overflow-hidden"
+            className="md:col-span-3 lg:col-span-1 bg-surface-container rounded-2xl p-4 md:p-6 border border-outline-variant/10 flex flex-col items-center justify-between relative overflow-hidden"
           >
             <div className="w-full">
               <h4 className="font-title-md text-on-surface text-base flex items-center gap-1.5">
@@ -428,7 +428,7 @@ export default function Analytics() {
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
-            className="md:col-span-2 bg-surface-container rounded-2xl p-6 border border-outline-variant/10 flex flex-col justify-between"
+            className="md:col-span-2 bg-surface-container rounded-2xl p-4 md:p-6 border border-outline-variant/10 flex flex-col justify-between"
           >
             <div>
               <h4 className="font-title-md text-on-surface text-base flex items-center gap-1.5">
@@ -637,7 +637,7 @@ export default function Analytics() {
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.6 }}
-            className="md:col-span-1 bg-surface-container rounded-2xl p-6 border border-outline-variant/10 flex flex-col justify-between"
+            className="md:col-span-1 bg-surface-container rounded-2xl p-4 md:p-6 border border-outline-variant/10 flex flex-col justify-between"
           >
             <div>
               <h4 className="font-title-md text-on-surface text-base flex items-center gap-1.5">
@@ -723,7 +723,7 @@ export default function Analytics() {
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.7 }}
-            className="md:col-span-1 bg-surface-container rounded-2xl p-6 border border-outline-variant/10 flex flex-col justify-between"
+            className="md:col-span-1 bg-surface-container rounded-2xl p-4 md:p-6 border border-outline-variant/10 flex flex-col justify-between"
           >
             <div>
               <h4 className="font-title-md text-on-surface text-base flex items-center gap-1.5">
