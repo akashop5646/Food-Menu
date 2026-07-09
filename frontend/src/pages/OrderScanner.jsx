@@ -615,7 +615,7 @@ export default function OrderScanner() {
                             <button
                               type="submit"
                               disabled={isSubmitting}
-                              className="flex-[2] bg-gold-metallic text-on-primary py-3.5 rounded-xl font-label-caps text-[13px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
+                              className="flex-[2] bg-gold-metallic text-on-primary-fixed py-3.5 rounded-xl font-label-caps text-[13px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
                             >
                               {isSubmitting ? (
                                 <span className="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
@@ -845,7 +845,7 @@ export default function OrderScanner() {
                   <button
                     type="submit"
                     disabled={isSubmitting || !selectedTable || manualLineItems.length === 0}
-                    className="w-full bg-gold-metallic text-on-primary py-4 rounded-xl font-label-caps text-[13px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
+                    className="w-full bg-gold-metallic text-on-primary-fixed py-4 rounded-xl font-label-caps text-[13px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
                   >
                     {isSubmitting ? (
                       <span className="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>

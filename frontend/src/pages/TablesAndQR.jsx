@@ -248,7 +248,7 @@ export default function TablesAndQR() {
                     <a 
                       href={table.qrUrl} 
                       download={`QR_${table.name.replace(/\s+/g, '_')}.png`}
-                      className="bg-gold-metallic text-on-primary font-label-caps text-[11px] rounded-full px-4 py-2 flex items-center gap-1.5 shadow-lg gold-glow transition-all"
+                      className="bg-gold-metallic text-on-primary-fixed font-label-caps text-[11px] rounded-full px-4 py-2 flex items-center gap-1.5 shadow-lg gold-glow transition-all"
                     >
                       <span className="material-symbols-outlined text-[16px]">download</span> Download
                     </a>

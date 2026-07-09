@@ -233,7 +233,7 @@ export default function AdminLogin() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-gold-metallic text-on-primary font-label-caps text-label-caps py-4 rounded-lg uppercase tracking-wider gold-glow transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-gold-metallic text-on-primary-fixed font-label-caps text-label-caps py-4 rounded-lg uppercase tracking-wider gold-glow transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
                   <span className="material-symbols-outlined animate-spin text-[20px]">progress_activity</span>

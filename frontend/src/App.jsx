@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Routes, Route, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -126,7 +126,11 @@ function MenuPage() {
   const observerRef = React.useRef(null);
   const PAGE_SIZE = 8;
 
-  // Fetch initial configs, categories, razorpay, ip, and profile on mount
+  // Hero Item and Cache
+  const [heroItem, setHeroItem] = useState(null);
+  const menuCache = useRef({});
+
+  // Fetch initial configs, categories, razorpay, ip, profile, and initial menu (for Hero/Default grid) on mount
   useEffect(() => {
     // Generate/get deviceId
     let id = localStorage.getItem('aurum_device_id');
@@ -138,12 +142,32 @@ function MenuPage() {
 
     const fetchInitialData = async () => {
       try {
-        const [catsRes, razorpayRes, ipRes, profileRes] = await Promise.all([
+        const [itemsRes, catsRes, razorpayRes, ipRes, profileRes] = await Promise.all([
+          fetch(API_BASE + '/api/menu?limit=8&offset=0'),
           fetch(API_BASE + '/api/categories'),
           fetch(API_BASE + '/api/settings/razorpay'),
           fetch(API_BASE + '/api/auth/ip').catch(() => null),
           fetch(API_BASE + '/api/settings/restaurant-profile').catch(() => null)
         ]);
+
+        const initialItems = await itemsRes.json();
+        if (Array.isArray(initialItems)) {
+          const foundHero = initialItems.find(item => item.chefPick) || initialItems[0] || null;
+          setHeroItem(foundHero);
+
+          // Seed default view (All, no search query)
+          setMenuItems(initialItems);
+          setHasMore(initialItems.length === PAGE_SIZE);
+          setMenuLoading(false);
+
+          // Warm cache
+          menuCache.current['All_'] = {
+            items: initialItems,
+            hasMore: initialItems.length === PAGE_SIZE,
+            offset: 0
+          };
+        }
+
         const cats = await catsRes.json();
         let razorpayData = { razorpayKeyId: '' };
         try {
@@ -176,8 +200,24 @@ function MenuPage() {
     fetchInitialData();
   }, []);
 
-  // Fetch first page of menu items whenever activeCategory or searchQuery changes
+  // Fetch first page of menu items whenever activeCategory or searchQuery changes (using cache if available)
   useEffect(() => {
+    // If the initial data hasn't finished loading yet, don't trigger watcher fetch
+    // (since initial data fetch seeds the "All" category view and menuLoading state)
+    if (activeCategory === 'All' && searchQuery === '' && menuCache.current['All_']) {
+      return;
+    }
+
+    const cacheKey = `${activeCategory}_${searchQuery}`;
+    if (menuCache.current[cacheKey]) {
+      const cached = menuCache.current[cacheKey];
+      setMenuItems(cached.items);
+      setHasMore(cached.hasMore);
+      setOffset(cached.offset);
+      setMenuLoading(false);
+      return;
+    }
+
     let active = true;
     const fetchFirstPage = async () => {
       setMenuLoading(true);
@@ -188,8 +228,16 @@ function MenuPage() {
         if (!res.ok) throw new Error('Failed to fetch menu');
         const data = await res.json();
         if (active) {
-          setMenuItems(Array.isArray(data) ? data : []);
-          setHasMore(Array.isArray(data) && data.length === PAGE_SIZE);
+          const itemsList = Array.isArray(data) ? data : [];
+          const more = itemsList.length === PAGE_SIZE;
+          setMenuItems(itemsList);
+          setHasMore(more);
+          // Save to cache
+          menuCache.current[cacheKey] = {
+            items: itemsList,
+            hasMore: more,
+            offset: 0
+          };
         }
       } catch (err) {
         console.error('Error fetching initial page items:', err);
@@ -210,21 +258,30 @@ function MenuPage() {
     if (loadingMore || !hasMore || menuLoading) return;
     setLoadingMore(true);
     const newOffset = menuItems.length;
+    const cacheKey = `${activeCategory}_${searchQuery}`;
     try {
       const res = await fetch(`${API_BASE}/api/menu?limit=${PAGE_SIZE}&offset=${newOffset}&category=${encodeURIComponent(activeCategory)}&search=${encodeURIComponent(searchQuery)}`);
       if (!res.ok) throw new Error('Failed to load more');
       const data = await res.json();
       if (Array.isArray(data)) {
-        setMenuItems(prev => [...prev, ...data]);
+        const updatedItems = [...menuItems, ...data];
+        const more = data.length === PAGE_SIZE;
+        setMenuItems(updatedItems);
         setOffset(newOffset);
-        setHasMore(data.length === PAGE_SIZE);
+        setHasMore(more);
+        // Update cache
+        menuCache.current[cacheKey] = {
+          items: updatedItems,
+          hasMore: more,
+          offset: newOffset
+        };
       }
     } catch (err) {
       console.error('Failed to load more menu items:', err);
     } finally {
       setLoadingMore(false);
     }
-  }, [loadingMore, hasMore, menuLoading, menuItems.length, activeCategory, searchQuery]);
+  }, [loadingMore, hasMore, menuLoading, menuItems, activeCategory, searchQuery]);
 
   // IntersectionObserver to trigger loading more items
   useEffect(() => {
@@ -255,10 +312,6 @@ function MenuPage() {
   const sessionItemsCount = ordersList.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.quantity, 0), 0);
   const unpaidOrders = ordersList.filter(o => o.paymentStatus !== 'PAID');
   const unpaidTotal = unpaidOrders.reduce((sum, o) => sum + o.total, 0);
-
-  const heroItem = useMemo(() => {
-    return menuItems.find(item => item.chefPick) || menuItems[0] || null;
-  }, [menuItems]);
 
   const showNotification = useCallback((msg) => {
     setNotification(msg);
@@ -573,7 +626,7 @@ function MenuPage() {
                     </div>
                     <button 
                       onClick={() => handleOrderNow(heroItem)}
-                      className="bg-gold-metallic text-on-primary font-label-caps text-[12px] px-8 py-4 rounded-xl uppercase tracking-widest gold-glow transition-all font-bold flex items-center gap-2"
+                      className="bg-gold-metallic text-on-primary-fixed font-label-caps text-[12px] px-8 py-4 rounded-xl uppercase tracking-widest gold-glow transition-all font-bold flex items-center gap-2"
                     >
                       Order Now <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
                     </button>
@@ -661,7 +714,7 @@ function MenuPage() {
                     onClick={() => setActiveCategory(cat)}
                     className={`relative px-5 py-2 text-[10px] md:text-[11px] font-label-caps uppercase tracking-widest transition-all duration-200 whitespace-nowrap rounded-full font-semibold border ${
                       isActive 
-                        ? 'bg-gold-metallic text-on-primary shadow-sm border-transparent' 
+                        ? 'bg-gold-metallic text-on-primary-fixed shadow-sm border-transparent' 
                         : 'text-on-surface-variant/85 hover:text-primary bg-surface-container-low border-outline-variant/20'
                     }`}
                   >
@@ -972,7 +1025,7 @@ function MenuPage() {
                   setIsCheckoutOpen(true);
                 }}
                 disabled={cart.length === 0}
-                className="w-full bg-gold-metallic text-on-primary font-label-caps text-label-caps py-4 rounded uppercase tracking-wider gold-glow transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed focus-ring-gold focus:outline-none"
+                className="w-full bg-gold-metallic text-on-primary-fixed font-label-caps text-label-caps py-4 rounded uppercase tracking-wider gold-glow transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed focus-ring-gold focus:outline-none"
               >
                 Proceed to Checkout <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
               </button>
@@ -1158,7 +1211,7 @@ function MenuPage() {
                       onClick={handlePayNow}
                       className={`w-full py-3 rounded font-label-caps text-label-caps uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all ${
                         (isOrderVerified || unpaidTotal > 0)
-                          ? 'bg-gold-metallic text-on-primary gold-glow' 
+                          ? 'bg-gold-metallic text-on-primary-fixed gold-glow' 
                           : 'bg-surface-container-high border border-outline-variant/30 text-on-surface-variant/40 cursor-not-allowed'
                       }`}
                     >
@@ -1355,7 +1408,7 @@ function MenuPage() {
                     setIsCartOpen(true);
                     setSelectedItem(null);
                   }}
-                  className="flex-1 bg-gold-metallic text-on-primary font-label-caps text-[14px] py-3 md:py-4 rounded-xl uppercase tracking-wider gold-glow transition-all flex items-center justify-center gap-1.5"
+                  className="flex-1 bg-gold-metallic text-on-primary-fixed font-label-caps text-[14px] py-3 md:py-4 rounded-xl uppercase tracking-wider gold-glow transition-all flex items-center justify-center gap-1.5"
                 >
                   <span className="material-symbols-outlined text-[18px]">shopping_bag</span> View Cart
                 </button>
@@ -1692,7 +1745,7 @@ function MenuPage() {
 
               <button 
                 onClick={() => setPaidOrderDetails(null)}
-                className="w-full bg-gold-metallic text-on-primary font-label-caps text-xs py-3.5 rounded-xl uppercase tracking-widest gold-glow font-bold transition-all active:scale-95"
+                className="w-full bg-gold-metallic text-on-primary-fixed font-label-caps text-xs py-3.5 rounded-xl uppercase tracking-widest gold-glow font-bold transition-all active:scale-95"
               >
                 Start Tracking Order
               </button>
