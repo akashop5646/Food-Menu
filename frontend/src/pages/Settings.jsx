@@ -22,6 +22,7 @@ export default function Settings({ user }) {
   const [restaurantPhoneInput, setRestaurantPhoneInput] = useState('');
   const [restaurantFssaiInput, setRestaurantFssaiInput] = useState('');
   const [restaurantEmailInput, setRestaurantEmailInput] = useState('');
+  const [restaurantHoursInput, setRestaurantHoursInput] = useState('');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [configSuccess, setConfigSuccess] = useState(false);
   const [configError, setConfigError] = useState('');
@@ -49,6 +50,7 @@ export default function Settings({ user }) {
         setRestaurantPhoneInput(profileData.restaurantPhone || '');
         setRestaurantFssaiInput(profileData.restaurantFssai || '');
         setRestaurantEmailInput(profileData.restaurantEmail || '');
+        setRestaurantHoursInput(profileData.restaurantHours || 'Monday - Sunday, 11:00 AM - 11:00 PM IST');
       }
     } catch (err) {
       console.error('Failed to load settings configs:', err);
@@ -159,7 +161,8 @@ export default function Settings({ user }) {
           restaurantAddress: restaurantAddressInput,
           restaurantPhone: restaurantPhoneInput,
           restaurantFssai: restaurantFssaiInput,
-          restaurantEmail: restaurantEmailInput
+          restaurantEmail: restaurantEmailInput,
+          restaurantHours: restaurantHoursInput
         }),
         credentials: 'include'
       });
@@ -546,6 +549,21 @@ export default function Settings({ user }) {
             />
             <p className="font-body-sm text-[11px] text-on-surface-variant opacity-70 mt-2 leading-relaxed">
               The restaurant customer support email address.
+            </p>
+          </div>
+
+          <div>
+            <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1.5 uppercase tracking-widest">Operational Hours *</label>
+            <input 
+              required
+              type="text" 
+              value={restaurantHoursInput} 
+              onChange={e => setRestaurantHoursInput(e.target.value)} 
+              className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors" 
+              placeholder="e.g. Monday - Sunday, 11:00 AM - 11:00 PM IST"
+            />
+            <p className="font-body-sm text-[11px] text-on-surface-variant opacity-70 mt-2 leading-relaxed">
+              Your restaurant daily working hours displayed on the contact info page.
             </p>
           </div>
 

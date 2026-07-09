@@ -110,6 +110,7 @@ function MenuPage() {
   const [restaurantPhone, setRestaurantPhone] = useState('');
   const [restaurantFssai, setRestaurantFssai] = useState('');
   const [restaurantEmail, setRestaurantEmail] = useState('support@aurumtable.com');
+  const [restaurantHours, setRestaurantHours] = useState('Monday - Sunday, 11:00 AM - 11:00 PM IST');
   const [paidOrderDetails, setPaidOrderDetails] = useState(null);
   const [isOrderVerified, setIsOrderVerified] = useState(false);
   const [deviceId, setDeviceId] = useState('');
@@ -155,6 +156,7 @@ function MenuPage() {
           setRestaurantPhone(profileData.restaurantPhone || '');
           setRestaurantFssai(profileData.restaurantFssai || '');
           setRestaurantEmail(profileData.restaurantEmail || 'support@aurumtable.com');
+          setRestaurantHours(profileData.restaurantHours || 'Monday - Sunday, 11:00 AM - 11:00 PM IST');
         }
 
         if (ipRes && ipRes.ok) {
@@ -1458,7 +1460,7 @@ function MenuPage() {
                       <li><strong>Support Email:</strong> {restaurantEmail}</li>
                       <li><strong>Customer Support Phone:</strong> {restaurantPhone}</li>
                       <li><strong>Physical Address:</strong> {restaurantAddress}</li>
-                      <li><strong>Operational Hours:</strong> Monday - Sunday, 11:00 AM - 11:00 PM IST</li>
+                      <li><strong>Operational Hours:</strong> {restaurantHours || 'Monday - Sunday, 11:00 AM - 11:00 PM IST'}</li>
                     </ul>
 
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">💬 Help Desk & Table Assistance</h3>
