@@ -697,7 +697,7 @@ export default function Settings({ user }) {
               }`}
             >
               <div
-                className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform duration-300 ${
+                className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${
                   convenienceFeeEnabled ? 'translate-x-6' : 'translate-x-0'
                 }`}
               />
