@@ -569,11 +569,7 @@ function MenuPage() {
       <main className="pt-16 w-full">
         
         {/* Hero Section */}
-        {menuLoading ? (
-          <section className="h-[500px] flex items-center justify-center">
-            <span className="material-symbols-outlined text-primary text-4xl animate-spin">progress_activity</span>
-          </section>
-        ) : heroItem ? (
+        {heroItem ? (
           <section className="relative bg-surface-container-lowest overflow-hidden py-12 md:py-20 border-b border-outline-variant/10">
             {/* Background atmospheric glows */}
             <div className="absolute top-0 right-0 w-[500px] h-[500px] rounded-full bg-primary/5 blur-[120px] pointer-events-none" />
@@ -635,7 +631,7 @@ function MenuPage() {
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center bg-surface-container">
-                          <span className="material-symbols-outlined text-6xl opacity-25 text-primary">restaurant</span>
+                          <span className="material-symbols-outlined text-8xl opacity-10 text-primary">restaurant</span>
                         </div>
                       )}
                       
@@ -652,6 +648,10 @@ function MenuPage() {
                 </motion.div>
               </div>
             </div>
+          </section>
+        ) : menuLoading ? (
+          <section className="h-[500px] flex items-center justify-center">
+            <span className="material-symbols-outlined text-primary text-4xl animate-spin">progress_activity</span>
           </section>
         ) : (
           <section className="h-[400px] flex items-center justify-center bg-surface-container text-on-surface-variant">
