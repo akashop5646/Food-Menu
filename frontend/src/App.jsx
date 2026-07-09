@@ -1122,13 +1122,13 @@ function MenuPage() {
               
               {/* Session Order History List (renders if they have any active verified orders) */}
               {ordersList.length > 0 && (
-                <div className="w-full flex flex-col gap-3 text-left mt-2 mb-6 flex-1 min-h-0">
+                <div className="w-full flex flex-col gap-3 text-left mt-2 mb-6 shrink-0">
                   <h3 className="font-label-caps text-[11px] text-primary border-b border-outline-variant/15 pb-2 uppercase tracking-widest font-bold flex justify-between items-center shrink-0">
                     <span>Order History ({ordersList.length})</span>
                     <span className="font-mono text-on-surface-variant text-[11px] lowercase tracking-normal">Total: ₹{sessionTotal.toFixed(2)}</span>
                   </h3>
                   
-                  <div className="space-y-3 w-full overflow-y-auto pr-1 hide-scrollbar flex-1 min-h-[120px]">
+                  <div className="space-y-3 w-full">
                     {ordersList.map((order, idx) => (
                       <div key={order._id || idx} className="bg-surface-container-high border border-outline-variant/15 rounded-xl p-3.5 flex flex-col gap-2 shadow-sm">
                         {/* Header */}
