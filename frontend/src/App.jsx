@@ -1040,7 +1040,7 @@ function MenuPage() {
               <h2 className="font-headline-sm text-headline-sm text-primary">{activeOrder ? 'Active Order' : 'Checkout'}</h2>
             </div>
             
-            <div className="flex-1 p-8 flex flex-col items-center justify-center text-center overflow-y-auto">
+            <div className="flex-1 p-6 md:p-8 flex flex-col items-stretch text-center overflow-y-auto">
               {/* Order Summary */}
               <div className="grid grid-cols-3 gap-3 w-full mb-8 shrink-0">
                 <div className="bg-surface-container-high border border-outline-variant/20 rounded-lg p-3">
