@@ -264,6 +264,7 @@ router.post('/', requireAuth, async (req, res) => {
       paymentStatus,
       source: source || 'QR',
       status: 'NEW',
+      statusUpdatedAt: new Date(),
       confirmedBy: req.user.name || req.user.email,
       createdAt: new Date(),
       deviceId: deviceId || null,
@@ -327,7 +328,7 @@ router.patch('/:id/status', requireAuth, async (req, res) => {
     const db = await getDB();
     const result = await db.collection('orders').updateOne(
       { _id: new ObjectId(id) },
-      { $set: { status } }
+      { $set: { status, statusUpdatedAt: new Date() } }
     );
 
     if (result.matchedCount === 0) {

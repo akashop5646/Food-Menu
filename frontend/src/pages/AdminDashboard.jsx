@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import TablesAndQR from './TablesAndQR';
@@ -38,6 +38,25 @@ export default function AdminDashboard() {
 
   const [wsConnected, setWsConnected] = useState(false);
 
+  // ponytail: lightweight tick counter for timer re-renders without refetching
+  const [tick, setTick] = useState(0);
+
+  // KDS stage-aware overdue thresholds (minutes in current stage)
+  const KDS_STAGE_THRESHOLDS = { NEW: 3, PREPARING: 15, READY: 10 };
+
+  // Sound alert state
+  const [kdsSoundEnabled, setKdsSoundEnabled] = useState(() => {
+    const saved = localStorage.getItem('aurum_kds_sound_enabled');
+    return saved === null ? true : saved === 'true';
+  });
+  const audioCtxRef = useRef(null);
+  const initialLoadRef = useRef(true);
+  const [newOrderToast, setNewOrderToast] = useState(null);
+
+  // Kitchen mode state
+  const [isKitchenMode, setIsKitchenMode] = useState(false);
+  const kdsContainerRef = useRef(null);
+
   const triggerRefresh = () => setRefreshKey(prev => prev + 1);
 
   // Setup WebSocket for real-time dashboard updates
@@ -62,6 +81,13 @@ export default function AdminDashboard() {
             const msg = JSON.parse(event.data);
             if (msg.type === 'ORDER_CREATED' || msg.type === 'ORDER_STATUS_CHANGED' || msg.type === 'PAYMENT_UPDATED') {
               triggerRefresh();
+              // ponytail: sound + toast only for genuinely new orders, not status changes or payments
+              if (msg.type === 'ORDER_CREATED') {
+                playNewOrderSound();
+                const tableName = msg.payload?.table;
+                setNewOrderToast(tableName ? `New order received — ${tableName}` : 'New order received');
+                setTimeout(() => setNewOrderToast(null), 3000);
+              }
             }
           } catch (e) {
             console.error('WebSocket parse error:', e);
@@ -100,6 +126,100 @@ export default function AdminDashboard() {
 
     return () => clearInterval(pollInterval);
   }, [wsConnected]);
+
+  // ponytail: lightweight 30s tick for timer text re-renders (no data refetch)
+  useEffect(() => {
+    const timerTick = setInterval(() => setTick(t => t + 1), 30000);
+    return () => clearInterval(timerTick);
+  }, []);
+
+  // Mark initial load complete after first data fetch
+  useEffect(() => {
+    if (!ordersLoading && initialLoadRef.current) {
+      initialLoadRef.current = false;
+    }
+  }, [ordersLoading]);
+
+  // ponytail: Web Audio API chime — no external file needed
+  const playNewOrderSound = useCallback(() => {
+    if (!kdsSoundEnabled || initialLoadRef.current) return;
+    try {
+      const ctx = audioCtxRef.current || new (window.AudioContext || window.webkitAudioContext)();
+      audioCtxRef.current = ctx;
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+      // Two-tone chime: C5 then E5
+      [523.25, 659.25].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.3, now + i * 0.15);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.15 + 0.25);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(now + i * 0.15);
+        osc.stop(now + i * 0.15 + 0.25);
+      });
+    } catch (e) {
+      // ponytail: silently handle autoplay restrictions
+    }
+  }, [kdsSoundEnabled]);
+
+  // Sound preference persistence
+  const toggleKdsSound = useCallback(() => {
+    setKdsSoundEnabled(prev => {
+      const next = !prev;
+      localStorage.setItem('aurum_kds_sound_enabled', String(next));
+      // Play test chime when enabling so user hears it works
+      if (next) {
+        setTimeout(() => {
+          try {
+            const ctx = audioCtxRef.current || new (window.AudioContext || window.webkitAudioContext)();
+            audioCtxRef.current = ctx;
+            if (ctx.state === 'suspended') ctx.resume();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = 523.25;
+            gain.gain.setValueAtTime(0.2, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+            osc.connect(gain).connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.2);
+          } catch (e) {}
+        }, 50);
+      }
+      return next;
+    });
+  }, []);
+
+  // Kitchen mode toggle
+  const toggleKitchenMode = useCallback(() => {
+    if (!isKitchenMode) {
+      setIsKitchenMode(true);
+      try {
+        document.documentElement.requestFullscreen?.();
+      } catch (e) {
+        // ponytail: fullscreen API unavailable — still activate distraction-free layout
+      }
+    } else {
+      setIsKitchenMode(false);
+      try {
+        if (document.fullscreenElement) document.exitFullscreen?.();
+      } catch (e) {}
+    }
+  }, [isKitchenMode]);
+
+  // Sync kitchen mode state with browser fullscreen (Escape key handling)
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement && isKitchenMode) {
+        setIsKitchenMode(false);
+      }
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, [isKitchenMode]);
 
   // Fetch KDS active orders
   const fetchActiveOrders = async () => {
@@ -270,8 +390,17 @@ export default function AdminDashboard() {
   const readyOrders = orders.filter(o => o.status === 'READY');
 
   const renderKDSCard = (order) => {
-    const minsAgo = Math.max(0, Math.floor((new Date() - new Date(order.createdAt)) / 60000));
-    const isOverdue = minsAgo >= 10;
+    const now = new Date();
+    const totalAgeMinutes = Math.max(0, Math.floor((now - new Date(order.createdAt)) / 60000));
+    const stageAgeMinutes = Math.max(0, Math.floor((now - new Date(order.statusUpdatedAt ?? order.createdAt)) / 60000));
+    const isOverdue = stageAgeMinutes >= (KDS_STAGE_THRESHOLDS[order.status] ?? 10);
+    const stageLabel = order.status === 'PREPARING' ? 'Prep' : order.status === 'READY' ? 'Ready' : 'New';
+    // ponytail: safe confirmedBy access — prevents crash on null/undefined/non-string
+    const confirmedByName = typeof order.confirmedBy === 'string' && order.confirmedBy.trim()
+      ? order.confirmedBy.split('@')[0]
+      : 'Staff';
+    // ponytail: use tick to ensure timers re-render even without data refetch
+    void tick;
     
     return (
       <motion.div
@@ -300,7 +429,7 @@ export default function AdminDashboard() {
         <div className="flex justify-between items-center gap-2">
           <span className={`text-[11px] font-mono flex items-center gap-1 ${isOverdue ? 'text-primary font-bold' : 'text-on-surface-variant/70'}`}>
             <span className="material-symbols-outlined text-[14px]">{isOverdue ? 'alarm' : 'schedule'}</span>
-            {minsAgo} mins ago • by {order.confirmedBy.split('@')[0]}
+            Total {totalAgeMinutes}m · {stageLabel} {stageAgeMinutes}m · by {confirmedByName}
           </span>
           
           <span className={`px-2 py-0.5 rounded-full text-[10px] font-label-caps tracking-widest uppercase font-semibold border ${
@@ -640,6 +769,21 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen flex selection:bg-primary selection:text-on-primary font-sans antialiased overflow-hidden bg-background text-on-background transition-colors duration-300">
+
+      {/* New Order Toast */}
+      <AnimatePresence>
+        {newOrderToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -30 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -30 }}
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] bg-primary text-on-primary px-5 py-2.5 rounded-xl shadow-lg font-title-sm text-sm flex items-center gap-2"
+          >
+            <span className="material-symbols-outlined text-base">notifications_active</span>
+            {newOrderToast}
+          </motion.div>
+        )}
+      </AnimatePresence>
       
       {/* Ripple Animation Overlay */}
       <AnimatePresence>
@@ -665,7 +809,8 @@ export default function AdminDashboard() {
         )}
       </AnimatePresence>
 
-      {/* SideNavBar */}
+      {/* SideNavBar — hidden in kitchen mode */}
+      {!isKitchenMode && (
       <nav className="hidden md:flex flex-col h-screen w-[280px] fixed left-0 top-0 bg-surface-container/60 backdrop-blur-[30px] border-r border-outline-variant/20 shadow-[0_0_20px_rgba(212,175,55,0.05)] py-margin-desktop z-50">
         <div className="px-6 mb-12">
           <h1 className="font-display-lg text-display-lg font-bold text-primary tracking-tight">Aurum Table</h1>
@@ -721,10 +866,33 @@ export default function AdminDashboard() {
           </div>
         </div>
       </nav>
+      )}
 
       {/* Main Content Area */}
-      <div className="flex-1 md:ml-[280px] flex flex-col h-screen overflow-hidden">
-        {/* TopAppBar */}
+      <div className={`flex-1 ${isKitchenMode ? 'ml-0' : 'md:ml-[280px]'} flex flex-col h-screen overflow-hidden`}>
+        {/* TopAppBar — hidden in kitchen mode, replaced by minimal KDS toolbar */}
+        {isKitchenMode ? (
+          <header className="w-full h-14 sticky top-0 bg-surface-container/90 backdrop-blur-md flex justify-between items-center px-4 md:px-6 z-40 transition-colors border-b border-outline-variant/20">
+            <div className="flex items-center gap-3">
+              <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>monitor_heart</span>
+              <h2 className="font-headline-sm text-primary font-bold">Kitchen Display</h2>
+              <span className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-error animate-pulse'}`} title={wsConnected ? 'Live' : 'Disconnected'} />
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={toggleKdsSound} className="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-all px-2 py-1.5 rounded-lg hover:bg-primary/10 cursor-pointer" title={kdsSoundEnabled ? 'Sound On' : 'Sound Off'}>
+                <span className="material-symbols-outlined text-lg">{kdsSoundEnabled ? 'volume_up' : 'volume_off'}</span>
+                <span className="text-[10px] font-label-caps uppercase tracking-wider font-semibold hidden sm:inline">{kdsSoundEnabled ? 'Sound On' : 'Sound Off'}</span>
+              </button>
+              <button onClick={handleThemeToggle} className="text-on-surface-variant hover:text-primary transition-all cursor-pointer p-1.5 rounded-lg hover:bg-primary/10">
+                <span className="material-symbols-outlined text-lg">{isDark ? 'light_mode' : 'dark_mode'}</span>
+              </button>
+              <button onClick={toggleKitchenMode} className="flex items-center gap-1 bg-primary/10 hover:bg-primary text-primary hover:text-on-primary border border-primary/30 px-3 py-1.5 rounded-xl font-label-caps text-[10px] uppercase tracking-wider font-bold transition-all cursor-pointer">
+                <span className="material-symbols-outlined text-sm">fullscreen_exit</span>
+                Exit Kitchen Mode
+              </button>
+            </div>
+          </header>
+        ) : (
         <header className="w-full h-20 sticky top-0 bg-background/80 backdrop-blur-md flex justify-between items-center px-margin-mobile md:px-margin-desktop z-40 transition-colors">
           <div className="flex items-center gap-2">
             <button 
@@ -745,11 +913,17 @@ export default function AdminDashboard() {
             </button>
           </div>
         </header>
+        )}
 
         {/* Dynamic Content */}
         <main className="flex-1 p-margin-mobile md:p-margin-desktop overflow-y-auto pb-24 md:pb-8 relative z-10">
           {activeTab === 'dashboard' && (
-            <div className="flex flex-col md:flex-row gap-gutter h-auto md:h-full md:min-w-[900px]">
+            <div ref={kdsContainerRef} className={`flex flex-col md:flex-row gap-gutter ${isKitchenMode ? 'h-full' : 'h-auto md:h-full'} md:min-w-[900px]`}>
+              {/* KDS Header Controls — only shown when NOT in kitchen mode (kitchen mode has its own toolbar) */}
+              {!isKitchenMode && (
+                <div className="w-full flex items-center justify-end gap-2 pb-2 md:hidden-force" style={{ position: 'absolute', top: -4, right: 0, zIndex: 5 }}>
+                </div>
+              )}
               {/* Column 1: New Orders */}
               <section className="flex-1 min-h-[400px] md:min-h-0 flex flex-col bg-surface/50 rounded-xl border border-outline-variant/20 overflow-hidden stagger-1">
                 <div className="p-4 border-b border-outline-variant/20 flex justify-between items-center bg-surface-container-low">
@@ -757,6 +931,17 @@ export default function AdminDashboard() {
                     New
                     <span className="bg-error/20 text-error font-mono-data text-mono-data px-2 py-0.5 rounded-full">{newOrders.length}</span>
                   </h3>
+                  {/* Kitchen mode + sound buttons in first column header */}
+                  {!isKitchenMode && (
+                    <div className="flex items-center gap-1">
+                      <button onClick={toggleKdsSound} className="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-all px-1.5 py-1 rounded-lg hover:bg-primary/10 cursor-pointer" title={kdsSoundEnabled ? 'Sound On' : 'Sound Off'}>
+                        <span className="material-symbols-outlined text-[16px]">{kdsSoundEnabled ? 'volume_up' : 'volume_off'}</span>
+                      </button>
+                      <button onClick={toggleKitchenMode} className="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-all px-1.5 py-1 rounded-lg hover:bg-primary/10 cursor-pointer" title="Enter Kitchen Mode">
+                        <span className="material-symbols-outlined text-[16px]">fullscreen</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
                   {ordersLoading ? (
@@ -849,9 +1034,9 @@ export default function AdminDashboard() {
         </main>
       </div>
 
-      {/* Mobile Drawer Navigation */}
+      {/* Mobile Drawer Navigation — hidden in kitchen mode */}
       <AnimatePresence>
-        {isMobileMenuOpen && (
+        {isMobileMenuOpen && !isKitchenMode && (
           <>
             {/* Backdrop */}
             <motion.div
