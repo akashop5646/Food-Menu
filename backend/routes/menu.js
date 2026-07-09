@@ -215,15 +215,31 @@ router.put('/:id', requireAdmin, upload.single('imageFile'), async (req, res) =>
     if (req.body.chefPick !== undefined) updates.chefPick = parseBoolean(req.body.chefPick);
     if (req.body.available !== undefined) updates.available = parseBoolean(req.body.available, true);
 
+    const db = await getDB();
+
     if (req.file) {
+      // Fetch the existing item to get the old image URL for cleanup
+      const existingItem = await db.collection('menu_items').findOne({ _id: new ObjectId(id) });
+      if (existingItem?.image && existingItem.image.includes('cloudinary.com')) {
+        // Delete the old image from Cloudinary to prevent orphaned assets
+        const parts = existingItem.image.split('/');
+        const filename = parts[parts.length - 1];
+        const folder = parts[parts.length - 2];
+        const publicId = `${folder}/${filename.split('.')[0]}`;
+        try {
+          await cloudinary.uploader.destroy(publicId);
+        } catch (cloudinaryErr) {
+          console.error('Failed to delete old image from Cloudinary:', cloudinaryErr);
+          // Non-blocking — proceed with the upload even if cleanup fails
+        }
+      }
+
       const compressed = await compressImageLosslessly(req.file.buffer);
       const uploaded = await uploadBufferToCloudinary(compressed);
       updates.image = uploaded.secure_url || uploaded.url || '';
     } else if (req.body.image !== undefined) {
       updates.image = typeof req.body.image === 'string' ? req.body.image.slice(0, 2000) : '';
     }
-
-    const db = await getDB();
     
     // If this item is updated to be the chefPick, unset chefPick from all other items
     if (updates.chefPick === true) {
