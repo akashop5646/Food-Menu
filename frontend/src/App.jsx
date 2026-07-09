@@ -130,7 +130,7 @@ function MenuPage() {
   const [heroItem, setHeroItem] = useState(null);
   const menuCache = useRef({});
 
-  // Fetch initial configs, categories, razorpay, ip, profile, and initial menu (for Hero/Default grid) on mount
+  // Fetch initial configs, categories, razorpay, ip, and profile on mount
   useEffect(() => {
     // Generate/get deviceId
     let id = localStorage.getItem('aurum_device_id');
@@ -142,31 +142,12 @@ function MenuPage() {
 
     const fetchInitialData = async () => {
       try {
-        const [itemsRes, catsRes, razorpayRes, ipRes, profileRes] = await Promise.all([
-          fetch(API_BASE + '/api/menu?limit=8&offset=0'),
+        const [catsRes, razorpayRes, ipRes, profileRes] = await Promise.all([
           fetch(API_BASE + '/api/categories'),
           fetch(API_BASE + '/api/settings/razorpay'),
           fetch(API_BASE + '/api/auth/ip').catch(() => null),
           fetch(API_BASE + '/api/settings/restaurant-profile').catch(() => null)
         ]);
-
-        const initialItems = await itemsRes.json();
-        if (Array.isArray(initialItems)) {
-          const foundHero = initialItems.find(item => item.chefPick) || initialItems[0] || null;
-          setHeroItem(foundHero);
-
-          // Seed default view (All, no search query)
-          setMenuItems(initialItems);
-          setHasMore(initialItems.length === PAGE_SIZE);
-          setMenuLoading(false);
-
-          // Warm cache
-          menuCache.current['All_'] = {
-            items: initialItems,
-            hasMore: initialItems.length === PAGE_SIZE,
-            offset: 0
-          };
-        }
 
         const cats = await catsRes.json();
         let razorpayData = { razorpayKeyId: '' };
@@ -202,12 +183,6 @@ function MenuPage() {
 
   // Fetch first page of menu items whenever activeCategory or searchQuery changes (using cache if available)
   useEffect(() => {
-    // If the initial data hasn't finished loading yet, don't trigger watcher fetch
-    // (since initial data fetch seeds the "All" category view and menuLoading state)
-    if (activeCategory === 'All' && searchQuery === '' && menuCache.current['All_']) {
-      return;
-    }
-
     const cacheKey = `${activeCategory}_${searchQuery}`;
     if (menuCache.current[cacheKey]) {
       const cached = menuCache.current[cacheKey];
@@ -232,6 +207,13 @@ function MenuPage() {
           const more = itemsList.length === PAGE_SIZE;
           setMenuItems(itemsList);
           setHasMore(more);
+
+          // If hero item is not set yet, set it from the first category fetch (normally "All")
+          if (!heroItem && itemsList.length > 0) {
+            const foundHero = itemsList.find(item => item.chefPick) || itemsList[0] || null;
+            setHeroItem(foundHero);
+          }
+
           // Save to cache
           menuCache.current[cacheKey] = {
             items: itemsList,
@@ -251,7 +233,7 @@ function MenuPage() {
     return () => {
       active = false;
     };
-  }, [activeCategory, searchQuery]);
+  }, [activeCategory, searchQuery, heroItem]);
 
   // Load more menu items when user scrolls to bottom
   const loadMore = useCallback(async () => {
