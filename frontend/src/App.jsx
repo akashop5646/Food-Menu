@@ -304,6 +304,7 @@ function MenuPage() {
   const ordersList = activeOrders.length > 0 ? activeOrders : (activeOrder ? [activeOrder] : []);
   const sessionTotal = ordersList.reduce((sum, o) => sum + o.total, 0);
   const sessionItemsCount = ordersList.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.quantity, 0), 0);
+  const unpaidOrders = ordersList.filter(o => o.paymentStatus !== 'PAID');
   const unpaidTotal = unpaidOrders.reduce((sum, o) => sum + o.total, 0);
   const unpaidTotalPayable = unpaidOrders.reduce((sum, o) => sum + (o.totalPayable ?? o.total), 0);
   const unpaidConvenienceFee = unpaidOrders.reduce((sum, o) => sum + (o.convenienceFee ?? 0), 0);
