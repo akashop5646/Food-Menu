@@ -188,6 +188,36 @@ router.post('/', requireAuth, async (req, res) => {
       ? paymentType.trim()
       : 'LATER';
 
+    const db = await getDB();
+
+    // Verify items and calculate authoritative total from DB prices
+    const verifiedItems = [];
+    let calculatedTotal = 0;
+    
+    for (const item of items) {
+      const id = item.id || item._id;
+      if (!id || !ObjectId.isValid(id)) {
+        return res.status(400).json({ error: `Invalid item ID: ${id}` });
+      }
+      const dbItem = await db.collection('menu_items').findOne({ _id: new ObjectId(id) });
+      if (!dbItem) {
+        return res.status(400).json({ error: `Menu item not found in database: ${item.name || id}` });
+      }
+      const quantity = Number(item.quantity);
+      if (isNaN(quantity) || quantity <= 0) {
+        return res.status(400).json({ error: `Invalid quantity for item: ${item.name || id}` });
+      }
+      const verifiedPrice = Number(dbItem.price);
+      calculatedTotal += verifiedPrice * quantity;
+      
+      verifiedItems.push({
+        id: dbItem._id,
+        name: dbItem.name,
+        price: verifiedPrice,
+        quantity: quantity
+      });
+    }
+
     const orderIdVal = req.body._id;
     const newOrder = {
       _id: orderIdVal && ObjectId.isValid(orderIdVal) ? new ObjectId(orderIdVal) : new ObjectId(),
@@ -195,13 +225,8 @@ router.post('/', requireAuth, async (req, res) => {
       location: location || null,
       tableId: tableId || null,
       locationId: locationId || null,
-      items: items.map(item => ({
-        id: item.id || item._id,
-        name: item.name,
-        price: Number(item.price),
-        quantity: Number(item.quantity)
-      })),
-      total: Number(total),
+      items: verifiedItems,
+      total: Number(calculatedTotal.toFixed(2)),
       paymentType: normalizedPaymentType,
       paymentStatus,
       source: source || 'QR',
@@ -213,7 +238,6 @@ router.post('/', requireAuth, async (req, res) => {
       checkoutSessionId: checkoutSessionId || null
     };
 
-    const db = await getDB();
     const result = await db.collection('orders').insertOne(newOrder);
 
     // Clean up any remaining checkout codes for this checkoutSessionId so they don't pile up
@@ -320,9 +344,24 @@ router.patch('/:id/payment', requireAuth, async (req, res) => {
 // Create a Razorpay Order (Public/Customer endpoint)
 router.post('/razorpay-order', async (req, res) => {
   try {
-    const { amount, orderId } = req.body;
+    const { orderId } = req.body;
+    if (!orderId || !ObjectId.isValid(orderId)) {
+      return res.status(400).json({ error: 'Valid internal orderId is required' });
+    }
+
+    const db = await getDB();
+    const order = await db.collection('orders').findOne({ _id: new ObjectId(orderId) });
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    if (order.paymentStatus === 'PAID') {
+      return res.status(400).json({ error: 'Order has already been paid' });
+    }
+
+    const amount = order.total;
     if (!amount || amount <= 0) {
-      return res.status(400).json({ error: 'Invalid amount' });
+      return res.status(400).json({ error: 'Invalid order amount' });
     }
 
     const keyId = process.env.RAZORPAY_KEY_ID;
@@ -343,7 +382,7 @@ router.post('/razorpay-order', async (req, res) => {
       body: JSON.stringify({
         amount: Math.round(Number(amount) * 100), // convert to paise
         currency: 'INR',
-        receipt: orderId ? `ord_${orderId}` : `rcpt_${Date.now()}`
+        receipt: `ord_${orderId}`
       })
     });
 
@@ -351,6 +390,12 @@ router.post('/razorpay-order', async (req, res) => {
     if (!response.ok) {
       return res.status(response.status).json({ error: data.error?.description || 'Razorpay order creation failed' });
     }
+
+    // Save the razorpayOrderId on the order document in MongoDB
+    await db.collection('orders').updateOne(
+      { _id: new ObjectId(orderId) },
+      { $set: { razorpayOrderId: data.id } }
+    );
 
     res.json(data);
   } catch (error) {
@@ -363,38 +408,77 @@ router.post('/razorpay-order', async (req, res) => {
 router.post('/:id/verify-payment', async (req, res) => {
   try {
     const { id } = req.params;
+    if (!id || !ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Valid internal order ID is required' });
+    }
+
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    if (
+      typeof razorpay_order_id !== 'string' || !razorpay_order_id.trim() ||
+      typeof razorpay_payment_id !== 'string' || !razorpay_payment_id.trim() ||
+      typeof razorpay_signature !== 'string' || !razorpay_signature.trim()
+    ) {
+      return res.status(400).json({ error: 'Invalid or missing Razorpay payment details' });
+    }
 
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
     if (!keySecret) {
       return res.status(500).json({ error: 'Razorpay secret key not configured' });
     }
 
-    // Verify signature using crypto
+    const db = await getDB();
+    const order = await db.collection('orders').findOne({ _id: new ObjectId(id) });
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // Idempotent payment checking
+    if (order.paymentStatus === 'PAID') {
+      if (order.razorpayPaymentId === razorpay_payment_id) {
+        return res.json({ success: true, message: 'Payment already verified' });
+      }
+      return res.status(409).json({ error: 'Order has already been paid with a different transaction' });
+    }
+
+    // Cryptographically and logically bind the Razorpay order to the correct internal order
+    if (!order.razorpayOrderId || order.razorpayOrderId !== razorpay_order_id) {
+      return res.status(409).json({ error: 'Razorpay order ID mismatch or not associated with this order' });
+    }
+
+    // Never allow one Razorpay payment ID to be attached to multiple internal orders
+    const duplicatePayment = await db.collection('orders').findOne({
+      razorpayPaymentId: razorpay_payment_id,
+      _id: { $ne: new ObjectId(id) }
+    });
+    if (duplicatePayment) {
+      return res.status(409).json({ error: 'This payment transaction has already been used for another order' });
+    }
+
+    // Verify signature using timing-safe comparison
     const hmac = crypto.createHmac('sha256', keySecret);
     hmac.update(`${razorpay_order_id}|${razorpay_payment_id}`);
     const generatedSignature = hmac.digest('hex');
 
-    if (generatedSignature !== razorpay_signature) {
+    const bufGen = Buffer.from(generatedSignature, 'hex');
+    const bufSig = Buffer.from(razorpay_signature, 'hex');
+
+    if (bufGen.length !== bufSig.length || !crypto.timingSafeEqual(bufGen, bufSig)) {
       return res.status(400).json({ error: 'Invalid payment signature' });
     }
 
-    const db = await getDB();
-    const result = await db.collection('orders').updateOne(
+    // Update order with payment verification fields
+    await db.collection('orders').updateOne(
       { _id: new ObjectId(id) },
       { 
         $set: { 
           paymentStatus: 'PAID',
           paymentType: 'RAZORPAY',
           razorpayOrderId: razorpay_order_id,
-          razorpayPaymentId: razorpay_payment_id
+          razorpayPaymentId: razorpay_payment_id,
+          paidAt: new Date()
         } 
       }
     );
-
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
 
     // Broadcast payment status change to waiter and KDS
     broadcast('PAYMENT_UPDATED', { id, paymentStatus: 'PAID' });
