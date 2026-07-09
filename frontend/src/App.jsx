@@ -111,6 +111,7 @@ function MenuPage() {
   const [restaurantFssai, setRestaurantFssai] = useState('');
   const [restaurantEmail, setRestaurantEmail] = useState('support@aurumtable.com');
   const [restaurantHours, setRestaurantHours] = useState('Monday - Sunday, 11:00 AM - 11:00 PM IST');
+  const [restaurantMapLink, setRestaurantMapLink] = useState('');
   const [paidOrderDetails, setPaidOrderDetails] = useState(null);
   const [isOrderVerified, setIsOrderVerified] = useState(false);
   const [deviceId, setDeviceId] = useState('');
@@ -118,7 +119,14 @@ function MenuPage() {
   const [checkoutSessionId, setCheckoutSessionId] = useState('');
   const [activePolicy, setActivePolicy] = useState(null);
 
-  // Fetch menu items and categories from API
+  // Pagination and lazy loading states
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const observerRef = React.useRef(null);
+  const PAGE_SIZE = 8;
+
+  // Fetch initial configs, categories, razorpay, ip, and profile on mount
   useEffect(() => {
     // Generate/get deviceId
     let id = localStorage.getItem('aurum_device_id');
@@ -128,16 +136,14 @@ function MenuPage() {
     }
     setDeviceId(id);
 
-    const fetchMenu = async () => {
+    const fetchInitialData = async () => {
       try {
-        const [itemsRes, catsRes, razorpayRes, ipRes, profileRes] = await Promise.all([
-          fetch(API_BASE + '/api/menu'),
+        const [catsRes, razorpayRes, ipRes, profileRes] = await Promise.all([
           fetch(API_BASE + '/api/categories'),
           fetch(API_BASE + '/api/settings/razorpay'),
           fetch(API_BASE + '/api/auth/ip').catch(() => null),
           fetch(API_BASE + '/api/settings/restaurant-profile').catch(() => null)
         ]);
-        const items = await itemsRes.json();
         const cats = await catsRes.json();
         let razorpayData = { razorpayKeyId: '' };
         try {
@@ -145,7 +151,6 @@ function MenuPage() {
         } catch (e) {
           console.error(e);
         }
-        setMenuItems(Array.isArray(items) ? items : []);
         setCategories(['All', ...(Array.isArray(cats) ? cats.map(c => c.name) : [])]);
         setRazorpayKeyId(razorpayData.razorpayKeyId || '');
 
@@ -157,6 +162,7 @@ function MenuPage() {
           setRestaurantFssai(profileData.restaurantFssai || '');
           setRestaurantEmail(profileData.restaurantEmail || 'support@aurumtable.com');
           setRestaurantHours(profileData.restaurantHours || 'Monday - Sunday, 11:00 AM - 11:00 PM IST');
+          setRestaurantMapLink(profileData.restaurantMapLink || '');
         }
 
         if (ipRes && ipRes.ok) {
@@ -164,13 +170,82 @@ function MenuPage() {
           setCustomerIp(ipData.ip || '');
         }
       } catch (err) {
-        console.error('Failed to fetch initial page data:', err);
-      } finally {
-        setMenuLoading(false);
+        console.error('Failed to fetch initial configs:', err);
       }
     };
-    fetchMenu();
+    fetchInitialData();
   }, []);
+
+  // Fetch first page of menu items whenever activeCategory or searchQuery changes
+  useEffect(() => {
+    let active = true;
+    const fetchFirstPage = async () => {
+      setMenuLoading(true);
+      setOffset(0);
+      setHasMore(true);
+      try {
+        const res = await fetch(`${API_BASE}/api/menu?limit=${PAGE_SIZE}&offset=0&category=${encodeURIComponent(activeCategory)}&search=${encodeURIComponent(searchQuery)}`);
+        if (!res.ok) throw new Error('Failed to fetch menu');
+        const data = await res.json();
+        if (active) {
+          setMenuItems(Array.isArray(data) ? data : []);
+          setHasMore(Array.isArray(data) && data.length === PAGE_SIZE);
+        }
+      } catch (err) {
+        console.error('Error fetching initial page items:', err);
+      } finally {
+        if (active) {
+          setMenuLoading(false);
+        }
+      }
+    };
+    fetchFirstPage();
+    return () => {
+      active = false;
+    };
+  }, [activeCategory, searchQuery]);
+
+  // Load more menu items when user scrolls to bottom
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || menuLoading) return;
+    setLoadingMore(true);
+    const newOffset = menuItems.length;
+    try {
+      const res = await fetch(`${API_BASE}/api/menu?limit=${PAGE_SIZE}&offset=${newOffset}&category=${encodeURIComponent(activeCategory)}&search=${encodeURIComponent(searchQuery)}`);
+      if (!res.ok) throw new Error('Failed to load more');
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setMenuItems(prev => [...prev, ...data]);
+        setOffset(newOffset);
+        setHasMore(data.length === PAGE_SIZE);
+      }
+    } catch (err) {
+      console.error('Failed to load more menu items:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, menuLoading, menuItems.length, activeCategory, searchQuery]);
+
+  // IntersectionObserver to trigger loading more items
+  useEffect(() => {
+    if (!hasMore || menuLoading || loadingMore) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        loadMore();
+      }
+    }, { threshold: 0.1, rootMargin: '150px' });
+
+    const currentTrigger = observerRef.current;
+    if (currentTrigger) {
+      observer.observe(currentTrigger);
+    }
+
+    return () => {
+      if (currentTrigger) {
+        observer.unobserve(currentTrigger);
+      }
+    };
+  }, [hasMore, menuLoading, loadingMore, loadMore]);
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -184,16 +259,6 @@ function MenuPage() {
   const heroItem = useMemo(() => {
     return menuItems.find(item => item.chefPick) || menuItems[0] || null;
   }, [menuItems]);
-
-  const filteredItems = useMemo(() => {
-    return menuItems.filter(item => {
-      const itemCats = item.categories || (item.category ? [item.category] : []);
-      const matchesCategory = activeCategory === 'All' || itemCats.includes(activeCategory);
-      const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                           item.description.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesCategory && matchesSearch;
-    });
-  }, [activeCategory, searchQuery, menuItems]);
 
   const showNotification = useCallback((msg) => {
     setNotification(msg);
@@ -612,7 +677,7 @@ function MenuPage() {
         <div className="max-w-[1200px] mx-auto w-full">
           <AnimatePresence mode="wait">
             <motion.section 
-              key={activeCategory}
+              key={activeCategory + '_' + searchQuery}
               variants={{
                 hidden: { opacity: 0 },
                 show: {
@@ -636,122 +701,154 @@ function MenuPage() {
               exit="exit"
               className="p-margin-mobile md:p-margin-desktop grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-gutter mt-8"
             >
-              {filteredItems.map((item) => {
-                const cartItem = cart.find(ci => ci._id === item._id);
-                return (
-                  <motion.article 
-                    variants={{
-                      hidden: { opacity: 0, y: 15 },
-                      show: { 
-                        opacity: 1, 
-                        y: 0,
-                        transition: { 
-                          type: "spring", 
-                          stiffness: 260, 
-                          damping: 24 
-                        } 
-                      }
-                    }}
-                    key={item._id} 
-                    onClick={() => setSelectedItem(item)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setSelectedItem(item);
-                      }
-                    }}
-                    role="button"
-                    tabIndex={0}
-                    className="bg-surface-container/40 backdrop-blur-md border border-primary/15 rounded-2xl overflow-hidden group hover:border-primary/45 premium-card-shadow focus-ring-gold focus:outline-none flex flex-col cursor-pointer transition-all duration-300"
-                  >
-                    <div className="relative overflow-hidden aspect-[4/3] w-full border-b border-primary/10">
-                      {item.image ? (
-                        <img 
-                          src={item.image} 
-                          alt={item.name} 
-                          loading="lazy"
-                          className="w-full h-full object-cover grayscale-[20%] group-hover:grayscale-0 group-hover:scale-105 transition-all duration-700" 
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-surface-variant flex items-center justify-center">
-                          <span className="material-symbols-outlined text-4xl opacity-20">restaurant</span>
-                        </div>
-                      )}
-                      {/* Subtle gradient overlay on hover for a premium feel */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
-                      
-                      {/* Dietary Tags Overlay */}
-                      <div className="absolute top-3 left-3 z-20 flex flex-col gap-1.5 pointer-events-none">
-                        {getDietaryTags(item).map(tag => (
-                          <div 
-                            key={tag.type} 
-                            className={`flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-semibold font-label-caps uppercase tracking-wider rounded-md border backdrop-blur-md shadow-sm ${tag.color}`}
-                          >
-                            {tag.type === 'veg' || tag.type === 'nonveg' ? (
-                              <span className={`w-2.5 h-2.5 flex items-center justify-center border ${tag.type === 'veg' ? 'border-green-500' : 'border-red-500'} rounded-sm p-[1px]`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${tag.type === 'veg' ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                              </span>
-                            ) : (
-                              <span className="material-symbols-outlined text-[11px]">{tag.icon}</span>
-                            )}
-                            {tag.label}
+              {menuLoading ? (
+                Array.from({ length: 8 }).map((_, index) => (
+                  <div key={index} className="bg-surface-container/40 border border-primary/15 rounded-2xl p-3 flex flex-col gap-3 animate-pulse">
+                    <div className="w-full aspect-[4/3] rounded-xl bg-surface-container-high relative overflow-hidden" />
+                    <div className="h-4 bg-surface-container-high rounded w-3/4" />
+                    <div className="h-3 bg-surface-container-high rounded w-1/2 mt-1" />
+                    <div className="flex justify-between items-center mt-4">
+                      <div className="h-5 bg-surface-container-high rounded w-1/4" />
+                      <div className="h-8 bg-surface-container-high rounded-full w-20" />
+                    </div>
+                  </div>
+                ))
+              ) : menuItems.length > 0 ? (
+                menuItems.map((item) => {
+                  const cartItem = cart.find(ci => ci._id === item._id);
+                  return (
+                    <motion.article 
+                      variants={{
+                        hidden: { opacity: 0, y: 15 },
+                        show: { 
+                          opacity: 1, 
+                          y: 0,
+                          transition: { 
+                            type: "spring", 
+                            stiffness: 260, 
+                            damping: 24 
+                          } 
+                        }
+                      }}
+                      key={item._id} 
+                      onClick={() => setSelectedItem(item)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setSelectedItem(item);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      className="bg-surface-container/40 backdrop-blur-md border border-primary/15 rounded-2xl overflow-hidden group hover:border-primary/45 premium-card-shadow focus-ring-gold focus:outline-none flex flex-col cursor-pointer transition-all duration-300"
+                    >
+                      <div className="relative overflow-hidden aspect-[4/3] w-full border-b border-primary/10">
+                        {item.image ? (
+                          <img 
+                            src={item.image} 
+                            alt={item.name} 
+                            loading="lazy"
+                            className="w-full h-full object-cover grayscale-[20%] group-hover:grayscale-0 group-hover:scale-105 transition-all duration-700" 
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-surface-variant flex items-center justify-center">
+                            <span className="material-symbols-outlined text-4xl opacity-20">restaurant</span>
                           </div>
-                        ))}
-                      </div>
-
-                      {item.chefPick && (
-                        <div className="absolute z-20 bg-surface-container/85 backdrop-blur-md border border-primary/30 text-primary px-3 py-1 text-[10px] font-label-caps uppercase tracking-widest rounded-full flex items-center gap-1 top-3 right-3 shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
-                          <span className="material-symbols-outlined text-[13px] font-bold">star</span> Chef's Pick
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="flex-1 flex flex-col justify-between p-3.5 md:p-5">
-                      <div>
-                        <h3 className="font-headline-sm text-[16px] md:text-headline-sm text-primary group-hover:text-primary-fixed transition-colors line-clamp-1 mb-1 font-semibold">{item.name}</h3>
-                        <p className="font-body-md text-[12px] md:text-body-md text-on-surface-variant/70 line-clamp-2 mb-4 leading-relaxed">
-                          {item.description}
-                        </p>
-                      </div>
-
-                      <div className="flex justify-between items-center mt-auto pt-2 border-t border-outline-variant/10">
-                        <span className="font-price-display text-[15px] md:text-price-display text-on-surface font-semibold">₹{item.price}</span>
-                        <div onClick={(e) => e.stopPropagation()}>
-                          {cartItem ? (
-                            <div className="flex items-center gap-2 bg-surface-container-high border border-outline-variant/30 rounded-full px-2 py-0.5 shadow-sm">
-                              <button 
-                                onClick={() => updateQuantity(item._id, -1)} 
-                                aria-label={`Decrease quantity of ${item.name}`}
-                                className="text-on-surface-variant hover:text-primary p-0.5 flex items-center justify-center rounded-full hover:bg-surface-container-highest transition-colors focus-ring-gold focus:outline-none"
-                              >
-                                <span className="material-symbols-outlined text-[15px] md:text-[18px]">remove</span>
-                              </button>
-                              <span className="font-body-md text-on-surface w-4 text-center text-[12px] md:text-[13px] font-bold">{cartItem.quantity}</span>
-                              <button 
-                                onClick={() => updateQuantity(item._id, 1)} 
-                                aria-label={`Increase quantity of ${item.name}`}
-                                className="text-on-surface-variant hover:text-primary p-0.5 flex items-center justify-center rounded-full hover:bg-surface-container-highest transition-colors focus-ring-gold focus:outline-none"
-                              >
-                                <span className="material-symbols-outlined text-[15px] md:text-[18px]">add</span>
-                              </button>
-                            </div>
-                          ) : (
-                            <button 
-                              onClick={() => addToCart(item)}
-                              aria-label={`Add ${item.name} to cart`}
-                              className="bg-primary/15 hover:bg-primary border border-primary/20 hover:border-primary text-primary hover:text-on-primary font-label-caps text-[9px] md:text-[10px] px-3.5 py-1.5 rounded-full uppercase tracking-wider transition-all duration-300 flex items-center gap-1 shadow-sm font-bold focus-ring-gold focus:outline-none"
+                        )}
+                        {/* Subtle gradient overlay on hover for a premium feel */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+                        
+                        {/* Dietary Tags Overlay */}
+                        <div className="absolute top-3 left-3 z-20 flex flex-col gap-1.5 pointer-events-none">
+                          {getDietaryTags(item).map(tag => (
+                            <div 
+                              key={tag.type} 
+                              className={`flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-semibold font-label-caps uppercase tracking-wider rounded-md border backdrop-blur-md shadow-sm ${tag.color}`}
                             >
-                              <span className="material-symbols-outlined text-[12px] md:text-[14px]">add</span> Add
-                            </button>
-                          )}
+                              {tag.type === 'veg' || tag.type === 'nonveg' ? (
+                                <span className={`w-2.5 h-2.5 flex items-center justify-center border ${tag.type === 'veg' ? 'border-green-500' : 'border-red-500'} rounded-sm p-[1px]`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${tag.type === 'veg' ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                                </span>
+                              ) : (
+                                <span className="material-symbols-outlined text-[11px]">{tag.icon}</span>
+                              )}
+                              {tag.label}
+                            </div>
+                          ))}
+                        </div>
+
+                        {item.chefPick && (
+                          <div className="absolute z-20 bg-surface-container/85 backdrop-blur-md border border-primary/30 text-primary px-3 py-1 text-[10px] font-label-caps uppercase tracking-widest rounded-full flex items-center gap-1 top-3 right-3 shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
+                            <span className="material-symbols-outlined text-[13px] font-bold">star</span> Chef's Pick
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="flex-1 flex flex-col justify-between p-3.5 md:p-5">
+                        <div>
+                          <h3 className="font-headline-sm text-[16px] md:text-headline-sm text-primary group-hover:text-primary-fixed transition-colors line-clamp-1 mb-1 font-semibold">{item.name}</h3>
+                          <p className="font-body-md text-[12px] md:text-body-md text-on-surface-variant/70 line-clamp-2 mb-4 leading-relaxed">
+                            {item.description}
+                          </p>
+                        </div>
+
+                        <div className="flex justify-between items-center mt-auto pt-2 border-t border-outline-variant/10">
+                          <span className="font-price-display text-[15px] md:text-price-display text-on-surface font-semibold">₹{item.price}</span>
+                          <div onClick={(e) => e.stopPropagation()}>
+                            {cartItem ? (
+                              <div className="flex items-center gap-2 bg-surface-container-high border border-outline-variant/30 rounded-full px-2 py-0.5 shadow-sm">
+                                <button 
+                                  onClick={() => updateQuantity(item._id, -1)} 
+                                  aria-label={`Decrease quantity of ${item.name}`}
+                                  className="text-on-surface-variant hover:text-primary p-0.5 flex items-center justify-center rounded-full hover:bg-surface-container-highest transition-colors focus-ring-gold focus:outline-none"
+                                >
+                                  <span className="material-symbols-outlined text-[15px] md:text-[18px]">remove</span>
+                                </button>
+                                <span className="font-body-md text-on-surface w-4 text-center text-[12px] md:text-[13px] font-bold">{cartItem.quantity}</span>
+                                <button 
+                                  onClick={() => updateQuantity(item._id, 1)} 
+                                  aria-label={`Increase quantity of ${item.name}`}
+                                  className="text-on-surface-variant hover:text-primary p-0.5 flex items-center justify-center rounded-full hover:bg-surface-container-highest transition-colors focus-ring-gold focus:outline-none"
+                                >
+                                  <span className="material-symbols-outlined text-[15px] md:text-[18px]">add</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <button 
+                                onClick={() => addToCart(item)}
+                                aria-label={`Add ${item.name} to cart`}
+                                className="bg-primary/15 hover:bg-primary border border-primary/20 hover:border-primary text-primary hover:text-on-primary font-label-caps text-[9px] md:text-[10px] px-3.5 py-1.5 rounded-full uppercase tracking-wider transition-all duration-300 flex items-center gap-1 shadow-sm font-bold focus-ring-gold focus:outline-none"
+                              >
+                                <span className="material-symbols-outlined text-[12px] md:text-[14px]">add</span> Add
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </motion.article>
-                );
-              })}
+                    </motion.article>
+                  );
+                })
+              ) : (
+                <div className="col-span-full py-16 text-center text-on-surface-variant">
+                  <span className="material-symbols-outlined text-5xl opacity-40 mb-3 block">search_off</span>
+                  <p className="font-body-lg text-body-lg">No dishes found matching your selection.</p>
+                </div>
+              )}
             </motion.section>
           </AnimatePresence>
+
+          {/* Infinite Scroll Trigger Element */}
+          {hasMore && !menuLoading && (
+            <div 
+              ref={observerRef} 
+              className="py-12 flex justify-center items-center w-full"
+            >
+              <div className="flex flex-col items-center gap-2">
+                <span className="material-symbols-outlined text-primary text-2xl animate-spin">progress_activity</span>
+                <span className="font-label-caps text-[9px] text-on-surface-variant/80 tracking-widest uppercase font-bold">Loading more flavors...</span>
+              </div>
+            </div>
+          )}
         </div>
       </main>
 
@@ -1272,11 +1369,22 @@ function MenuPage() {
       {/* Footer */}
       <footer className="mt-20 border-t border-outline-variant/15 py-10 bg-surface-container-lowest/80 backdrop-blur-md">
         <div className="max-w-[1200px] mx-auto px-margin-mobile md:px-margin-desktop flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="text-center md:text-left">
+          <div className="text-center md:text-left flex flex-col items-center md:items-start">
             <div className="font-display-lg text-[18px] text-primary font-semibold mb-2">{restaurantName}</div>
-            <p className="text-body-sm text-on-surface-variant/70 max-w-xs leading-relaxed text-[12px] md:text-body-sm">
+            <p className="text-body-sm text-on-surface-variant/70 max-w-xs leading-relaxed text-[12px] md:text-body-sm mb-3">
               Online tableside ordering and secure payment fulfillment for {restaurantName}. Payments are processed securely through Razorpay.
             </p>
+            {restaurantMapLink && (
+              <a 
+                href={restaurantMapLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-[11px] font-label-caps uppercase tracking-wider text-primary hover:text-primary/80 transition-colors border border-primary/20 bg-primary/5 px-3.5 py-1.5 rounded-full gold-glow font-bold focus-ring-gold focus:outline-none"
+              >
+                <span className="material-symbols-outlined text-[16px]">location_on</span>
+                View Location
+              </a>
+            )}
           </div>
           <div className="flex flex-wrap justify-center gap-6 font-label-caps text-[11px] uppercase tracking-widest">
             <button onClick={() => setActivePolicy('restaurant-info')} className="text-on-surface-variant hover:text-primary transition-colors focus-ring-gold rounded px-1.5 py-0.5">About Restaurant</button>
@@ -1459,7 +1567,20 @@ function MenuPage() {
                       <li><strong>Registered Business/Legal Name:</strong> {restaurantName}</li>
                       <li><strong>Support Email:</strong> {restaurantEmail}</li>
                       <li><strong>Customer Support Phone:</strong> {restaurantPhone}</li>
-                      <li><strong>Physical Address:</strong> {restaurantAddress}</li>
+                      <li>
+                        <strong>Physical Address:</strong> {restaurantAddress}
+                        {restaurantMapLink && (
+                          <a 
+                            href={restaurantMapLink} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="ml-2 text-primary hover:text-gold-metallic transition-colors inline-flex items-center gap-0.5 text-xs font-bold"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">map</span>
+                            (Map Link)
+                          </a>
+                        )}
+                      </li>
                       <li><strong>Operational Hours:</strong> {restaurantHours || 'Monday - Sunday, 11:00 AM - 11:00 PM IST'}</li>
                     </ul>
 
@@ -1480,7 +1601,20 @@ function MenuPage() {
                       </div>
                       <div className="flex justify-between items-start pb-3 border-b border-outline-variant/10">
                         <span className="text-on-surface-variant font-medium">Address</span>
-                        <span className="text-on-surface font-semibold text-right max-w-xs whitespace-pre-line">{restaurantAddress || 'Not Configured'}</span>
+                        <div className="flex flex-col items-end gap-1 max-w-xs">
+                          <span className="text-on-surface font-semibold text-right whitespace-pre-line">{restaurantAddress || 'Not Configured'}</span>
+                          {restaurantMapLink && (
+                            <a 
+                              href={restaurantMapLink} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-xs text-primary hover:text-gold-metallic transition-colors flex items-center gap-1 mt-1 font-bold"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">map</span>
+                              Open in Google Maps
+                            </a>
+                          )}
+                        </div>
                       </div>
                       <div className="flex justify-between items-start pb-3 border-b border-outline-variant/10">
                         <span className="text-on-surface-variant font-medium">Contact</span>

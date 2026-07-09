@@ -23,6 +23,7 @@ export default function Settings({ user }) {
   const [restaurantFssaiInput, setRestaurantFssaiInput] = useState('');
   const [restaurantEmailInput, setRestaurantEmailInput] = useState('');
   const [restaurantHoursInput, setRestaurantHoursInput] = useState('');
+  const [restaurantMapLinkInput, setRestaurantMapLinkInput] = useState('');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [configSuccess, setConfigSuccess] = useState(false);
   const [configError, setConfigError] = useState('');
@@ -51,6 +52,7 @@ export default function Settings({ user }) {
         setRestaurantFssaiInput(profileData.restaurantFssai || '');
         setRestaurantEmailInput(profileData.restaurantEmail || '');
         setRestaurantHoursInput(profileData.restaurantHours || 'Monday - Sunday, 11:00 AM - 11:00 PM IST');
+        setRestaurantMapLinkInput(profileData.restaurantMapLink || '');
       }
     } catch (err) {
       console.error('Failed to load settings configs:', err);
@@ -162,7 +164,8 @@ export default function Settings({ user }) {
           restaurantPhone: restaurantPhoneInput,
           restaurantFssai: restaurantFssaiInput,
           restaurantEmail: restaurantEmailInput,
-          restaurantHours: restaurantHoursInput
+          restaurantHours: restaurantHoursInput,
+          restaurantMapLink: restaurantMapLinkInput
         }),
         credentials: 'include'
       });
@@ -564,6 +567,20 @@ export default function Settings({ user }) {
             />
             <p className="font-body-sm text-[11px] text-on-surface-variant opacity-70 mt-2 leading-relaxed">
               Your restaurant daily working hours displayed on the contact info page.
+            </p>
+          </div>
+
+          <div>
+            <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1.5 uppercase tracking-widest">Google Maps Link (Optional)</label>
+            <input 
+              type="url" 
+              value={restaurantMapLinkInput} 
+              onChange={e => setRestaurantMapLinkInput(e.target.value)} 
+              className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors" 
+              placeholder="e.g. https://maps.app.goo.gl/xxxxxxxx"
+            />
+            <p className="font-body-sm text-[11px] text-on-surface-variant opacity-70 mt-2 leading-relaxed">
+              Google Maps URL of your physical location, used to display a location button in the menu footer.
             </p>
           </div>
 

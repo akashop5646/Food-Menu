@@ -162,7 +162,7 @@ router.get('/restaurant-profile', async (req, res) => {
   try {
     const db = await getDB();
     const configs = await db.collection('configs').find({
-      key: { $in: ['restaurant_name', 'restaurant_address', 'restaurant_phone', 'restaurant_fssai', 'restaurant_email', 'restaurant_hours'] }
+      key: { $in: ['restaurant_name', 'restaurant_address', 'restaurant_phone', 'restaurant_fssai', 'restaurant_email', 'restaurant_hours', 'restaurant_map_link'] }
     }).toArray();
     
     const profile = {
@@ -171,7 +171,8 @@ router.get('/restaurant-profile', async (req, res) => {
       restaurantPhone: '',
       restaurantFssai: '',
       restaurantEmail: '',
-      restaurantHours: 'Monday - Sunday, 11:00 AM - 11:00 PM IST'
+      restaurantHours: 'Monday - Sunday, 11:00 AM - 11:00 PM IST',
+      restaurantMapLink: ''
     };
     
     configs.forEach(config => {
@@ -181,6 +182,7 @@ router.get('/restaurant-profile', async (req, res) => {
       if (config.key === 'restaurant_fssai') profile.restaurantFssai = config.value;
       if (config.key === 'restaurant_email') profile.restaurantEmail = config.value;
       if (config.key === 'restaurant_hours') profile.restaurantHours = config.value;
+      if (config.key === 'restaurant_map_link') profile.restaurantMapLink = config.value;
     });
     
     res.json(profile);
@@ -192,7 +194,7 @@ router.get('/restaurant-profile', async (req, res) => {
 // Update Restaurant Profile (Admin only)
 router.post('/restaurant-profile', requireAdmin, async (req, res) => {
   try {
-    const { restaurantName, restaurantAddress, restaurantPhone, restaurantFssai, restaurantEmail, restaurantHours } = req.body;
+    const { restaurantName, restaurantAddress, restaurantPhone, restaurantFssai, restaurantEmail, restaurantHours, restaurantMapLink } = req.body;
     const db = await getDB();
     
     const updates = [
@@ -201,7 +203,8 @@ router.post('/restaurant-profile', requireAdmin, async (req, res) => {
       { key: 'restaurant_phone', value: restaurantPhone || '' },
       { key: 'restaurant_fssai', value: restaurantFssai || '' },
       { key: 'restaurant_email', value: restaurantEmail || '' },
-      { key: 'restaurant_hours', value: restaurantHours || 'Monday - Sunday, 11:00 AM - 11:00 PM IST' }
+      { key: 'restaurant_hours', value: restaurantHours || 'Monday - Sunday, 11:00 AM - 11:00 PM IST' },
+      { key: 'restaurant_map_link', value: restaurantMapLink || '' }
     ];
     
     for (const update of updates) {
@@ -212,7 +215,7 @@ router.post('/restaurant-profile', requireAdmin, async (req, res) => {
       );
     }
     
-    res.json({ success: true, profile: { restaurantName, restaurantAddress, restaurantPhone, restaurantFssai, restaurantEmail, restaurantHours } });
+    res.json({ success: true, profile: { restaurantName, restaurantAddress, restaurantPhone, restaurantFssai, restaurantEmail, restaurantHours, restaurantMapLink } });
   } catch (error) {
     res.status(500).json({ error: 'Failed to update restaurant profile' });
   }
