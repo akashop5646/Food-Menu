@@ -21,6 +21,7 @@ export default function Settings({ user }) {
   const [restaurantAddressInput, setRestaurantAddressInput] = useState('');
   const [restaurantPhoneInput, setRestaurantPhoneInput] = useState('');
   const [restaurantFssaiInput, setRestaurantFssaiInput] = useState('');
+  const [restaurantEmailInput, setRestaurantEmailInput] = useState('');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [configSuccess, setConfigSuccess] = useState(false);
   const [configError, setConfigError] = useState('');
@@ -47,6 +48,7 @@ export default function Settings({ user }) {
         setRestaurantAddressInput(profileData.restaurantAddress || '');
         setRestaurantPhoneInput(profileData.restaurantPhone || '');
         setRestaurantFssaiInput(profileData.restaurantFssai || '');
+        setRestaurantEmailInput(profileData.restaurantEmail || '');
       }
     } catch (err) {
       console.error('Failed to load settings configs:', err);
@@ -156,7 +158,8 @@ export default function Settings({ user }) {
           restaurantName: restaurantNameInput,
           restaurantAddress: restaurantAddressInput,
           restaurantPhone: restaurantPhoneInput,
-          restaurantFssai: restaurantFssaiInput
+          restaurantFssai: restaurantFssaiInput,
+          restaurantEmail: restaurantEmailInput
         }),
         credentials: 'include'
       });
@@ -528,6 +531,21 @@ export default function Settings({ user }) {
             />
             <p className="font-body-sm text-[11px] text-on-surface-variant opacity-70 mt-2 leading-relaxed">
               The restaurant customer support phone number.
+            </p>
+          </div>
+
+          <div>
+            <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1.5 uppercase tracking-widest">Restaurant Contact Email *</label>
+            <input 
+              required
+              type="email" 
+              value={restaurantEmailInput} 
+              onChange={e => setRestaurantEmailInput(e.target.value)} 
+              className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors" 
+              placeholder="e.g. support@yourrestaurant.com"
+            />
+            <p className="font-body-sm text-[11px] text-on-surface-variant opacity-70 mt-2 leading-relaxed">
+              The restaurant customer support email address.
             </p>
           </div>
 

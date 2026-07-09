@@ -109,6 +109,7 @@ function MenuPage() {
   const [restaurantAddress, setRestaurantAddress] = useState('');
   const [restaurantPhone, setRestaurantPhone] = useState('');
   const [restaurantFssai, setRestaurantFssai] = useState('');
+  const [restaurantEmail, setRestaurantEmail] = useState('support@aurumtable.com');
   const [paidOrderDetails, setPaidOrderDetails] = useState(null);
   const [isOrderVerified, setIsOrderVerified] = useState(false);
   const [deviceId, setDeviceId] = useState('');
@@ -153,6 +154,7 @@ function MenuPage() {
           setRestaurantAddress(profileData.restaurantAddress || '');
           setRestaurantPhone(profileData.restaurantPhone || '');
           setRestaurantFssai(profileData.restaurantFssai || '');
+          setRestaurantEmail(profileData.restaurantEmail || 'support@aurumtable.com');
         }
 
         if (ipRes && ipRes.ok) {
@@ -1328,7 +1330,7 @@ function MenuPage() {
                 {activePolicy === 'privacy' && (
                   <>
                     <p><strong>Effective Date:</strong> June 15, 2026</p>
-                    <p>Welcome to Aurum Table (accessible via https://food-menu-pb17.vercel.app). We respect your privacy and are committed to protecting your personal data. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website and use our food ordering services.</p>
+                    <p>Welcome to {restaurantName} (accessible via https://food-menu-pb17.vercel.app). We respect your privacy and are committed to protecting your personal data. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website and use our food ordering services.</p>
                     <p>Please read this privacy policy carefully. If you do not agree with the terms of this privacy policy, please do not access the site.</p>
                     
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">1. Information We Collect</h3>
@@ -1377,20 +1379,20 @@ function MenuPage() {
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">9. Contact Us</h3>
                     <p>If you have questions or comments about this Privacy Policy, please contact us at:</p>
                     <ul className="list-none space-y-1">
-                      <li><strong>Business Name:</strong> Aurum Table</li>
-                      <li><strong>Email:</strong> support@aurumtable.com</li>
-                      <li><strong>Phone:</strong> +91 98765 43210</li>
-                      <li><strong>Physical Address:</strong> 12, Aurum Culinary Street, Bangalore, Karnataka, India - 560001</li>
+                      <li><strong>Business Name:</strong> {restaurantName}</li>
+                      <li><strong>Email:</strong> {restaurantEmail}</li>
+                      <li><strong>Phone:</strong> {restaurantPhone}</li>
+                      <li><strong>Physical Address:</strong> {restaurantAddress}</li>
                     </ul>
                   </>
                 )}
                 {activePolicy === 'terms' && (
                   <>
                     <p><strong>Effective Date:</strong> June 15, 2026</p>
-                    <p>Welcome to Aurum Table. By accessing our website (https://food-menu-pb17.vercel.app) and placing food orders, you agree to comply with and be bound by the following Terms & Conditions. Please read them carefully.</p>
+                    <p>Welcome to {restaurantName}. By accessing our website (https://food-menu-pb17.vercel.app) and placing food orders, you agree to comply with and be bound by the following Terms & Conditions. Please read them carefully.</p>
                     
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">1. Services Provided</h3>
-                    <p>Aurum Table operates a digital table ordering platform connecting customers with authorized food merchants. The restaurant is the actual seller and fulfiller of food orders, and is solely responsible for preparing and delivering meals. Payments are processed securely through Razorpay.</p>
+                    <p>{restaurantName} operates a digital table ordering platform connecting customers with authorized food merchants. The restaurant is the actual seller and fulfiller of food orders, and is solely responsible for preparing and delivering meals. Payments are processed securely through Razorpay.</p>
 
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">2. User Accounts & Responsibilities</h3>
                     <ul className="list-disc pl-5 space-y-1">
@@ -1412,19 +1414,19 @@ function MenuPage() {
                     </ul>
 
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">5. Limitation of Liability</h3>
-                    <p>Aurum Table is not liable for indirect, incidental, or consequential damages resulting from the use or inability to use our services, food preparation delays, or errors by third-party delivery partners.</p>
+                    <p>{restaurantName} is not liable for indirect, incidental, or consequential damages resulting from the use or inability to use our services, food preparation delays, or errors by third-party delivery partners.</p>
 
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">6. Governing Law</h3>
                     <p>These Terms & Conditions are governed by and construed in accordance with the laws of India. Any disputes shall be subject to the exclusive jurisdiction of the courts in Bangalore, India.</p>
 
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">7. Contact Us</h3>
-                    <p>If you have questions regarding these Terms & Conditions, contact us at support@aurumtable.com.</p>
+                    <p>If you have questions regarding these Terms & Conditions, contact us at {restaurantEmail}.</p>
                   </>
                 )}
                 {activePolicy === 'refund' && (
                   <>
                     <p><strong>Effective Date:</strong> June 15, 2026</p>
-                    <p>Aurum Table is a digital ordering technology provider. The restaurant is the actual seller of the food orders and holds sole responsibility for food preparation, fulfillment, order cancellations, and processing refunds. Online payments and refund settlements are processed securely via Razorpay.</p>
+                    <p>{restaurantName} is a digital ordering technology provider. The restaurant is the actual seller of the food orders and holds sole responsibility for food preparation, fulfillment, order cancellations, and processing refunds. Online payments and refund settlements are processed securely via Razorpay.</p>
                     
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">1. Order Cancellation</h3>
                     <ul className="list-disc pl-5 space-y-1">
@@ -1443,7 +1445,7 @@ function MenuPage() {
                     <p>Approved online refunds will be processed via Razorpay to the original payment source (Credit/Debit Card, Net Banking, or UPI) within <strong>5 to 7 business days</strong> in compliance with standard bank processing times.</p>
 
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">4. Contact Us</h3>
-                    <p>For cancellation or refund assistance, please email support@aurumtable.com or speak directly with the table captain/staff.</p>
+                    <p>For cancellation or refund assistance, please email {restaurantEmail} or speak directly with the table captain/staff.</p>
                   </>
                 )}
                 {activePolicy === 'contact' && (
@@ -1452,10 +1454,10 @@ function MenuPage() {
                     
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">📍 General Inquiries & Customer Support</h3>
                     <ul className="list-none space-y-2">
-                      <li><strong>Registered Business/Legal Name:</strong> Aurum Table</li>
-                      <li><strong>Support Email:</strong> support@aurumtable.com</li>
-                      <li><strong>Customer Support Phone:</strong> +91 98765 43210</li>
-                      <li><strong>Physical Address:</strong> 12, Aurum Culinary Street, Bangalore, Karnataka, India - 560001</li>
+                      <li><strong>Registered Business/Legal Name:</strong> {restaurantName}</li>
+                      <li><strong>Support Email:</strong> {restaurantEmail}</li>
+                      <li><strong>Customer Support Phone:</strong> {restaurantPhone}</li>
+                      <li><strong>Physical Address:</strong> {restaurantAddress}</li>
                       <li><strong>Operational Hours:</strong> Monday - Sunday, 11:00 AM - 11:00 PM IST</li>
                     </ul>
 

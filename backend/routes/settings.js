@@ -162,14 +162,15 @@ router.get('/restaurant-profile', async (req, res) => {
   try {
     const db = await getDB();
     const configs = await db.collection('configs').find({
-      key: { $in: ['restaurant_name', 'restaurant_address', 'restaurant_phone', 'restaurant_fssai'] }
+      key: { $in: ['restaurant_name', 'restaurant_address', 'restaurant_phone', 'restaurant_fssai', 'restaurant_email'] }
     }).toArray();
     
     const profile = {
       restaurantName: 'Aurum Restaurant',
       restaurantAddress: '',
       restaurantPhone: '',
-      restaurantFssai: ''
+      restaurantFssai: '',
+      restaurantEmail: ''
     };
     
     configs.forEach(config => {
@@ -177,6 +178,7 @@ router.get('/restaurant-profile', async (req, res) => {
       if (config.key === 'restaurant_address') profile.restaurantAddress = config.value;
       if (config.key === 'restaurant_phone') profile.restaurantPhone = config.value;
       if (config.key === 'restaurant_fssai') profile.restaurantFssai = config.value;
+      if (config.key === 'restaurant_email') profile.restaurantEmail = config.value;
     });
     
     res.json(profile);
@@ -188,14 +190,15 @@ router.get('/restaurant-profile', async (req, res) => {
 // Update Restaurant Profile (Admin only)
 router.post('/restaurant-profile', requireAdmin, async (req, res) => {
   try {
-    const { restaurantName, restaurantAddress, restaurantPhone, restaurantFssai } = req.body;
+    const { restaurantName, restaurantAddress, restaurantPhone, restaurantFssai, restaurantEmail } = req.body;
     const db = await getDB();
     
     const updates = [
       { key: 'restaurant_name', value: restaurantName || '' },
       { key: 'restaurant_address', value: restaurantAddress || '' },
       { key: 'restaurant_phone', value: restaurantPhone || '' },
-      { key: 'restaurant_fssai', value: restaurantFssai || '' }
+      { key: 'restaurant_fssai', value: restaurantFssai || '' },
+      { key: 'restaurant_email', value: restaurantEmail || '' }
     ];
     
     for (const update of updates) {
@@ -206,7 +209,7 @@ router.post('/restaurant-profile', requireAdmin, async (req, res) => {
       );
     }
     
-    res.json({ success: true, profile: { restaurantName, restaurantAddress, restaurantPhone, restaurantFssai } });
+    res.json({ success: true, profile: { restaurantName, restaurantAddress, restaurantPhone, restaurantFssai, restaurantEmail } });
   } catch (error) {
     res.status(500).json({ error: 'Failed to update restaurant profile' });
   }
