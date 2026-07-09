@@ -239,6 +239,7 @@ export default function OrderScanner() {
         paymentType,
         paymentStatus,
         source: mode === 'manual' ? 'MANUAL' : 'CODE',
+        _id: mode === 'manual' ? null : parsedOrder?._id || null,
         deviceId: mode === 'manual' ? null : parsedOrder?.deviceId || null,
         customerIp: mode === 'manual' ? null : parsedOrder?.customerIp || null,
         checkoutSessionId: mode === 'manual' ? null : parsedOrder?.checkoutSessionId || null,
@@ -549,6 +550,9 @@ export default function OrderScanner() {
                       </div>
 
                       <div className="px-5 py-3 border-b border-outline-variant/15 bg-surface-container-lowest flex flex-col sm:flex-row justify-between text-xs text-on-surface-variant/70 gap-2 font-mono">
+                        <div>
+                          <span className="font-semibold text-primary font-sans">Order ID:</span> {parsedOrder._id ? `#${parsedOrder._id.toString().substring(18)}` : 'N/A'}
+                        </div>
                         <div>
                           <span className="font-semibold text-primary font-sans">Customer IP:</span> {parsedOrder.customerIp || 'N/A'}
                         </div>

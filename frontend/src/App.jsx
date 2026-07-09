@@ -102,6 +102,7 @@ function MenuPage() {
   const [notification, setNotification] = useState('');
   const [selectedItem, setSelectedItem] = useState(null);
   const [verificationCode, setVerificationCode] = useState('');
+  const [pendingOrderId, setPendingOrderId] = useState('');
 
   // Razorpay configuration and states
   const [razorpayKeyId, setRazorpayKeyId] = useState('');
@@ -348,6 +349,7 @@ function MenuPage() {
   useEffect(() => {
     if (!isCheckoutOpen || !orderPayload) {
       setVerificationCode('');
+      setPendingOrderId('');
       return;
     }
     // Request a 4-digit verification code from the backend
@@ -361,6 +363,9 @@ function MenuPage() {
         const data = await res.json();
         if (res.ok && data.code) {
           setVerificationCode(data.code);
+          if (data.orderId) {
+            setPendingOrderId(data.orderId);
+          }
         } else {
           console.error('Failed to get checkout code:', data.error);
         }
@@ -401,6 +406,7 @@ function MenuPage() {
           if (data.verified && data.order && isToday(data.order.createdAt)) {
             setActiveOrder(data.order);
             setIsOrderVerified(true);
+            setPendingOrderId('');
             // Clear cart & session ID if the order was just placed/verified
             if (cart.length > 0 && checkoutSessionId && data.order.checkoutSessionId === checkoutSessionId) {
               setCart([]);
@@ -1101,11 +1107,20 @@ function MenuPage() {
                      )}
                    </div>
 
-                   {/* Code Details */}
-                   <div className="w-full bg-surface-container-high border border-outline-variant/20 rounded-lg p-4 mb-6 text-left shrink-0">
-                     <h4 className="font-body-md text-on-surface font-medium mb-1">Code includes</h4>
-                     <p className="font-body-md text-body-md text-on-surface-variant/70">Table number, selected items, quantity, item prices, and total.</p>
-                   </div>
+                    {/* Code Details */}
+                    <div className="w-full bg-surface-container-high border border-outline-variant/20 rounded-lg p-4 mb-4 text-left shrink-0">
+                      <h4 className="font-body-md text-on-surface font-medium mb-1">Code includes</h4>
+                      <p className="font-body-md text-body-md text-on-surface-variant/70">Table number, selected items, quantity, item prices, and total.</p>
+                    </div>
+
+                    {pendingOrderId && (
+                      <div className="w-full bg-surface-container-high border border-outline-variant/20 rounded-lg p-4 mb-4 text-left shrink-0">
+                        <h4 className="font-body-md text-on-surface font-medium mb-1">Pending Order ID</h4>
+                        <p className="font-mono text-sm text-primary font-bold">
+                          #{pendingOrderId.toString().substring(18)}
+                        </p>
+                      </div>
+                    )}            
                    
                    {/* Verification Status Banner */}
                    <div className="w-full bg-error/10 border border-error/20 rounded-lg p-3.5 mb-6 text-center shrink-0">

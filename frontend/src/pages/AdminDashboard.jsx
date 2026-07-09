@@ -358,11 +358,11 @@ export default function AdminDashboard() {
     // ponytail: filter payment orders locally for real-time responsiveness
     const filteredPaymentOrders = paymentOrders.filter(order => {
       // 1. Search Query
-      const searchLower = paymentsSearch.toLowerCase();
-      const tableMatches = order.table.toLowerCase().includes(searchLower);
-      const orderIdMatches = order._id.toString().toLowerCase().includes(searchLower);
+      const searchClean = paymentsSearch.toLowerCase().replace(/^#/, '');
+      const tableMatches = order.table.toLowerCase().includes(searchClean);
+      const orderIdMatches = order._id.toString().toLowerCase().includes(searchClean);
       const itemsText = order.items.map(item => `${item.quantity}x ${item.name}`).join(', ').toLowerCase();
-      const itemsMatches = itemsText.includes(searchLower);
+      const itemsMatches = itemsText.includes(searchClean);
       const matchesSearch = !paymentsSearch || tableMatches || orderIdMatches || itemsMatches;
 
       // 2. Status Filter
@@ -486,6 +486,7 @@ export default function AdminDashboard() {
                 <table className="w-full text-left border-collapse text-sm">
                   <thead>
                     <tr className="border-b border-outline-variant/20 text-on-surface-variant font-label-caps text-[11px] uppercase tracking-widest bg-surface-container-lowest/50">
+                      <th className="py-3 px-4">Order ID</th>
                       <th className="py-3 px-4">Date</th>
                       <th className="py-3 px-4">Table</th>
                       <th className="py-3 px-4">Items Summary</th>
@@ -504,6 +505,9 @@ export default function AdminDashboard() {
                       
                       return (
                         <tr key={order._id} className="hover:bg-surface-container-lowest/30 transition-colors">
+                          <td className="py-3.5 px-4 font-mono text-primary font-bold text-xs">
+                            #{order._id.toString().substring(18)}
+                          </td>
                           <td className="py-3.5 px-4 font-body-sm text-on-surface-variant whitespace-nowrap">{dateStr}</td>
                           <td className="py-3.5 px-4">
                             <div className="flex items-center gap-1.5">
@@ -564,9 +568,12 @@ export default function AdminDashboard() {
                     <div key={order._id} className="bg-surface-container-low border border-outline-variant/20 rounded-2xl p-4 flex flex-col gap-3 shadow-md">
                       <div className="flex justify-between items-start gap-2">
                         <div>
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="material-symbols-outlined text-primary text-base">table_restaurant</span>
                             <span className="font-headline-sm text-base text-primary font-bold">{order.table}</span>
+                            <span className="font-mono text-[10px] text-primary font-bold bg-primary/10 border border-primary/20 rounded px-1.5 py-0.5 ml-1">
+                              #{order._id.toString().substring(18)}
+                            </span>
                           </div>
                           {order.location && (
                             <span className="text-xs text-on-surface-variant font-normal block mt-0.5">📍 {order.location}</span>

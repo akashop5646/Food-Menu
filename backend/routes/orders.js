@@ -61,15 +61,17 @@ router.post('/checkout-code', async (req, res) => {
       return res.status(503).json({ error: 'Could not generate a unique code. Please try again.' });
     }
 
+    const orderId = new ObjectId();
+
     await db.collection('checkout_codes').insertOne({
       code,
-      orderPayload: { table, location, items, total, deviceId, customerIp, checkoutSessionId },
+      orderPayload: { _id: orderId, table, location, items, total, deviceId, customerIp, checkoutSessionId },
       checkoutSessionId: checkoutSessionId || null,
       used: false,
       createdAt: new Date()
     });
 
-    res.json({ code });
+    res.json({ code, orderId });
   } catch (error) {
     console.error('Failed to generate checkout code:', error);
     res.status(500).json({ error: 'Failed to generate checkout code.' });
@@ -186,7 +188,9 @@ router.post('/', requireAuth, async (req, res) => {
       ? paymentType.trim()
       : 'LATER';
 
+    const orderIdVal = req.body._id;
     const newOrder = {
+      _id: orderIdVal && ObjectId.isValid(orderIdVal) ? new ObjectId(orderIdVal) : new ObjectId(),
       table,
       location: location || null,
       tableId: tableId || null,
@@ -211,7 +215,6 @@ router.post('/', requireAuth, async (req, res) => {
 
     const db = await getDB();
     const result = await db.collection('orders').insertOne(newOrder);
-    newOrder._id = result.insertedId;
 
     // Clean up any remaining checkout codes for this checkoutSessionId so they don't pile up
     if (checkoutSessionId) {
