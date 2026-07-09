@@ -105,6 +105,11 @@ function MenuPage() {
 
   // Razorpay configuration and states
   const [razorpayKeyId, setRazorpayKeyId] = useState('');
+  const [restaurantName, setRestaurantName] = useState('Aurum Restaurant');
+  const [restaurantAddress, setRestaurantAddress] = useState('');
+  const [restaurantPhone, setRestaurantPhone] = useState('');
+  const [restaurantFssai, setRestaurantFssai] = useState('');
+  const [paidOrderDetails, setPaidOrderDetails] = useState(null);
   const [isOrderVerified, setIsOrderVerified] = useState(false);
   const [deviceId, setDeviceId] = useState('');
   const [customerIp, setCustomerIp] = useState('');
@@ -123,11 +128,12 @@ function MenuPage() {
 
     const fetchMenu = async () => {
       try {
-        const [itemsRes, catsRes, razorpayRes, ipRes] = await Promise.all([
+        const [itemsRes, catsRes, razorpayRes, ipRes, profileRes] = await Promise.all([
           fetch(API_BASE + '/api/menu'),
           fetch(API_BASE + '/api/categories'),
           fetch(API_BASE + '/api/settings/razorpay'),
-          fetch(API_BASE + '/api/auth/ip').catch(() => null)
+          fetch(API_BASE + '/api/auth/ip').catch(() => null),
+          fetch(API_BASE + '/api/settings/restaurant-profile').catch(() => null)
         ]);
         const items = await itemsRes.json();
         const cats = await catsRes.json();
@@ -140,6 +146,14 @@ function MenuPage() {
         setMenuItems(Array.isArray(items) ? items : []);
         setCategories(['All', ...(Array.isArray(cats) ? cats.map(c => c.name) : [])]);
         setRazorpayKeyId(razorpayData.razorpayKeyId || '');
+
+        if (profileRes && profileRes.ok) {
+          const profileData = await profileRes.json();
+          setRestaurantName(profileData.restaurantName || 'Aurum Restaurant');
+          setRestaurantAddress(profileData.restaurantAddress || '');
+          setRestaurantPhone(profileData.restaurantPhone || '');
+          setRestaurantFssai(profileData.restaurantFssai || '');
+        }
 
         if (ipRes && ipRes.ok) {
           const ipData = await ipRes.json();
@@ -360,6 +374,7 @@ function MenuPage() {
             if (!verifyRes.ok) throw new Error(verifyData.error || 'Payment verification failed');
 
             showNotification('Payment successful! Your order is being prepared.');
+            setPaidOrderDetails({ orderId: targetOrderId || 'session_order', amount: activeTotal });
             setIsCheckoutOpen(false);
           } catch (err) {
             console.error(err);
@@ -417,8 +432,13 @@ function MenuPage() {
           </button>
         </div>
         
-        <div className="font-display-lg text-display-lg-mobile md:text-[24px] text-primary tracking-tighter text-center select-none font-semibold">
-          Aurum Table
+        <div className="flex flex-col items-center select-none max-w-[50%] md:max-w-[40%]">
+          <div className="font-display-lg text-[16px] sm:text-display-lg-mobile md:text-[22px] text-primary tracking-tighter text-center truncate font-semibold w-full">
+            {restaurantName}
+          </div>
+          <div className="text-[8px] sm:text-[9px] font-label-caps text-on-surface-variant/80 uppercase tracking-widest text-center mt-0.5 truncate w-full">
+            Prepared and fulfilled by {restaurantName}
+          </div>
         </div>
         
         <button 
@@ -835,6 +855,9 @@ function MenuPage() {
             </div>
 
             <div className="p-6 border-t border-outline-variant/20 bg-surface-container-lowest">
+              <div className="text-[11px] text-on-surface-variant/80 font-medium mb-3 text-center border-b border-outline-variant/10 pb-2">
+                Sold & fulfilled by <span className="font-bold text-on-surface">{restaurantName}</span>
+              </div>
               <div className="flex justify-between items-center mb-4">
                 <span className="font-body-lg text-body-lg text-on-surface">Subtotal</span>
                 <span className="font-price-display text-price-display text-primary">₹{cartTotal.toFixed(2)}</span>
@@ -980,6 +1003,11 @@ function MenuPage() {
                           </span>
                         </div>
                         
+                        {/* Seller Identity */}
+                        <div className="text-[10px] font-label-caps text-on-surface-variant/75 uppercase tracking-widest font-semibold">
+                          {restaurantName}
+                        </div>
+                        
                         {/* Items */}
                         <div className="space-y-1">
                           {order.items.map((item, itemIdx) => (
@@ -1017,6 +1045,14 @@ function MenuPage() {
               <div className="w-full space-y-4 shrink-0">
                 {(!activeOrder || unpaidTotal > 0) ? (
                   <>
+                    {/* Seller & Fulfillment Disclosure */}
+                    <div className="bg-surface-container-high/60 border border-outline-variant/20 rounded-xl p-3 text-[11px] text-on-surface-variant/90 leading-relaxed text-left">
+                      <strong className="text-on-surface font-semibold block mb-1">Seller & Fulfillment</strong>
+                      <p>
+                        <span className="font-semibold text-on-surface">{restaurantName}</span> prepares and fulfills this order. <span className="font-semibold text-on-surface">{restaurantName}</span> provides the digital ordering technology and facilitates online payment processing. Payments are securely processed through Razorpay.
+                      </p>
+                    </div>
+
                     <button 
                       onClick={handlePayNow}
                       className={`w-full py-3 rounded font-label-caps text-label-caps uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all ${
@@ -1033,6 +1069,11 @@ function MenuPage() {
                     >
                       <span className="material-symbols-outlined">schedule</span> Pay Later
                     </button>
+
+                    <div className="text-[10px] text-on-surface-variant/60 flex items-center justify-center gap-1 mt-1 font-medium">
+                      <span className="material-symbols-outlined text-[12px] text-green-500">lock</span>
+                      <span>Secure payment powered by Razorpay</span>
+                    </div>
                   </>
                 ) : (
                   <button 
@@ -1228,12 +1269,13 @@ function MenuPage() {
       <footer className="mt-20 border-t border-outline-variant/15 py-10 bg-surface-container-lowest/80 backdrop-blur-md">
         <div className="max-w-[1200px] mx-auto px-margin-mobile md:px-margin-desktop flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="text-center md:text-left">
-            <div className="font-display-lg text-[18px] text-primary font-semibold mb-2">Aurum Table</div>
+            <div className="font-display-lg text-[18px] text-primary font-semibold mb-2">{restaurantName}</div>
             <p className="text-body-sm text-on-surface-variant/70 max-w-xs leading-relaxed text-[12px] md:text-body-sm">
-              Experience culinary excellence at your table. Safe payments, instant order tracking, and split settlements.
+              Online tableside ordering and secure payment fulfillment for {restaurantName}. Payments are processed securely through Razorpay.
             </p>
           </div>
           <div className="flex flex-wrap justify-center gap-6 font-label-caps text-[11px] uppercase tracking-widest">
+            <button onClick={() => setActivePolicy('restaurant-info')} className="text-on-surface-variant hover:text-primary transition-colors focus-ring-gold rounded px-1.5 py-0.5">About Restaurant</button>
             <button onClick={() => setActivePolicy('privacy')} className="text-on-surface-variant hover:text-primary transition-colors focus-ring-gold rounded px-1.5 py-0.5">Privacy Policy</button>
             <button onClick={() => setActivePolicy('terms')} className="text-on-surface-variant hover:text-primary transition-colors focus-ring-gold rounded px-1.5 py-0.5">Terms & Conditions</button>
             <button onClick={() => setActivePolicy('refund')} className="text-on-surface-variant hover:text-primary transition-colors focus-ring-gold rounded px-1.5 py-0.5">Cancellation & Refund</button>
@@ -1241,7 +1283,7 @@ function MenuPage() {
           </div>
         </div>
         <div className="max-w-[1200px] mx-auto px-margin-mobile md:px-margin-desktop text-center mt-8 pt-4 border-t border-outline-variant/10 text-[10px] text-on-surface-variant/40">
-          © 2026 Aurum Table. All rights reserved. Powered by Razorpay.
+          © 2026 {restaurantName}. All rights reserved. Powered by Razorpay.
         </div>
       </footer>
 
@@ -1271,6 +1313,7 @@ function MenuPage() {
                   {activePolicy === 'terms' && 'Terms & Conditions'}
                   {activePolicy === 'refund' && 'Cancellation & Refund Policy'}
                   {activePolicy === 'contact' && 'Contact Us'}
+                  {activePolicy === 'restaurant-info' && 'Restaurant Information'}
                 </h2>
                 <button 
                   onClick={() => setActivePolicy(null)}
@@ -1347,7 +1390,7 @@ function MenuPage() {
                     <p>Welcome to Aurum Table. By accessing our website (https://food-menu-pb17.vercel.app) and placing food orders, you agree to comply with and be bound by the following Terms & Conditions. Please read them carefully.</p>
                     
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">1. Services Provided</h3>
-                    <p>Aurum Table operates a digital table ordering and food delivery platform connecting customers with authorized food merchants and payment systems (Razorpay).</p>
+                    <p>Aurum Table operates a digital table ordering platform connecting customers with authorized food merchants. The restaurant is the actual seller and fulfiller of food orders, and is solely responsible for preparing and delivering meals. Payments are processed securely through Razorpay.</p>
 
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">2. User Accounts & Responsibilities</h3>
                     <ul className="list-disc pl-5 space-y-1">
@@ -1381,7 +1424,7 @@ function MenuPage() {
                 {activePolicy === 'refund' && (
                   <>
                     <p><strong>Effective Date:</strong> June 15, 2026</p>
-                    <p>At Aurum Table, we strive to provide a seamless dining and ordering experience. Please review our policies regarding order cancellations and refund requests.</p>
+                    <p>Aurum Table is a digital ordering technology provider. The restaurant is the actual seller of the food orders and holds sole responsibility for food preparation, fulfillment, order cancellations, and processing refunds. Online payments and refund settlements are processed securely via Razorpay.</p>
                     
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">1. Order Cancellation</h3>
                     <ul className="list-disc pl-5 space-y-1">
@@ -1420,6 +1463,32 @@ function MenuPage() {
                     <p>If you are currently dining at our restaurant, you can call for waiter verification or bill requests directly through your table QR code interface. For urgent billing issues, please contact the billing desk at our physical counter.</p>
                   </>
                 )}
+                {activePolicy === 'restaurant-info' && (
+                  <>
+                    <p className="text-body-md text-on-surface-variant mb-6">
+                      Official trade, licensing, and compliance information for {restaurantName}.
+                    </p>
+                    
+                    <div className="bg-surface-container-high/40 border border-outline-variant/10 rounded-2xl p-5 flex flex-col gap-4 text-sm">
+                      <div className="flex justify-between items-start pb-3 border-b border-outline-variant/10">
+                        <span className="text-on-surface-variant font-medium">Restaurant Name</span>
+                        <span className="text-on-surface font-semibold text-right max-w-xs">{restaurantName}</span>
+                      </div>
+                      <div className="flex justify-between items-start pb-3 border-b border-outline-variant/10">
+                        <span className="text-on-surface-variant font-medium">Address</span>
+                        <span className="text-on-surface font-semibold text-right max-w-xs whitespace-pre-line">{restaurantAddress || 'Not Configured'}</span>
+                      </div>
+                      <div className="flex justify-between items-start pb-3 border-b border-outline-variant/10">
+                        <span className="text-on-surface-variant font-medium">Contact</span>
+                        <span className="text-on-surface font-semibold text-right">{restaurantPhone || 'Not Configured'}</span>
+                      </div>
+                      <div className="flex justify-between items-start">
+                        <span className="text-on-surface-variant font-medium">FSSAI Licence No.</span>
+                        <span className="text-on-surface font-mono font-bold text-right">{restaurantFssai || 'Not Applicable'}</span>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
               
               <div className="p-4 border-t border-outline-variant/10 bg-surface-container-lowest flex justify-end shrink-0">
@@ -1430,6 +1499,65 @@ function MenuPage() {
                   Close
                 </button>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Payment Success Confirmation Modal */}
+      <AnimatePresence>
+        {paidOrderDetails && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/85 backdrop-blur-md z-[120] flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-surface-container w-full max-w-md rounded-3xl p-6 md:p-8 border border-primary/30 shadow-2xl flex flex-col items-center text-center relative overflow-hidden"
+            >
+              {/* Background atmospheric glows */}
+              <div className="absolute top-0 w-full h-32 bg-gradient-to-b from-primary/10 to-transparent pointer-events-none" />
+
+              <div className="w-16 h-16 rounded-full bg-primary/15 border-2 border-primary text-primary flex items-center justify-center mb-6 relative z-10">
+                <span className="material-symbols-outlined text-3xl font-bold animate-[pulse_2s_infinite]">check</span>
+              </div>
+
+              <h2 className="font-headline-md text-2xl text-primary font-bold mb-1 relative z-10">Order Confirmed!</h2>
+              <p className="text-[11px] font-label-caps text-on-surface-variant/80 uppercase tracking-widest mb-6">Prepared and fulfilled by {restaurantName}</p>
+
+              <div className="w-full bg-surface-container-high/60 border border-outline-variant/15 rounded-2xl p-4 mb-6 flex flex-col gap-3 text-sm text-left">
+                <div className="flex justify-between items-center pb-2 border-b border-outline-variant/10 text-xs">
+                  <span className="text-on-surface-variant">Merchant Seller</span>
+                  <span className="font-semibold text-on-surface">{restaurantName}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-on-surface-variant">Order ID</span>
+                  <span className="font-mono text-primary font-bold">#{paidOrderDetails.orderId.toString().substring(18)}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs pt-1">
+                  <span className="text-on-surface-variant">Amount Paid</span>
+                  <span className="font-price-display text-primary font-semibold">₹{paidOrderDetails.amount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs pt-2 border-t border-outline-variant/10">
+                  <span className="text-on-surface-variant">Payment Status</span>
+                  <span className="px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-bold font-label-caps uppercase tracking-wider text-[9px]">PAID</span>
+                </div>
+              </div>
+
+              <p className="text-xs text-on-surface-variant/80 mb-6 leading-relaxed">
+                Your payment was processed securely. The kitchen has received your order and is starting preparation.
+              </p>
+
+              <button 
+                onClick={() => setPaidOrderDetails(null)}
+                className="w-full bg-gold-metallic text-on-primary font-label-caps text-xs py-3.5 rounded-xl uppercase tracking-widest gold-glow font-bold transition-all active:scale-95"
+              >
+                Start Tracking Order
+              </button>
             </motion.div>
           </motion.div>
         )}

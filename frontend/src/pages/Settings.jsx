@@ -16,6 +16,15 @@ export default function Settings({ user }) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [actionError, setActionError] = useState('');
 
+  // General Config states
+  const [restaurantNameInput, setRestaurantNameInput] = useState('');
+  const [restaurantAddressInput, setRestaurantAddressInput] = useState('');
+  const [restaurantPhoneInput, setRestaurantPhoneInput] = useState('');
+  const [restaurantFssaiInput, setRestaurantFssaiInput] = useState('');
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [configSuccess, setConfigSuccess] = useState(false);
+  const [configError, setConfigError] = useState('');
+
   const fetchStaff = async () => {
     try {
       const res = await fetch(API_BASE + '/api/settings/staff', { credentials: 'include' });
@@ -29,8 +38,24 @@ export default function Settings({ user }) {
     }
   };
 
+  const fetchConfigs = async () => {
+    try {
+      const profileRes = await fetch(API_BASE + '/api/settings/restaurant-profile', { credentials: 'include' });
+      if (profileRes.ok) {
+        const profileData = await profileRes.json();
+        setRestaurantNameInput(profileData.restaurantName || 'Aurum Restaurant');
+        setRestaurantAddressInput(profileData.restaurantAddress || '');
+        setRestaurantPhoneInput(profileData.restaurantPhone || '');
+        setRestaurantFssaiInput(profileData.restaurantFssai || '');
+      }
+    } catch (err) {
+      console.error('Failed to load settings configs:', err);
+    }
+  };
+
   useEffect(() => {
     fetchStaff();
+    fetchConfigs();
   }, []);
 
   const handleUpdateRole = async (memberId, newRole) => {
@@ -116,6 +141,40 @@ export default function Settings({ user }) {
     if (email) return email.charAt(0).toUpperCase();
     return '?';
   };
+
+  const handleConfigSubmit = async (e) => {
+    e.preventDefault();
+    setIsSavingConfig(true);
+    setConfigError('');
+    setConfigSuccess(false);
+
+    try {
+      const profileRes = await fetch(API_BASE + '/api/settings/restaurant-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          restaurantName: restaurantNameInput,
+          restaurantAddress: restaurantAddressInput,
+          restaurantPhone: restaurantPhoneInput,
+          restaurantFssai: restaurantFssaiInput
+        }),
+        credentials: 'include'
+      });
+
+      const profileData = await profileRes.json();
+
+      if (!profileRes.ok) throw new Error(profileData.error || 'Failed to save restaurant profile');
+
+      setConfigSuccess(true);
+      setTimeout(() => setConfigSuccess(false), 3000);
+    } catch (err) {
+      setConfigError(err.message);
+    } finally {
+      setIsSavingConfig(false);
+    }
+  };
+
+
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-margin-mobile md:px-0 flex flex-col gap-8">
@@ -402,6 +461,104 @@ export default function Settings({ user }) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* General Configurations Card */}
+      <div className="bg-surface-container rounded-2xl border border-outline-variant/20 shadow-lg overflow-hidden">
+        {/* Header */}
+        <div className="p-6 md:p-8 border-b border-outline-variant/10">
+          <h2 className="font-headline-md text-2xl text-on-surface flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary">settings</span>
+            General Configurations
+          </h2>
+          <p className="font-body-md text-on-surface-variant mt-1">Configure restaurant profile name and settlement parameters</p>
+        </div>
+
+        {/* Content */}
+        <form onSubmit={handleConfigSubmit} className="p-6 md:p-8 flex flex-col gap-6">
+          {configSuccess && (
+            <div className="bg-primary/10 text-primary px-4 py-3 rounded-lg border border-primary/20 text-sm font-medium">
+              Configurations saved successfully!
+            </div>
+          )}
+          {configError && (
+            <div className="bg-error/10 text-error px-4 py-3 rounded-lg border border-error/20 text-sm font-medium">
+              {configError}
+            </div>
+          )}
+
+          <div>
+            <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1.5 uppercase tracking-widest">Restaurant Real/Trade Name *</label>
+            <input 
+              required 
+              type="text" 
+              value={restaurantNameInput} 
+              onChange={e => setRestaurantNameInput(e.target.value)} 
+              className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors" 
+              placeholder="e.g. Aurum Restaurant & Cafe"
+            />
+            <p className="font-body-sm text-[11px] text-on-surface-variant opacity-70 mt-2 leading-relaxed">
+              This name will be displayed prominently across all customer touchpoints (menu header, cart summary, success confirmation, and invoices) as required by Razorpay payee guidelines.
+            </p>
+          </div>
+
+          <div>
+            <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1.5 uppercase tracking-widest">Restaurant Address *</label>
+            <textarea 
+              required
+              rows={2}
+              value={restaurantAddressInput} 
+              onChange={e => setRestaurantAddressInput(e.target.value)} 
+              className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors resize-none font-sans" 
+              placeholder="e.g. 12, Aurum Culinary Street, Bangalore, India - 560001"
+            />
+            <p className="font-body-sm text-[11px] text-on-surface-variant opacity-70 mt-1 leading-relaxed">
+              The physical location of your restaurant, printed on invoices and compliant policy disclosures.
+            </p>
+          </div>
+
+          <div>
+            <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1.5 uppercase tracking-widest">Restaurant Contact Number *</label>
+            <input 
+              required
+              type="tel" 
+              value={restaurantPhoneInput} 
+              onChange={e => setRestaurantPhoneInput(e.target.value)} 
+              className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors" 
+              placeholder="e.g. +91 98765 43210"
+            />
+            <p className="font-body-sm text-[11px] text-on-surface-variant opacity-70 mt-2 leading-relaxed">
+              The restaurant customer support phone number.
+            </p>
+          </div>
+
+          <div>
+            <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1.5 uppercase tracking-widest">FSSAI Licence Number (Optional)</label>
+            <input 
+              type="text" 
+              value={restaurantFssaiInput} 
+              onChange={e => setRestaurantFssaiInput(e.target.value)} 
+              className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors" 
+              placeholder="e.g. 12345678901234"
+            />
+            <p className="font-body-sm text-[11px] text-on-surface-variant opacity-70 mt-2 leading-relaxed">
+              Food Safety and Standards Authority of India registration number.
+            </p>
+          </div>
+
+
+
+          <div className="flex justify-end pt-4 border-t border-outline-variant/10">
+            <button 
+              type="submit" 
+              disabled={isSavingConfig}
+              className="bg-primary text-on-primary px-6 py-2.5 rounded-lg font-label-caps text-[12px] uppercase tracking-widest gold-glow disabled:opacity-50 flex items-center gap-2"
+            >
+              {isSavingConfig ? <span className="material-symbols-outlined animate-spin text-[16px]">progress_activity</span> : null}
+              Save Configurations
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

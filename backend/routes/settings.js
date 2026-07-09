@@ -130,19 +130,85 @@ router.get('/razorpay', async (req, res) => {
   }
 });
 
-// Update Razorpay Key ID (Admin only)
-router.post('/razorpay', requireAdmin, async (req, res) => {
+// Get Restaurant Name (Public endpoint)
+router.get('/restaurant-name', async (req, res) => {
   try {
-    const { razorpayKeyId } = req.body;
+    const db = await getDB();
+    const config = await db.collection('configs').findOne({ key: 'restaurant_name' });
+    res.json({ restaurantName: config ? config.value : 'Aurum Restaurant' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch restaurant name' });
+  }
+});
+
+// Update Restaurant Name (Admin only)
+router.post('/restaurant-name', requireAdmin, async (req, res) => {
+  try {
+    const { restaurantName } = req.body;
     const db = await getDB();
     await db.collection('configs').updateOne(
-      { key: 'razorpay_key_id' },
-      { $set: { value: razorpayKeyId || '' } },
+      { key: 'restaurant_name' },
+      { $set: { value: restaurantName || '' } },
       { upsert: true }
     );
-    res.json({ success: true, razorpayKeyId });
+    res.json({ success: true, restaurantName });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to update Razorpay settings' });
+    res.status(500).json({ error: 'Failed to update restaurant name' });
+  }
+});
+
+// Get Restaurant Profile (Public endpoint)
+router.get('/restaurant-profile', async (req, res) => {
+  try {
+    const db = await getDB();
+    const configs = await db.collection('configs').find({
+      key: { $in: ['restaurant_name', 'restaurant_address', 'restaurant_phone', 'restaurant_fssai'] }
+    }).toArray();
+    
+    const profile = {
+      restaurantName: 'Aurum Restaurant',
+      restaurantAddress: '',
+      restaurantPhone: '',
+      restaurantFssai: ''
+    };
+    
+    configs.forEach(config => {
+      if (config.key === 'restaurant_name') profile.restaurantName = config.value;
+      if (config.key === 'restaurant_address') profile.restaurantAddress = config.value;
+      if (config.key === 'restaurant_phone') profile.restaurantPhone = config.value;
+      if (config.key === 'restaurant_fssai') profile.restaurantFssai = config.value;
+    });
+    
+    res.json(profile);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch restaurant profile' });
+  }
+});
+
+// Update Restaurant Profile (Admin only)
+router.post('/restaurant-profile', requireAdmin, async (req, res) => {
+  try {
+    const { restaurantName, restaurantAddress, restaurantPhone, restaurantFssai } = req.body;
+    const db = await getDB();
+    
+    const updates = [
+      { key: 'restaurant_name', value: restaurantName || '' },
+      { key: 'restaurant_address', value: restaurantAddress || '' },
+      { key: 'restaurant_phone', value: restaurantPhone || '' },
+      { key: 'restaurant_fssai', value: restaurantFssai || '' }
+    ];
+    
+    for (const update of updates) {
+      await db.collection('configs').updateOne(
+        { key: update.key },
+        { $set: { value: update.value } },
+        { upsert: true }
+      );
+    }
+    
+    res.json({ success: true, profile: { restaurantName, restaurantAddress, restaurantPhone, restaurantFssai } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update restaurant profile' });
   }
 });
 
