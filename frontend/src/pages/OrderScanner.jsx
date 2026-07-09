@@ -551,7 +551,10 @@ export default function OrderScanner() {
 
                       <div className="px-5 py-3 border-b border-outline-variant/15 bg-surface-container-lowest flex flex-col sm:flex-row justify-between text-xs text-on-surface-variant/70 gap-2 font-mono">
                         <div>
-                          <span className="font-semibold text-primary font-sans">Order ID:</span> {parsedOrder._id ? `#${parsedOrder._id.toString().substring(18)}` : 'N/A'}
+                          <span className="font-semibold text-primary font-sans text-xs">Order ID:</span>{' '}
+                          <span className="text-primary font-bold text-sm tracking-wide">
+                            {parsedOrder._id ? `#${parsedOrder._id.toString().substring(18)}` : 'N/A'}
+                          </span>
                         </div>
                         <div>
                           <span className="font-semibold text-primary font-sans">Customer IP:</span> {parsedOrder.customerIp || 'N/A'}

@@ -505,7 +505,7 @@ export default function AdminDashboard() {
                       
                       return (
                         <tr key={order._id} className="hover:bg-surface-container-lowest/30 transition-colors">
-                          <td className="py-3.5 px-4 font-mono text-primary font-bold text-xs">
+                          <td className="py-3.5 px-4 font-mono text-primary font-bold text-sm tracking-wide">
                             #{order._id.toString().substring(18)}
                           </td>
                           <td className="py-3.5 px-4 font-body-sm text-on-surface-variant whitespace-nowrap">{dateStr}</td>
@@ -571,7 +571,7 @@ export default function AdminDashboard() {
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="material-symbols-outlined text-primary text-base">table_restaurant</span>
                             <span className="font-headline-sm text-base text-primary font-bold">{order.table}</span>
-                            <span className="font-mono text-[10px] text-primary font-bold bg-primary/10 border border-primary/20 rounded px-1.5 py-0.5 ml-1">
+                            <span className="font-mono text-xs text-primary font-bold bg-primary/10 border border-primary/20 rounded px-1.5 py-0.5 ml-1">
                               #{order._id.toString().substring(18)}
                             </span>
                           </div>

@@ -1116,7 +1116,7 @@ function MenuPage() {
                     {pendingOrderId && (
                       <div className="w-full bg-surface-container-high border border-outline-variant/20 rounded-lg p-4 mb-4 text-left shrink-0">
                         <h4 className="font-body-md text-on-surface font-medium mb-1">Pending Order ID</h4>
-                        <p className="font-mono text-sm text-primary font-bold">
+                        <p className="font-mono text-base text-primary font-bold tracking-wide">
                           #{pendingOrderId.toString().substring(18)}
                         </p>
                       </div>
@@ -1147,8 +1147,8 @@ function MenuPage() {
                     {ordersList.map((order, idx) => (
                       <div key={order._id || idx} className="bg-surface-container-high border border-outline-variant/15 rounded-xl p-3.5 flex flex-col gap-2 shadow-sm">
                         {/* Header */}
-                        <div className="flex justify-between items-center text-[11px] font-semibold border-b border-outline-variant/10 pb-1.5 font-sans">
-                          <span className="text-primary font-mono">Order #{order._id.toString().substring(18)}</span>
+                        <div className="flex justify-between items-center text-xs font-semibold border-b border-outline-variant/10 pb-1.5 font-sans">
+                          <span className="text-primary font-mono text-[13px] font-bold">Order #{order._id.toString().substring(18)}</span>
                           <span className="text-on-surface-variant/80 font-normal">
                             {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
