@@ -218,6 +218,37 @@ router.post('/', requireAuth, async (req, res) => {
       });
     }
 
+    // Fetch convenience fee configuration
+    const feeConfigs = await db.collection('configs').find({
+      key: { $in: ['convenience_fee_enabled', 'convenience_fee_amount'] }
+    }).toArray();
+
+    let feeEnabled = false;
+    let feeAmount = 0;
+    let feeAmountValid = false;
+
+    feeConfigs.forEach(c => {
+      if (c.key === 'convenience_fee_enabled') {
+        feeEnabled = typeof c.value === 'boolean' ? c.value : c.value === 'true';
+      }
+      if (c.key === 'convenience_fee_amount') {
+        const val = Number(c.value);
+        if (Number.isFinite(val) && val >= 0 && val <= 20) {
+          feeAmount = val;
+          feeAmountValid = true;
+        }
+      }
+    });
+
+    // Safely normalize malformed stored config to disabled/0
+    if (feeEnabled && !feeAmountValid) {
+      feeEnabled = false;
+      feeAmount = 0;
+    }
+
+    const convenienceFee = feeEnabled ? feeAmount : 0;
+    const totalPayable = Number((calculatedTotal + convenienceFee).toFixed(2));
+
     const orderIdVal = req.body._id;
     const newOrder = {
       _id: orderIdVal && ObjectId.isValid(orderIdVal) ? new ObjectId(orderIdVal) : new ObjectId(),
@@ -227,6 +258,8 @@ router.post('/', requireAuth, async (req, res) => {
       locationId: locationId || null,
       items: verifiedItems,
       total: Number(calculatedTotal.toFixed(2)),
+      convenienceFee: Number(convenienceFee),
+      totalPayable: Number(totalPayable),
       paymentType: normalizedPaymentType,
       paymentStatus,
       source: source || 'QR',
@@ -359,8 +392,8 @@ router.post('/razorpay-order', async (req, res) => {
       return res.status(400).json({ error: 'Order has already been paid' });
     }
 
-    const amount = order.total;
-    if (!amount || amount <= 0) {
+    const amount = order.totalPayable ?? order.total;
+    if (amount === undefined || amount === null || isNaN(amount) || amount <= 0) {
       return res.status(400).json({ error: 'Invalid order amount' });
     }
 

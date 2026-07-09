@@ -120,6 +120,10 @@ function MenuPage() {
   const [checkoutSessionId, setCheckoutSessionId] = useState('');
   const [activePolicy, setActivePolicy] = useState(null);
 
+  // Convenience Fee states
+  const [globalConvenienceFeeEnabled, setGlobalConvenienceFeeEnabled] = useState(false);
+  const [globalConvenienceFeeAmount, setGlobalConvenienceFeeAmount] = useState(0);
+
   // Pagination and lazy loading states
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
@@ -143,11 +147,12 @@ function MenuPage() {
 
     const fetchInitialData = async () => {
       try {
-        const [catsRes, razorpayRes, ipRes, profileRes] = await Promise.all([
+        const [catsRes, razorpayRes, ipRes, profileRes, feeRes] = await Promise.all([
           fetch(API_BASE + '/api/categories'),
           fetch(API_BASE + '/api/settings/razorpay'),
           fetch(API_BASE + '/api/auth/ip').catch(() => null),
-          fetch(API_BASE + '/api/settings/restaurant-profile').catch(() => null)
+          fetch(API_BASE + '/api/settings/restaurant-profile').catch(() => null),
+          fetch(API_BASE + '/api/settings/convenience-fee').catch(() => null)
         ]);
 
         const cats = await catsRes.json();
@@ -169,6 +174,12 @@ function MenuPage() {
           setRestaurantEmail(profileData.restaurantEmail || 'support@aurumtable.com');
           setRestaurantHours(profileData.restaurantHours || 'Monday - Sunday, 11:00 AM - 11:00 PM IST');
           setRestaurantMapLink(profileData.restaurantMapLink || '');
+        }
+
+        if (feeRes && feeRes.ok) {
+          const feeData = await feeRes.json();
+          setGlobalConvenienceFeeEnabled(!!feeData.enabled);
+          setGlobalConvenienceFeeAmount(Number(feeData.amount) || 0);
         }
 
         if (ipRes && ipRes.ok) {
@@ -293,8 +304,9 @@ function MenuPage() {
   const ordersList = activeOrders.length > 0 ? activeOrders : (activeOrder ? [activeOrder] : []);
   const sessionTotal = ordersList.reduce((sum, o) => sum + o.total, 0);
   const sessionItemsCount = ordersList.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.quantity, 0), 0);
-  const unpaidOrders = ordersList.filter(o => o.paymentStatus !== 'PAID');
   const unpaidTotal = unpaidOrders.reduce((sum, o) => sum + o.total, 0);
+  const unpaidTotalPayable = unpaidOrders.reduce((sum, o) => sum + (o.totalPayable ?? o.total), 0);
+  const unpaidConvenienceFee = unpaidOrders.reduce((sum, o) => sum + (o.convenienceFee ?? 0), 0);
 
   const showNotification = useCallback((msg) => {
     setNotification(msg);
@@ -483,7 +495,12 @@ function MenuPage() {
             if (!verifyRes.ok) throw new Error(verifyData.error || 'Payment verification failed');
 
             showNotification('Payment successful! Your order is being prepared.');
-            setPaidOrderDetails({ orderId: targetOrderId || 'session_order', amount: activeTotal });
+            setPaidOrderDetails({ 
+              orderId: targetOrderId || 'session_order', 
+              subtotal: activeOrder ? activeOrder.total : cartTotal,
+              convenienceFee: activeOrder ? (activeOrder.convenienceFee ?? 0) : (globalConvenienceFeeEnabled ? globalConvenienceFeeAmount : 0),
+              amount: orderData.amount / 100
+            });
             setIsCheckoutOpen(false);
           } catch (err) {
             console.error(err);
@@ -1063,7 +1080,10 @@ function MenuPage() {
                 <div className="bg-surface-container-high border border-outline-variant/20 rounded-lg p-3">
                   <span className="font-label-caps text-label-caps text-on-surface-variant block mb-1">Total</span>
                   <strong className="font-price-display text-price-display text-primary">
-                    ₹{(activeOrder ? sessionTotal : cartTotal).toFixed(2)}
+                    ₹{(activeOrder 
+                      ? ordersList.reduce((sum, o) => sum + (o.totalPayable ?? o.total), 0) 
+                      : (cartTotal + (globalConvenienceFeeEnabled ? globalConvenienceFeeAmount : 0))
+                    ).toFixed(2)}
                   </strong>
                 </div>
               </div>
@@ -1139,7 +1159,9 @@ function MenuPage() {
                 <div className="w-full flex flex-col gap-3 text-left mt-2 mb-6 shrink-0">
                   <h3 className="font-label-caps text-[11px] text-primary border-b border-outline-variant/15 pb-2 uppercase tracking-widest font-bold flex justify-between items-center shrink-0">
                     <span>Order History ({ordersList.length})</span>
-                    <span className="font-mono text-on-surface-variant text-[11px] lowercase tracking-normal">Total: ₹{sessionTotal.toFixed(2)}</span>
+                    <span className="font-mono text-on-surface-variant text-[11px] lowercase tracking-normal">
+                      Total: ₹{ordersList.reduce((sum, o) => sum + (o.totalPayable ?? o.total), 0).toFixed(2)}
+                    </span>
                   </h3>
                   
                   <div className="space-y-3 w-full">
@@ -1171,7 +1193,7 @@ function MenuPage() {
                         </div>
                         
                         {/* Status Footer */}
-                        <div className="flex justify-between items-center text-[11px] font-medium border-t border-outline-variant/10 pt-1.5 mt-1 font-sans">
+                        <div className="flex justify-between items-start text-[11px] font-medium border-t border-outline-variant/10 pt-1.5 mt-1 font-sans">
                           <span className="flex items-center gap-1">
                             {order.paymentStatus === 'PAID' ? (
                               <span className="text-green-500 font-bold flex items-center gap-0.5">
@@ -1184,7 +1206,16 @@ function MenuPage() {
                             )}
                             <span className="text-on-surface-variant/50 font-normal">| {order.status}</span>
                           </span>
-                          <span className="text-primary font-bold font-price-display">₹{order.total.toFixed(2)}</span>
+                          <div className="text-right flex flex-col items-end">
+                            <span className="text-primary font-bold font-price-display text-xs">
+                              ₹{(order.totalPayable ?? order.total).toFixed(2)}
+                            </span>
+                            {Number(order.convenienceFee) > 0 && (
+                              <span className="text-[9px] text-on-surface-variant/70 font-normal mt-0.5">
+                                (includes ₹{order.convenienceFee} fee)
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -1195,6 +1226,31 @@ function MenuPage() {
               <div className="w-full space-y-4 shrink-0">
                 {(!activeOrder || unpaidTotal > 0) ? (
                   <>
+                    {/* Bill Details Breakdown */}
+                    <div className="bg-surface-container-high/60 border border-outline-variant/20 rounded-xl p-4 text-xs text-on-surface-variant text-left space-y-2">
+                      <strong className="text-on-surface font-semibold block mb-2 border-b border-outline-variant/10 pb-1.5 font-sans uppercase tracking-widest text-[10px]">
+                        Bill Details
+                      </strong>
+                      <div className="flex justify-between">
+                        <span>Food Subtotal</span>
+                        <span className="font-mono">₹{(unpaidTotal > 0 ? unpaidTotal : cartTotal).toFixed(2)}</span>
+                      </div>
+                      {(unpaidTotal > 0 ? unpaidConvenienceFee > 0 : globalConvenienceFeeEnabled) && (
+                        <div className="flex justify-between">
+                          <span>Convenience Fee</span>
+                          <span className="font-mono">
+                            ₹{(unpaidTotal > 0 ? unpaidConvenienceFee : (globalConvenienceFeeEnabled ? globalConvenienceFeeAmount : 0)).toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex justify-between font-semibold text-on-surface border-t border-outline-variant/10 pt-2 text-sm">
+                        <span>Total Payable</span>
+                        <span className="font-mono text-primary">
+                          ₹{(unpaidTotal > 0 ? unpaidTotalPayable : (cartTotal + (globalConvenienceFeeEnabled ? globalConvenienceFeeAmount : 0))).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+
                     {/* Seller & Fulfillment Disclosure */}
                     <div className="bg-surface-container-high/60 border border-outline-variant/20 rounded-xl p-3 text-[11px] text-on-surface-variant/90 leading-relaxed text-left">
                       <strong className="text-on-surface font-semibold block mb-1">Seller & Fulfillment</strong>
@@ -1211,7 +1267,7 @@ function MenuPage() {
                           : 'bg-surface-container-high border border-outline-variant/30 text-on-surface-variant/40 cursor-not-allowed'
                       }`}
                     >
-                      <span className="material-symbols-outlined">credit_card</span> Pay Now (₹{unpaidTotal > 0 ? unpaidTotal.toFixed(2) : cartTotal.toFixed(2)})
+                      <span className="material-symbols-outlined">credit_card</span> Pay Now (₹{(unpaidTotal > 0 ? unpaidTotalPayable : (cartTotal + (globalConvenienceFeeEnabled ? globalConvenienceFeeAmount : 0))).toFixed(2)})
                     </button>
                     <button 
                       onClick={handlePayLater}
@@ -1726,8 +1782,16 @@ function MenuPage() {
                   <span className="font-mono text-primary font-bold">#{paidOrderDetails.orderId.toString().substring(18)}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs pt-1">
-                  <span className="text-on-surface-variant">Amount Paid</span>
-                  <span className="font-price-display text-primary font-semibold">₹{paidOrderDetails.amount.toFixed(2)}</span>
+                  <span className="text-on-surface-variant">Food Subtotal</span>
+                  <span className="font-mono text-on-surface">₹{(paidOrderDetails.subtotal ?? 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-on-surface-variant">Convenience Fee</span>
+                  <span className="font-mono text-on-surface">₹{(paidOrderDetails.convenienceFee ?? 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs pt-2 border-t border-outline-variant/10">
+                  <span className="text-on-surface-variant font-semibold">Amount Paid</span>
+                  <span className="font-price-display text-primary font-bold text-base">₹{paidOrderDetails.amount.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs pt-2 border-t border-outline-variant/10">
                   <span className="text-on-surface-variant">Payment Status</span>

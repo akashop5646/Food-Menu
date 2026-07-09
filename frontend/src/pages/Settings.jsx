@@ -28,6 +28,13 @@ export default function Settings({ user }) {
   const [configSuccess, setConfigSuccess] = useState(false);
   const [configError, setConfigError] = useState('');
 
+  // Convenience Fee states
+  const [convenienceFeeEnabled, setConvenienceFeeEnabled] = useState(false);
+  const [convenienceFeeAmount, setConvenienceFeeAmount] = useState(0);
+  const [isSavingFee, setIsSavingFee] = useState(false);
+  const [feeSuccess, setFeeSuccess] = useState(false);
+  const [feeError, setFeeError] = useState('');
+
   const fetchStaff = async () => {
     try {
       const res = await fetch(API_BASE + '/api/settings/staff', { credentials: 'include' });
@@ -43,7 +50,11 @@ export default function Settings({ user }) {
 
   const fetchConfigs = async () => {
     try {
-      const profileRes = await fetch(API_BASE + '/api/settings/restaurant-profile', { credentials: 'include' });
+      const [profileRes, feeRes] = await Promise.all([
+        fetch(API_BASE + '/api/settings/restaurant-profile', { credentials: 'include' }),
+        fetch(API_BASE + '/api/settings/convenience-fee', { credentials: 'include' })
+      ]);
+
       if (profileRes.ok) {
         const profileData = await profileRes.json();
         setRestaurantNameInput(profileData.restaurantName || 'Aurum Restaurant');
@@ -53,6 +64,12 @@ export default function Settings({ user }) {
         setRestaurantEmailInput(profileData.restaurantEmail || '');
         setRestaurantHoursInput(profileData.restaurantHours || 'Monday - Sunday, 11:00 AM - 11:00 PM IST');
         setRestaurantMapLinkInput(profileData.restaurantMapLink || '');
+      }
+
+      if (feeRes.ok) {
+        const feeData = await feeRes.json();
+        setConvenienceFeeEnabled(!!feeData.enabled);
+        setConvenienceFeeAmount(Number(feeData.amount) || 0);
       }
     } catch (err) {
       console.error('Failed to load settings configs:', err);
@@ -180,6 +197,35 @@ export default function Settings({ user }) {
       setConfigError(err.message);
     } finally {
       setIsSavingConfig(false);
+    }
+  };
+
+  const handleFeeSubmit = async (e) => {
+    e.preventDefault();
+    setIsSavingFee(true);
+    setFeeError('');
+    setFeeSuccess(false);
+
+    try {
+      const res = await fetch(API_BASE + '/api/settings/convenience-fee', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled: convenienceFeeEnabled,
+          amount: Number(convenienceFeeAmount)
+        }),
+        credentials: 'include'
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save convenience fee settings');
+
+      setFeeSuccess(true);
+      setTimeout(() => setFeeSuccess(false), 3000);
+    } catch (err) {
+      setFeeError(err.message);
+    } finally {
+      setIsSavingFee(false);
     }
   };
 
@@ -608,6 +654,108 @@ export default function Settings({ user }) {
             >
               {isSavingConfig ? <span className="material-symbols-outlined animate-spin text-[16px]">progress_activity</span> : null}
               Save Configurations
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Payment & Fees Card */}
+      <div className="bg-surface-container rounded-2xl border border-outline-variant/20 shadow-lg overflow-hidden">
+        {/* Header */}
+        <div className="p-6 md:p-8 border-b border-outline-variant/10">
+          <h2 className="font-headline-md text-2xl text-on-surface flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary">payments</span>
+            Payment & Fees
+          </h2>
+          <p className="font-body-md text-on-surface-variant mt-1">Configure customer convenience fees and online gateway surcharges</p>
+        </div>
+
+        {/* Content */}
+        <form onSubmit={handleFeeSubmit} className="p-6 md:p-8 flex flex-col gap-6">
+          {feeSuccess && (
+            <div className="bg-primary/10 text-primary px-4 py-3 rounded-lg border border-primary/20 text-sm font-medium">
+              Payment settings saved successfully!
+            </div>
+          )}
+          {feeError && (
+            <div className="bg-error/10 text-error px-4 py-3 rounded-lg border border-error/20 text-sm font-medium">
+              {feeError}
+            </div>
+          )}
+
+          {/* Toggle */}
+          <div className="flex items-center justify-between p-4 rounded-xl bg-surface-container-highest/40 border border-outline-variant/20">
+            <div>
+              <span className="block font-semibold text-on-surface text-sm">Enable Customer Convenience Fee</span>
+              <p className="text-xs text-on-surface-variant opacity-80 mt-1">Charge a fixed fee for Tableside ordering and payment facilities</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setConvenienceFeeEnabled(prev => !prev)}
+              className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 outline-none ${
+                convenienceFeeEnabled ? 'bg-primary' : 'bg-outline-variant/50'
+              }`}
+            >
+              <div
+                className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform duration-300 ${
+                  convenienceFeeEnabled ? 'translate-x-6' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Input field */}
+          <div>
+            <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1.5 uppercase tracking-widest">
+              Convenience Fee Amount (₹0 – ₹20) *
+            </label>
+            <input 
+              type="number"
+              min={0}
+              max={20}
+              step={1}
+              disabled={!convenienceFeeEnabled}
+              value={convenienceFeeAmount}
+              onChange={e => setConvenienceFeeAmount(e.target.value === '' ? '' : Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
+              className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
+              placeholder="e.g. 10"
+              required={convenienceFeeEnabled}
+            />
+            <p className="font-body-sm text-[11px] text-on-surface-variant opacity-70 mt-2 leading-relaxed">
+              This fee is charged to customers as a separate line item during checkout. Allowed range: ₹0 – ₹20.
+            </p>
+          </div>
+
+          {/* Preview Panel */}
+          <div className="p-4 rounded-xl bg-surface-container-low border border-outline-variant/15 flex flex-col gap-2.5">
+            <span className="font-label-caps text-[10px] text-primary uppercase tracking-widest block border-b border-outline-variant/10 pb-1.5 mb-1">
+              Checkout Fee Preview
+            </span>
+            <div className="flex justify-between text-sm text-on-surface-variant">
+              <span>Food subtotal:</span>
+              <span className="font-mono">₹500.00</span>
+            </div>
+            <div className="flex justify-between text-sm text-on-surface-variant">
+              <span>Convenience fee:</span>
+              <span className="font-mono">₹{(convenienceFeeEnabled ? Number(convenienceFeeAmount || 0) : 0).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-sm font-semibold text-on-surface border-t border-outline-variant/10 pt-2">
+              <span>Customer pays:</span>
+              <span className="font-mono text-primary">
+                ₹{(500 + (convenienceFeeEnabled ? Number(convenienceFeeAmount || 0) : 0)).toFixed(2)}
+              </span>
+            </div>
+          </div>
+
+          {/* Action button */}
+          <div className="flex justify-end pt-4 border-t border-outline-variant/10">
+            <button 
+              type="submit" 
+              disabled={isSavingFee}
+              className="bg-primary text-on-primary px-6 py-2.5 rounded-lg font-label-caps text-[12px] uppercase tracking-widest gold-glow disabled:opacity-50 flex items-center gap-2"
+            >
+              {isSavingFee ? <span className="material-symbols-outlined animate-spin text-[16px]">progress_activity</span> : null}
+              Save Payment Settings
             </button>
           </div>
         </form>

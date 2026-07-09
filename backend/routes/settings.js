@@ -221,4 +221,73 @@ router.post('/restaurant-profile', requireAdmin, async (req, res) => {
   }
 });
 
+// Get Convenience Fee Configuration (Public endpoint)
+router.get('/convenience-fee', async (req, res) => {
+  try {
+    const db = await getDB();
+    const configs = await db.collection('configs').find({
+      key: { $in: ['convenience_fee_enabled', 'convenience_fee_amount'] }
+    }).toArray();
+
+    let enabled = false;
+    let amount = 0;
+    let amountValid = false;
+
+    configs.forEach(config => {
+      if (config.key === 'convenience_fee_enabled') {
+        enabled = typeof config.value === 'boolean' ? config.value : config.value === 'true';
+      }
+      if (config.key === 'convenience_fee_amount') {
+        const val = Number(config.value);
+        if (Number.isFinite(val) && val >= 0 && val <= 20) {
+          amount = val;
+          amountValid = true;
+        }
+      }
+    });
+
+    // Safely normalize malformed stored config to disabled/0
+    if (enabled && !amountValid) {
+      enabled = false;
+      amount = 0;
+    }
+
+    res.json({ enabled, amount });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch convenience fee configuration' });
+  }
+});
+
+// Update Convenience Fee Configuration (Admin only)
+router.post('/convenience-fee', requireAdmin, async (req, res) => {
+  try {
+    const { enabled, amount } = req.body;
+
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ error: 'Enabled status must be a boolean' });
+    }
+
+    const numAmount = Number(amount);
+    if (!Number.isFinite(numAmount) || numAmount < 0 || numAmount > 20) {
+      return res.status(400).json({ error: 'Convenience fee amount must be a finite number between 0 and 20' });
+    }
+
+    const db = await getDB();
+    await db.collection('configs').updateOne(
+      { key: 'convenience_fee_enabled' },
+      { $set: { value: enabled } },
+      { upsert: true }
+    );
+    await db.collection('configs').updateOne(
+      { key: 'convenience_fee_amount' },
+      { $set: { value: numAmount } },
+      { upsert: true }
+    );
+
+    res.json({ success: true, enabled, amount: numAmount });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update convenience fee configuration' });
+  }
+});
+
 export default router;
