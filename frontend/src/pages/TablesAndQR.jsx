@@ -228,11 +228,7 @@ export default function TablesAndQR() {
                     <h3 className="font-title-md text-[18px] md:text-[20px] font-semibold text-on-surface leading-snug">{table.name || `Table ${table.number}`}</h3>
                     <p className="font-body-sm text-[13px] text-on-surface-variant/75 mt-1">{getLocationLabel(table)}</p>
                   </div>
-                  <div className={`px-2.5 py-0.5 rounded-full font-label-caps text-[10px] font-bold tracking-[0.08em] uppercase ${
-                    table.status === 'Active' ? 'bg-primary/20 text-primary border border-primary/30' : 'bg-surface-container-highest text-on-surface-variant/80 border border-outline-variant/10'
-                  }`}>
-                    {table.status || 'Idle'}
-                  </div>
+
                 </div>
                 
                 <div className="flex-1 flex justify-center items-center py-6 relative">
