@@ -166,15 +166,15 @@ export default function Analytics() {
     fetchMenuItems();
 
     return () => {
-      if (menuAbortControllerRef.current) {
-        menuAbortControllerRef.current.abort();
-      }
+      // ponytail: do not abort on unmount to avoid strict-mode abort issues in development
     };
   }, []);
 
   // Fetch Orders function (prevents parallel requests)
   const fetchOrders = useCallback(async (isManual = false) => {
+    console.log('[Analytics] fetchOrders called, isManual:', isManual, 'isFetchInFlightRef.current:', isFetchInFlightRef.current);
     if (isFetchInFlightRef.current) {
+      console.log('[Analytics] fetchOrders returned early because fetch is in flight');
       return; // Skip if already fetching
     }
 
@@ -186,9 +186,11 @@ export default function Analytics() {
     // Increment request ID and capture it locally in closure
     activeRequestIdRef.current += 1;
     const requestId = activeRequestIdRef.current;
+    console.log('[Analytics] Starting request, requestId:', requestId);
 
-    // Cancel any stale order requests
-    if (ordersAbortControllerRef.current) {
+    // Cancel any stale order requests if it is a manual refresh
+    if (isManual && ordersAbortControllerRef.current) {
+      console.log('[Analytics] Aborting previous request controller');
       ordersAbortControllerRef.current.abort();
     }
 
@@ -196,37 +198,48 @@ export default function Analytics() {
     ordersAbortControllerRef.current = controller;
 
     try {
+      console.log('[Analytics] Fetching orders from API...');
       const ordersRes = await fetch(API_BASE + '/api/orders', {
         credentials: 'include',
         signal: controller.signal
       });
 
+      console.log('[Analytics] Fetch response status:', ordersRes.status);
       if (ordersRes.ok) {
         const ordersData = await ordersRes.json();
+        console.log('[Analytics] Fetch successful, orders count:', ordersData.length, 'activeRequestIdRef.current:', activeRequestIdRef.current, 'requestId:', requestId);
         // Guard state updates: only write if this request is still the active/latest one
         if (activeRequestIdRef.current === requestId) {
           setOrders(ordersData);
           setLastUpdatedAt(new Date());
           setFetchError(false);
+          console.log('[Analytics] Orders state updated');
+        } else {
+          console.log('[Analytics] Ignored orders update because request is stale');
         }
       } else {
+        console.error('[Analytics] Fetch failed with status:', ordersRes.status);
         if (activeRequestIdRef.current === requestId) {
           setFetchError(true);
         }
       }
     } catch (err) {
       if (err.name !== 'AbortError') {
-        console.error('Failed to fetch orders:', err);
+        console.error('[Analytics] Failed to fetch orders:', err);
         if (activeRequestIdRef.current === requestId) {
           setFetchError(true);
         }
+      } else {
+        console.log('[Analytics] Request was aborted, requestId:', requestId);
       }
     } finally {
       // Guard cleanup updates: only clear indicators if this request is still the active/latest one
+      console.log('[Analytics] fetchOrders finally block, activeRequestIdRef.current:', activeRequestIdRef.current, 'requestId:', requestId);
       if (activeRequestIdRef.current === requestId) {
         isFetchInFlightRef.current = false;
         setLoading(false);
         setRefreshing(false);
+        console.log('[Analytics] Cleaned up inflight ref and loading state');
       }
     }
   }, []);
@@ -239,9 +252,7 @@ export default function Analytics() {
   // Cleanup in-flight requests on component unmount
   useEffect(() => {
     return () => {
-      if (ordersAbortControllerRef.current) {
-        ordersAbortControllerRef.current.abort();
-      }
+      // ponytail: do not abort on unmount to avoid strict-mode abort issues in development
     };
   }, []);
 
