@@ -5,6 +5,7 @@ import { API_BASE } from '../config';
 export default function TablesAndQR() {
   const [tables, setTables] = useState([]);
   const [locations, setLocations] = useState([]);
+  const [restaurantName, setRestaurantName] = useState('Mater Dhaba');
   const [initialLoading, setInitialLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
@@ -23,6 +24,7 @@ export default function TablesAndQR() {
   const [editFormData, setEditFormData] = useState({ name: '', locationId: '', seats: 4 });
 
   const [deleteTargetId, setDeleteTargetId] = useState(null);
+  const [selectedTableId, setSelectedTableId] = useState(null);
 
   const [isCreatingTable, setIsCreatingTable] = useState(false);
   const [isSavingTable, setIsSavingTable] = useState(false);
@@ -41,6 +43,7 @@ export default function TablesAndQR() {
   const editInputRef = useRef(null);
   const locationInputRef = useRef(null);
   const deleteCancelButtonRef = useRef(null);
+  const drawerCloseButtonRef = useRef(null);
 
   // Focus management on open
   useEffect(() => {
@@ -67,6 +70,12 @@ export default function TablesAndQR() {
     }
   }, [deleteTargetId]);
 
+  useEffect(() => {
+    if (selectedTableId) {
+      setTimeout(() => drawerCloseButtonRef.current?.focus(), 50);
+    }
+  }, [selectedTableId]);
+
   const showToast = useCallback((message, type) => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     setToast({ message, type });
@@ -79,14 +88,29 @@ export default function TablesAndQR() {
     };
   }, []);
 
-  const getLocationLabel = (table) => table.locationName || table.location || 'Main Dining Room';
-  const getLocationIdForTable = (table) => String(table.locationId || locations.find(loc => loc.name === table.location)?._id || '');
+  const getLocationLabel = useCallback((table) => {
+    if (!table) return 'Main Dining Room';
+    return table.locationName || table.location || 'Main Dining Room';
+  }, []);
 
-  const getTableLabel = (table) => table.name || (table.number ? `Table ${table.number}` : 'Table');
+  const getLocationIdForTable = useCallback((table) => {
+    if (!table) return '';
+    return String(table.locationId || locations.find(loc => loc.name === table.location)?._id || '');
+  }, [locations]);
+
+  const getTableLabel = useCallback((table) => {
+    if (!table) return 'Table';
+    return table.name || (table.number ? `Table ${table.number}` : 'Table');
+  }, []);
 
   const deleteTarget = useMemo(
     () => (deleteTargetId ? tables.find((t) => String(t._id) === String(deleteTargetId)) || null : null),
     [deleteTargetId, tables]
+  );
+
+  const selectedTable = useMemo(
+    () => (selectedTableId ? tables.find((t) => String(t._id) === String(selectedTableId)) || null : null),
+    [selectedTableId, tables]
   );
 
   const filteredTables = useMemo(
@@ -100,10 +124,10 @@ export default function TablesAndQR() {
           `table ${t.number}`.toLowerCase().includes(searchQuery.toLowerCase());
         return matchesLocation && matchesSearch;
       }),
-    [tables, selectedFilter, searchQuery, locations]
+    [tables, selectedFilter, searchQuery, getLocationIdForTable]
   );
 
-  const hasOpenOverlay = isModalOpen || isLocationModalOpen || !!editingTable || !!deleteTargetId;
+  const hasOpenOverlay = isModalOpen || isLocationModalOpen || !!editingTable || !!deleteTargetId || !!selectedTableId;
 
   // Safe scroll lock handling open overlays
   useEffect(() => {
@@ -146,6 +170,9 @@ export default function TablesAndQR() {
       } else if (isModalOpen) {
         setIsModalOpen(false);
         restoreFocus();
+      } else if (selectedTableId) {
+        setSelectedTableId(null);
+        restoreFocus();
       } else if (openDropdownId) {
         setOpenDropdownId(null);
       }
@@ -153,7 +180,7 @@ export default function TablesAndQR() {
 
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [deleteTargetId, editingTable, isModalOpen, isLocationModalOpen, openDropdownId, hasOpenOverlay]);
+  }, [deleteTargetId, editingTable, isModalOpen, isLocationModalOpen, selectedTableId, openDropdownId, hasOpenOverlay]);
 
   // Click outside to close three-dot menu dropdown
   useEffect(() => {
@@ -195,9 +222,10 @@ export default function TablesAndQR() {
     }
 
     try {
-      const [tablesRes, locsRes] = await Promise.all([
+      const [tablesRes, locsRes, profileRes] = await Promise.all([
         fetch(API_BASE + '/api/tables'),
         fetch(API_BASE + '/api/locations'),
+        fetch(API_BASE + '/api/settings/restaurant-profile').catch(() => null),
       ]);
 
       if (!tablesRes.ok || !locsRes.ok) throw new Error('Fetch failed');
@@ -207,6 +235,14 @@ export default function TablesAndQR() {
 
       setTables(Array.isArray(tablesData) ? tablesData : tablesData.tables || []);
       setLocations(Array.isArray(locsData) ? locsData : []);
+      
+      if (profileRes && profileRes.ok) {
+        const profileData = await profileRes.json();
+        if (profileData && profileData.restaurantName) {
+          setRestaurantName(profileData.restaurantName);
+        }
+      }
+
       setFetchError(false);
 
       if (!hasLoadedOnceRef.current) {
@@ -345,6 +381,9 @@ export default function TablesAndQR() {
         credentials: 'include',
       });
       if (res.ok) {
+        if (String(selectedTableId) === String(deleteTargetId)) {
+          setSelectedTableId(null);
+        }
         setTables((prev) => prev.filter((t) => t._id !== deleteTargetId));
         setDeleteTargetId(null);
         setOpenDropdownId(null);
@@ -375,6 +414,320 @@ export default function TablesAndQR() {
     const label = table.name?.trim() || `Table ${table.number ?? ''}`.trim() || 'Table';
     return label.replace(/\s+/g, '_');
   };
+
+  const handleDownloadQR = useCallback(
+    (table) => {
+      if (!table?.qrUrl) {
+        showToast('QR code is not available.', 'error');
+        return;
+      }
+
+      const link = document.createElement('a');
+      link.href = table.qrUrl;
+      link.download = `QR_${safeTableLabel(table)}.png`;
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      showToast('QR code download started', 'success');
+    },
+    [showToast]
+  );
+
+  const handleCopyMenuLink = useCallback(
+    async (table) => {
+      if (!table?.orderUrl) {
+        showToast('Menu link is not available.', 'error');
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(table.orderUrl);
+        showToast('Menu link copied', 'success');
+      } catch (error) {
+        console.error('Failed to copy menu link:', error);
+        showToast('Unable to copy the menu link.', 'error');
+      }
+    },
+    [showToast]
+  );
+
+  const escapeHtml = (value = '') =>
+    String(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+
+  const handlePrintQR = useCallback(
+    (table) => {
+      if (!table?.qrUrl) {
+        showToast('QR code is not available.', 'error');
+        return;
+      }
+
+      const printWindow = window.open('', '_blank', 'width=720,height=900');
+      if (!printWindow) {
+        showToast('Print window was blocked. Please allow pop-ups and try again.', 'error');
+        return;
+      }
+
+      const safeName = escapeHtml(getTableLabel(table));
+      const safeLocation = escapeHtml(getLocationLabel(table));
+      const safeRestaurantName = escapeHtml(restaurantName || 'Aurum Restaurant');
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Print Menu Card — ${safeName}</title>
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
+          <style>
+            @page {
+              size: A4;
+              margin: 15mm;
+            }
+            body {
+              margin: 0;
+              padding: 0;
+              font-family: 'Outfit', -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+              background-color: #ffffff;
+              color: #121212;
+              display: flex;
+              justify-content: center;
+              align-items: flex-start;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            .print-card {
+              width: 100%;
+              max-width: 440px;
+              padding: 44px 36px;
+              border: 1px solid #d4af37;
+              border-radius: 24px;
+              text-align: center;
+              box-sizing: border-box;
+              background-color: #ffffff;
+              box-shadow: 0 4px 30px rgba(0, 0, 0, 0.02);
+              margin-top: 10px;
+            }
+            .gold-accent {
+              width: 50px;
+              height: 3px;
+              background: linear-gradient(90deg, #c5a880, #e5c07b, #c5a880);
+              margin: 0 auto 20px auto;
+              border-radius: 2px;
+            }
+            .restaurant-name {
+              font-family: 'Playfair Display', serif;
+              font-size: 26px;
+              font-style: italic;
+              font-weight: 700;
+              color: #1a1a1a;
+              margin: 0;
+              line-height: 1.2;
+            }
+            .digital-concierge {
+              font-size: 11px;
+              font-weight: 700;
+              letter-spacing: 0.25em;
+              color: #8c7e6c;
+              text-transform: uppercase;
+              margin: 6px 0 16px 0;
+            }
+            .diamond {
+              color: #e5c07b;
+              font-size: 10px;
+              margin: 0 auto 16px auto;
+              display: block;
+            }
+            .main-heading {
+              font-size: 20px;
+              font-weight: 800;
+              letter-spacing: 0.06em;
+              color: #111111;
+              text-transform: uppercase;
+              margin: 0 0 6px 0;
+            }
+            .sub-heading {
+              font-size: 13px;
+              color: #666666;
+              margin: 0 0 24px 0;
+              font-weight: 400;
+            }
+            .qr-container-card {
+              display: inline-block;
+              border: 1px solid rgba(229, 192, 123, 0.4);
+              border-radius: 20px;
+              padding: 20px;
+              background-color: #ffffff;
+              box-shadow: 0 8px 24px rgba(229, 192, 123, 0.08);
+              margin-bottom: 24px;
+            }
+            .qr-quiet-zone {
+              background-color: #ffffff;
+              padding: 16px;
+              border-radius: 12px;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+            }
+            .qr-image {
+              width: 210px;
+              height: 210px;
+              display: block;
+              object-fit: contain;
+            }
+            .table-name {
+              font-size: 28px;
+              font-weight: 800;
+              letter-spacing: 0.04em;
+              color: #1a1a1a;
+              text-transform: uppercase;
+              margin: 0;
+            }
+            .table-location {
+              font-size: 12px;
+              font-weight: 600;
+              color: #8c7e6c;
+              text-transform: uppercase;
+              letter-spacing: 0.08em;
+              margin: 4px 0 24px 0;
+            }
+            .steps-row {
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              gap: 10px;
+              margin-bottom: 24px;
+            }
+            .step-text {
+              font-size: 11px;
+              font-weight: 700;
+              letter-spacing: 0.12em;
+              text-transform: uppercase;
+              color: #1a1a1a;
+            }
+            .step-sep {
+              color: #e5c07b;
+              font-size: 8px;
+            }
+            .help-fallback {
+              font-size: 10px;
+              color: #888888;
+              border-top: 1px dashed rgba(0, 0, 0, 0.08);
+              padding-top: 16px;
+              margin-bottom: 20px;
+              max-width: 280px;
+              margin-left: auto;
+              margin-right: auto;
+              line-height: 1.4;
+            }
+            .footer-brand {
+              font-size: 9px;
+              font-weight: 700;
+              letter-spacing: 0.18em;
+              color: #b0a494;
+              text-transform: uppercase;
+            }
+            @media print {
+              body {
+                background-color: #ffffff;
+              }
+              .print-card {
+                box-shadow: none;
+                margin-top: 0;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="print-card">
+            <div class="gold-accent"></div>
+            <h1 class="restaurant-name">${safeRestaurantName}</h1>
+            <div class="digital-concierge">Digital Concierge</div>
+            <div class="diamond">◆</div>
+            
+            <h2 class="main-heading">SCAN TO VIEW OUR MENU</h2>
+            <p class="sub-heading">Browse, order and enjoy from your table</p>
+            
+            <div class="qr-container-card">
+              <div class="qr-quiet-zone">
+                <img id="print-qr" class="qr-image" src="${table.qrUrl}" alt="QR Code for ${safeName}" />
+              </div>
+            </div>
+            
+            <h3 class="table-name">${safeName}</h3>
+            <div class="table-location">${safeLocation}</div>
+            
+            <div class="steps-row">
+              <span class="step-text">Scan</span>
+              <span class="step-sep">•</span>
+              <span class="step-text">Browse</span>
+              <span class="step-sep">•</span>
+              <span class="step-text">Order</span>
+            </div>
+            
+            <div class="help-fallback">
+              Having trouble scanning? Ask our staff for assistance.
+            </div>
+            
+            <div class="footer-brand">
+              Powered by Aurum Table
+            </div>
+          </div>
+          
+          <script>
+            const qrImage = document.getElementById('print-qr');
+            const printPage = () => {
+              window.focus();
+              window.print();
+            };
+            if (qrImage.complete) {
+              printPage();
+            } else {
+              qrImage.onload = printPage;
+              qrImage.onerror = printPage;
+            }
+            window.onafterprint = () => {
+              window.close();
+            };
+          </script>
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+    },
+    [getLocationLabel, getTableLabel, showToast, restaurantName]
+  );
+
+  const handleShareTable = useCallback(
+    async (table) => {
+      if (!table?.orderUrl) {
+        showToast('Menu link is not available.', 'error');
+        return;
+      }
+
+      try {
+        await navigator.share({
+          title: getTableLabel(table),
+          text: `View the menu for ${getTableLabel(table)}`,
+          url: table.orderUrl
+        });
+      } catch (error) {
+        if (error?.name !== 'AbortError') {
+          console.error('Unable to share table menu:', error);
+          showToast('Unable to share the menu link.', 'error');
+        }
+      }
+    },
+    [showToast, getTableLabel]
+  );
+
 
 
   const renderSkeletons = () => (
@@ -626,56 +979,72 @@ export default function TablesAndQR() {
                     Seats: {table.seats || 4}
                   </div>
 
-                  <div data-table-actions-id={table._id}>
+                  <div className="flex items-center gap-2">
                     <button
-                      onClick={() => {
-                        lastFocusedRef.current = document.activeElement;
-                        setOpenDropdownId(
-                          openDropdownId === table._id ? null : table._id
-                        );
+                      type="button"
+                      onClick={(event) => {
+                        lastFocusedRef.current = event.currentTarget;
+                        setOpenDropdownId(null);
+                        setSelectedTableId(table._id);
                       }}
-                      className="text-on-surface-variant hover:text-primary transition-colors rounded p-2 min-w-[44px] min-h-[44px] flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                      aria-label={`Actions for ${table.name || `Table ${table.number || ''}`}`}
-                      aria-haspopup="menu"
-                      aria-expanded={openDropdownId === table._id}
-                      aria-controls={`table-actions-${table._id}`}
+                      className="text-primary hover:text-primary-hover font-label-caps text-[11px] font-bold tracking-wider flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-primary/10 transition-colors focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
+                      aria-label={`View details for ${getTableLabel(table)}`}
                     >
-                      <span className="material-symbols-outlined text-[20px]">more_vert</span>
+                      <span className="material-symbols-outlined text-[16px]">visibility</span>
+                      View Details
                     </button>
 
-                    <AnimatePresence>
-                      {openDropdownId === table._id && (
-                        <motion.div
-                          id={`table-actions-${table._id}`}
-                          initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                          animate={{ opacity: 1, scale: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                          role="menu"
-                          className="absolute right-0 bottom-full mb-2 w-36 bg-surface-container-high border border-outline-variant/30 rounded-xl shadow-xl z-20 overflow-hidden"
-                        >
-                          <button
-                            type="button"
-                            role="menuitem"
-                            onClick={() => handleStartEdit(table)}
-                            className="w-full text-left px-4 py-3 min-h-[44px] font-body-sm text-[13px] text-on-surface hover:bg-surface-bright transition-colors flex items-center gap-2 border-b border-outline-variant/10 outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                            aria-label={`Edit ${table.name || `Table ${table.number || ''}`}`}
+                    <div data-table-actions-id={table._id} className="relative">
+                      <button
+                        onClick={() => {
+                          lastFocusedRef.current = document.activeElement;
+                          setOpenDropdownId(
+                            openDropdownId === table._id ? null : table._id
+                          );
+                        }}
+                        className="text-on-surface-variant hover:text-primary transition-colors rounded p-2 min-w-[44px] min-h-[44px] flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        aria-label={`Actions for ${table.name || `Table ${table.number || ''}`}`}
+                        aria-haspopup="menu"
+                        aria-expanded={openDropdownId === table._id}
+                        aria-controls={`table-actions-${table._id}`}
+                      >
+                        <span className="material-symbols-outlined text-[20px]">more_vert</span>
+                      </button>
+
+                      <AnimatePresence>
+                        {openDropdownId === table._id && (
+                          <motion.div
+                            id={`table-actions-${table._id}`}
+                            initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                            role="menu"
+                            className="absolute right-0 bottom-full mb-2 w-36 bg-surface-container-high border border-outline-variant/30 rounded-xl shadow-xl z-20 overflow-hidden"
                           >
-                            <span className="material-symbols-outlined text-[16px]">edit</span>{' '}
-                            Edit Table
-                          </button>
-                          <button
-                            type="button"
-                            role="menuitem"
-                            onClick={() => handleDeleteClick(table._id)}
-                            className="w-full text-left px-4 py-3 min-h-[44px] font-body-sm text-[13px] text-error hover:bg-surface-bright transition-colors flex items-center gap-2 outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                            aria-label={`Delete ${table.name || `Table ${table.number || ''}`}`}
-                          >
-                            <span className="material-symbols-outlined text-[16px]">delete</span>{' '}
-                            Delete Table
-                          </button>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => handleStartEdit(table)}
+                              className="w-full text-left px-4 py-3 min-h-[44px] font-body-sm text-[13px] text-on-surface hover:bg-surface-bright transition-colors flex items-center gap-2 border-b border-outline-variant/10 outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                              aria-label={`Edit ${table.name || `Table ${table.number || ''}`}`}
+                            >
+                              <span className="material-symbols-outlined text-[16px]">edit</span>{' '}
+                              Edit Table
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => handleDeleteClick(table._id)}
+                              className="w-full text-left px-4 py-3 min-h-[44px] font-body-sm text-[13px] text-error hover:bg-surface-bright transition-colors flex items-colors gap-2 outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                              aria-label={`Delete ${table.name || `Table ${table.number || ''}`}`}
+                            >
+                              <span className="material-symbols-outlined text-[16px]">delete</span>{' '}
+                              Delete Table
+                            </button>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1124,6 +1493,200 @@ export default function TablesAndQR() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {selectedTableId && selectedTable && (
+          <motion.div
+            key="details-drawer"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[90] flex justify-end"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setSelectedTableId(null);
+                restoreFocus();
+              }
+            }}
+          >
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'tween', duration: 0.25 }}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="table-details-drawer-title"
+              tabIndex={-1}
+              className="bg-surface-container-low border-l border-outline-variant/30 w-full max-w-md h-full flex flex-col shadow-2xl relative overflow-hidden"
+            >
+              {/* Header */}
+              <div className="p-6 border-b border-outline-variant/20 flex justify-between items-center bg-surface-container-low shrink-0">
+                <div>
+                  <span className="block font-label-caps text-[10px] tracking-widest text-primary font-bold uppercase mb-1">
+                    Table Details
+                  </span>
+                  <h2
+                    id="table-details-drawer-title"
+                    className="font-headline-sm text-on-surface text-[20px] font-semibold"
+                  >
+                    {getTableLabel(selectedTable)}
+                  </h2>
+                  <p className="font-body-sm text-[13px] text-on-surface-variant/70 mt-0.5">
+                    {getLocationLabel(selectedTable)}
+                  </p>
+                </div>
+                <button
+                  ref={drawerCloseButtonRef}
+                  type="button"
+                  onClick={() => {
+                    setSelectedTableId(null);
+                    restoreFocus();
+                  }}
+                  aria-label="Close table details"
+                  className="text-on-surface-variant hover:text-primary transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">close</span>
+                </button>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="flex-1 overflow-y-auto overscroll-contain p-6 space-y-8 pb-24">
+                {/* QR Preview Section */}
+                <div className="flex flex-col items-center">
+                  <div className="w-full max-w-[280px] aspect-square bg-white rounded-2xl flex items-center justify-center p-4 border border-primary/10 shadow-md">
+                    {selectedTable.qrUrl ? (
+                      <img
+                        src={selectedTable.qrUrl}
+                        alt={`QR code for ${getTableLabel(selectedTable)}`}
+                        className="w-full h-full object-contain rounded-lg"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center text-black/30">
+                        <span className="material-symbols-outlined text-[64px]" aria-hidden="true">
+                          qr_code_2
+                        </span>
+                        <span className="text-[12px] font-medium mt-2">QR code is not available</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Actions Grid */}
+                <div className="grid grid-cols-2 gap-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadQR(selectedTable)}
+                    disabled={!selectedTable.qrUrl}
+                    className="flex items-center justify-center gap-2 bg-surface-container-high border border-outline-variant/40 text-on-surface hover:text-primary disabled:opacity-40 disabled:hover:text-on-surface hover:border-primary/40 px-4 py-3 min-h-[44px] rounded-xl font-title-md text-[13px] font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer disabled:cursor-not-allowed"
+                    aria-label={`Download QR code for ${getTableLabel(selectedTable)}`}
+                  >
+                    <span className="material-symbols-outlined text-[18px]" aria-hidden="true">download</span>
+                    Download
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleCopyMenuLink(selectedTable)}
+                    disabled={!selectedTable.orderUrl}
+                    className="flex items-center justify-center gap-2 bg-surface-container-high border border-outline-variant/40 text-on-surface hover:text-primary disabled:opacity-40 disabled:hover:text-on-surface hover:border-primary/40 px-4 py-3 min-h-[44px] rounded-xl font-title-md text-[13px] font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer disabled:cursor-not-allowed"
+                    aria-label={`Copy menu link for ${getTableLabel(selectedTable)}`}
+                  >
+                    <span className="material-symbols-outlined text-[18px]" aria-hidden="true">content_copy</span>
+                    Copy Link
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handlePrintQR(selectedTable)}
+                    disabled={!selectedTable.qrUrl}
+                    className="flex items-center justify-center gap-2 bg-surface-container-high border border-outline-variant/40 text-on-surface hover:text-primary disabled:opacity-40 disabled:hover:text-on-surface hover:border-primary/40 px-4 py-3 min-h-[44px] rounded-xl font-title-md text-[13px] font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer disabled:cursor-not-allowed"
+                    aria-label={`Print QR code for ${getTableLabel(selectedTable)}`}
+                  >
+                    <span className="material-symbols-outlined text-[18px]" aria-hidden="true">print</span>
+                    Print QR
+                  </button>
+
+                  {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
+                    <button
+                      type="button"
+                      onClick={() => handleShareTable(selectedTable)}
+                      className="flex items-center justify-center gap-2 bg-surface-container-high border border-outline-variant/40 text-on-surface hover:text-primary px-4 py-3 min-h-[44px] rounded-xl font-title-md text-[13px] font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
+                      aria-label={`Share menu link for ${getTableLabel(selectedTable)}`}
+                    >
+                      <span className="material-symbols-outlined text-[18px]" aria-hidden="true">share</span>
+                      Share
+                    </button>
+                  )}
+                </div>
+
+                {/* Table Info Fields */}
+                <div className="space-y-4 pt-2 border-t border-outline-variant/15">
+                  <div>
+                    <span className="block font-label-caps text-[10px] tracking-wider text-on-surface-variant/60 font-semibold uppercase">
+                      Table Name / Number
+                    </span>
+                    <span className="text-[15px] font-medium text-on-surface block mt-0.5">
+                      {getTableLabel(selectedTable)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="block font-label-caps text-[10px] tracking-wider text-on-surface-variant/60 font-semibold uppercase">
+                      Location / Section
+                    </span>
+                    <span className="text-[15px] font-medium text-on-surface block mt-0.5">
+                      {getLocationLabel(selectedTable)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="block font-label-caps text-[10px] tracking-wider text-on-surface-variant/60 font-semibold uppercase">
+                      Seats
+                    </span>
+                    <span className="text-[15px] font-mono-data font-medium text-on-surface block mt-0.5">
+                      {selectedTable.seats || 4}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="block font-label-caps text-[10px] tracking-wider text-on-surface-variant/60 font-semibold uppercase">
+                      Menu Link
+                    </span>
+                    {selectedTable.orderUrl ? (
+                      <span className="text-[13px] font-medium text-primary hover:underline break-all block mt-0.5 select-all">
+                        {selectedTable.orderUrl}
+                      </span>
+                    ) : (
+                      <span className="text-[13px] font-medium text-on-surface-variant/50 block mt-0.5 italic">
+                        Menu link is not available
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Drawer Footer Actions */}
+              <div className="absolute bottom-0 left-0 w-full p-6 bg-surface-container-low border-t border-outline-variant/20 flex gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleStartEdit(selectedTable)}
+                  className="flex-1 bg-surface-container-high border border-outline-variant/40 text-on-surface hover:text-primary px-4 py-2.5 min-h-[44px] rounded-xl font-label-caps text-[12px] font-bold tracking-widest uppercase transition-all hover:border-primary/45 focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
+                >
+                  Edit Table
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleteTargetId(selectedTable._id)}
+                  className="flex-1 bg-error/10 hover:bg-error text-error hover:text-on-error border border-error/20 px-4 py-2.5 min-h-[44px] rounded-xl font-label-caps text-[12px] font-bold tracking-widest uppercase transition-all focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
+                >
+                  Delete Table
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
