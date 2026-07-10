@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import TablesAndQR from './TablesAndQR';
@@ -20,13 +20,79 @@ const SIDEBAR_ITEMS = [
   { id: 'settings', icon: 'settings', label: 'Settings', adminOnly: true },
 ];
 
+const NOTIFICATION_STORAGE_KEY = 'aurum_admin_notifications';
+const MAX_NOTIFICATIONS = 20;
+
+function isValidNotification(notification) {
+  if (!notification || typeof notification !== 'object') return false;
+  if (typeof notification.id !== 'string' || !notification.id) return false;
+  if (!['ORDER_CREATED', 'PAYMENT_UPDATED', 'CONNECTION_WARNING'].includes(notification.type)) return false;
+  if (typeof notification.title !== 'string') return false;
+  if (typeof notification.message !== 'string') return false;
+  if (typeof notification.timestamp !== 'string') return false;
+  if (isNaN(new Date(notification.timestamp).getTime())) return false;
+  if (typeof notification.isRead !== 'boolean') return false;
+  if (!['dashboard', 'payments'].includes(notification.targetSection)) return false;
+  if (notification.metadata === undefined || notification.metadata === null || typeof notification.metadata !== 'object') return false;
+  return true;
+}
+
+function formatNotificationTime(dateString) {
+  const timestamp = new Date(dateString).getTime();
+  if (!Number.isFinite(timestamp)) return '';
+  const diff = Math.max(0, Date.now() - timestamp);
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hr${hours === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'Yesterday';
+  return `${days} days ago`;
+}
+
+function createNotificationId() {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  
+
+  // Notification center
+  const [notifications, setNotifications] = useState(() => {
+    try {
+      const saved = localStorage.getItem(NOTIFICATION_STORAGE_KEY);
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter(isValidNotification)
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .slice(0, MAX_NOTIFICATIONS);
+    } catch {
+      return [];
+    }
+  });
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [notificationTimeTick, setNotificationTimeTick] = useState(0);
+  const bellRef = useRef(null);
+  const notificationPanelRef = useRef(null);
+  const wasConnectedRef = useRef(false);
+  const disconnectNotifiedRef = useRef(false);
+  const isWebSocketCleanupRef = useRef(false);
+  const processedEventIdsRef = useRef(new Set());
+  const audioContextRef = useRef(null);
+  const isMutedRef = useRef(false);
+
+  const [isMuted, setIsMuted] = useState(() => {
+    try { return localStorage.getItem('aurum_admin_muted') === 'true'; }
+    catch { return false; }
+  });
+
   // Real-time signals
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastOrderCreatedEvent, setLastOrderCreatedEvent] = useState(null);
@@ -34,6 +100,58 @@ export default function AdminDashboard() {
   const [isKitchenMode, setIsKitchenMode] = useState(false);
 
   const triggerRefresh = () => setRefreshKey(prev => prev + 1);
+
+  function playNotificationSound() {
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      const ctx = audioContextRef.current;
+      if (ctx.state === 'suspended') ctx.resume();
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+      oscillator.type = 'sine';
+      const now = ctx.currentTime;
+      oscillator.frequency.setValueAtTime(523, now);
+      oscillator.frequency.setValueAtTime(659, now + 0.1);
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+      oscillator.start(now);
+      oscillator.stop(now + 0.3);
+    } catch {
+      // Audio context unavailable
+    }
+  }
+
+  const addNotification = useCallback(({ type, title, message, targetSection, metadata = {} }) => {
+    const id = createNotificationId();
+    const notification = {
+      id,
+      type,
+      title,
+      message,
+      timestamp: new Date().toISOString(),
+      isRead: false,
+      targetSection,
+      metadata
+    };
+    setNotifications(prev => [notification, ...prev].slice(0, MAX_NOTIFICATIONS));
+    if (!isMutedRef.current) playNotificationSound();
+  }, []);
+
+  const unreadCount = useMemo(() => notifications.filter(n => !n.isRead).length, [notifications]);
+
+  const handleMarkAllRead = useCallback(() => {
+    setNotifications(prev => prev.map(n => n.isRead ? n : { ...n, isRead: true }));
+  }, []);
+
+  const handleNotificationClick = useCallback((notification) => {
+    setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, isRead: true } : n));
+    setIsNotificationOpen(false);
+    setActiveTab(notification.targetSection);
+  }, []);
 
   // Setup WebSocket for real-time dashboard signals
   useEffect(() => {
@@ -50,6 +168,9 @@ export default function AdminDashboard() {
         ws.onopen = () => {
           console.log('🔌 WebSocket connected');
           setWsConnected(true);
+          wasConnectedRef.current = true;
+          disconnectNotifiedRef.current = false;
+          isWebSocketCleanupRef.current = false;
         };
         
         ws.onmessage = (event) => {
@@ -60,11 +181,62 @@ export default function AdminDashboard() {
               
               // Handoff ORDER_CREATED to LiveKDS with seq/stale guards
               if (msg.type === 'ORDER_CREATED') {
+                const orderId = msg.payload?._id;
+                if (orderId && processedEventIdsRef.current.has(`ORDER_CREATED:${orderId}`)) return;
+                if (orderId) {
+                  processedEventIdsRef.current.add(`ORDER_CREATED:${orderId}`);
+                  setTimeout(() => processedEventIdsRef.current.delete(`ORDER_CREATED:${orderId}`), 5000);
+                }
                 const tableName = msg.payload?.table || null;
                 setLastOrderCreatedEvent({
-                  id: msg.payload?._id || Math.random().toString(),
+                  id: orderId || Math.random().toString(),
                   timestamp: Date.now(),
                   table: tableName
+                });
+                const itemCount = Array.isArray(msg.payload?.items) ? msg.payload.items.length : null;
+                let orderMessage;
+                if (tableName && itemCount !== null) {
+                  orderMessage = `${tableName} · ${itemCount} item${itemCount === 1 ? '' : 's'}`;
+                } else if (tableName) {
+                  orderMessage = tableName;
+                } else {
+                  orderMessage = 'A new customer order was received.';
+                }
+                addNotification({
+                  type: 'ORDER_CREATED',
+                  title: 'New order received',
+                  message: orderMessage,
+                  targetSection: 'dashboard',
+                  metadata: {
+                    orderId: msg.payload?._id || null,
+                    table: tableName
+                  }
+                });
+              }
+              if (msg.type === 'PAYMENT_UPDATED') {
+                const paymentOrderId = msg.payload?._id;
+                if (paymentOrderId && processedEventIdsRef.current.has(`PAYMENT_UPDATED:${paymentOrderId}`)) return;
+                if (paymentOrderId) {
+                  processedEventIdsRef.current.add(`PAYMENT_UPDATED:${paymentOrderId}`);
+                  setTimeout(() => processedEventIdsRef.current.delete(`PAYMENT_UPDATED:${paymentOrderId}`), 5000);
+                }
+                const tableName = msg.payload?.table || msg.payload?.order?.table || null;
+                const displayStatus = msg.payload?.status === 'PAID' || msg.payload?.paymentStatus === 'PAID' ? 'paid' : 'updated';
+                let paymentMessage;
+                if (tableName) {
+                  paymentMessage = `${tableName} · Payment marked as ${displayStatus}`;
+                } else {
+                  paymentMessage = 'Payment status was updated.';
+                }
+                addNotification({
+                  type: 'PAYMENT_UPDATED',
+                  title: 'Payment updated',
+                  message: paymentMessage,
+                  targetSection: 'payments',
+                  metadata: {
+                    orderId: msg.payload?._id || null,
+                    table: tableName
+                  }
                 });
               }
             }
@@ -76,6 +248,16 @@ export default function AdminDashboard() {
         ws.onclose = () => {
           console.log('🔌 WebSocket connection closed. Reconnecting in 10s...');
           setWsConnected(false);
+          if (wasConnectedRef.current && !disconnectNotifiedRef.current && !isWebSocketCleanupRef.current) {
+            disconnectNotifiedRef.current = true;
+            addNotification({
+              type: 'CONNECTION_WARNING',
+              title: 'Live updates disconnected',
+              message: 'Real-time updates are temporarily unavailable. Automatic refresh will continue.',
+              targetSection: 'dashboard',
+              metadata: {}
+            });
+          }
           reconnectTimer = setTimeout(connect, 10000);
         };
         
@@ -90,10 +272,65 @@ export default function AdminDashboard() {
     connect();
     
     return () => {
+      isWebSocketCleanupRef.current = true;
       if (ws) ws.close();
       clearTimeout(reconnectTimer);
     };
   }, []);
+
+  // Sync isMuted to ref for stable addNotification callback
+  useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
+
+  // Persist mute preference
+  useEffect(() => {
+    try { localStorage.setItem('aurum_admin_muted', isMuted ? 'true' : 'false'); }
+    catch { /* storage unavailable */ }
+  }, [isMuted]);
+
+  // Persist notifications to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(NOTIFICATION_STORAGE_KEY, JSON.stringify(notifications.slice(0, MAX_NOTIFICATIONS)));
+    } catch {
+      // Storage may be unavailable, restricted, or full
+    }
+  }, [notifications]);
+
+  // Update relative-time display every 60 seconds
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setNotificationTimeTick(t => t + 1);
+    }, 60000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // Close notification panel on click-outside
+  useEffect(() => {
+    if (!isNotificationOpen) return;
+    const handler = (e) => {
+      if (
+        notificationPanelRef.current && !notificationPanelRef.current.contains(e.target) &&
+        bellRef.current && !bellRef.current.contains(e.target)
+      ) {
+        setIsNotificationOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handler);
+    return () => document.removeEventListener('pointerdown', handler);
+  }, [isNotificationOpen]);
+
+  // Close notification panel on Escape
+  useEffect(() => {
+    if (!isNotificationOpen) return;
+    const handler = (e) => {
+      if (e.key === 'Escape') {
+        setIsNotificationOpen(false);
+        bellRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [isNotificationOpen]);
 
   // ponytail: AdminDashboard owns the sole central polling/refresh interval loop
   useEffect(() => {
@@ -287,13 +524,134 @@ export default function AdminDashboard() {
               <button onClick={handleThemeToggle} className="text-on-surface-variant hover:text-primary transition-all ripple-effect cursor-pointer">
                 <span className="material-symbols-outlined">{isDark ? 'light_mode' : 'dark_mode'}</span>
               </button>
-              <button className="text-on-surface-variant hover:text-primary transition-all ripple-effect cursor-pointer relative">
+              <button
+                ref={bellRef}
+                onClick={() => setIsNotificationOpen(prev => !prev)}
+                className="text-on-surface-variant hover:text-primary transition-all ripple-effect cursor-pointer relative"
+                aria-label="Notifications"
+              >
                 <span className="material-symbols-outlined">notifications</span>
-                <span className="absolute top-0 right-0 w-2 h-2 bg-error rounded-full"></span>
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center bg-error text-[11px] font-bold text-white rounded-full px-1 leading-none shadow-md">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
               </button>
             </div>
           </header>
         )}
+
+        {/* Notification Dropdown Panel */}
+        <AnimatePresence>
+          {isNotificationOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-40 md:z-40"
+                onClick={() => setIsNotificationOpen(false)}
+              />
+              <motion.div
+                ref={notificationPanelRef}
+                initial={{ opacity: 0, y: -12, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -12, scale: 0.96 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+                className="fixed md:absolute top-20 right-4 md:right-8 w-[380px] max-w-[calc(100vw-32px)] max-h-[600px] overflow-hidden z-50 bg-surface-container/95 backdrop-blur-[30px] border border-outline-variant/20 rounded-2xl shadow-2xl flex flex-col"
+                style={{
+                  boxShadow: '0 0 30px rgba(212,175,55,0.08), 0 10px 40px rgba(0,0,0,0.15)'
+                }}
+              >
+                <div className="flex items-center justify-between px-5 py-4 border-b border-outline-variant/10 shrink-0">
+                  <span className="font-title-lg text-title-lg text-primary tracking-tight">Notifications</span>
+                  <div className="flex items-center gap-2">
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={handleMarkAllRead}
+                        className="font-label-sm text-label-sm text-primary hover:text-primary/80 transition-colors px-3 py-1 rounded-lg hover:bg-primary/10 cursor-pointer"
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setIsMuted(prev => !prev)}
+                      className="text-on-surface-variant hover:text-primary p-1 rounded-lg transition-colors cursor-pointer"
+                      aria-label={isMuted ? 'Unmute notifications' : 'Mute notifications'}
+                    >
+                      <span className="material-symbols-outlined text-[20px]">{isMuted ? 'notifications_off' : 'notifications'}</span>
+                    </button>
+                    <button
+                      onClick={() => setIsNotificationOpen(false)}
+                      className="text-on-surface-variant hover:text-primary p-1 rounded-lg transition-colors cursor-pointer"
+                      aria-label="Close notifications"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">close</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="overflow-y-auto flex-1">
+                  {notifications.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 px-5 text-center">
+                      <span className="material-symbols-outlined text-[40px] text-outline mb-3">notifications_off</span>
+                      <p className="font-body-md text-body-md text-on-surface-variant">No notifications yet</p>
+                      <p className="font-body-sm text-body-sm text-on-surface-variant/60 mt-1">New orders and updates will appear here.</p>
+                    </div>
+                  ) : (
+                    notifications.map((notification) => (
+                      <motion.button
+                        key={notification.id}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        onClick={() => handleNotificationClick(notification)}
+                        className={`w-full text-left px-5 py-4 flex items-start gap-4 transition-colors cursor-pointer border-b border-outline-variant/5 last:border-b-0 ${
+                          notification.isRead
+                            ? 'bg-transparent hover:bg-surface-container-hover/30'
+                            : 'bg-primary/[0.04] hover:bg-primary/[0.08]'
+                        }`}
+                      >
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+                          notification.type === 'ORDER_CREATED'
+                            ? 'bg-[#e8f5e9] dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                            : notification.type === 'PAYMENT_UPDATED'
+                            ? 'bg-[#e3f2fd] dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                            : 'bg-[#fff3e0] dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+                        }`}>
+                          <span className="material-symbols-outlined text-[20px]">
+                            {notification.type === 'ORDER_CREATED'
+                              ? 'orders'
+                              : notification.type === 'PAYMENT_UPDATED'
+                              ? 'payments'
+                              : 'wifi_off'}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className={`font-title-sm text-title-sm truncate ${
+                              notification.isRead ? 'text-on-surface' : 'text-on-surface font-semibold'
+                            }`}>
+                              {notification.title}
+                            </p>
+                            {!notification.isRead && (
+                              <span className="w-2 h-2 rounded-full bg-primary shrink-0 mt-1.5" />
+                            )}
+                          </div>
+                          <p className="font-body-sm text-body-sm text-on-surface-variant mt-0.5 line-clamp-2">
+                            {notification.message}
+                          </p>
+                          <p className="font-label-sm text-label-sm text-on-surface-variant/50 mt-1">
+                            {formatNotificationTime(notification.timestamp)}
+                          </p>
+                        </div>
+                      </motion.button>
+                    ))
+                  )}
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
 
         {/* Dynamic Content */}
         <main className="flex-1 p-margin-mobile md:p-margin-desktop overflow-y-auto pb-24 md:pb-8 relative z-10">
