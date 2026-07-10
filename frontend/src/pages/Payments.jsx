@@ -161,7 +161,7 @@ export default function Payments({ refreshKey }) {
   const [paymentsLoading, setPaymentsLoading] = useState(true);
   const [paymentsSearch, setPaymentsSearch] = useState('');
   const [paymentsStatusFilter, setPaymentsStatusFilter] = useState('ALL'); // ALL, PAID, PENDING
-  const [paymentsTypeFilter, setPaymentsTypeFilter] = useState('ALL'); // ALL, RAZORPAY, LATER, UPI
+  const [paymentsTypeFilter, setPaymentsTypeFilter] = useState('ALL'); // ALL, ONLINE, CASH
   
   // Date Presets and Custom Ranges
   const [paymentsTimeRange, setPaymentsTimeRange] = useState('7d'); // today, yesterday, 7d, 30d, this_month, custom
@@ -344,17 +344,21 @@ export default function Payments({ refreshKey }) {
 
       // 3. Payment Method Filter
       if (paymentsTypeFilter !== 'ALL') {
-        const type = order.paymentType || 'UNKNOWN';
-        let normalizedType = 'UNKNOWN';
-        if (type === 'RAZORPAY' || type === 'ONLINE' || type === 'NOW') {
-          normalizedType = 'RAZORPAY';
-        } else if (type === 'LATER') {
-          normalizedType = 'LATER';
-        } else if (type === 'UPI') {
-          normalizedType = 'UPI';
+        const type = String(order.paymentType || '').toUpperCase();
+
+        if (paymentsTypeFilter === 'ONLINE') {
+          const onlineTypes = ['RAZORPAY', 'ONLINE', 'NOW', 'UPI'];
+          if (!onlineTypes.includes(type)) {
+            return false;
+          }
         }
-        if (normalizedType !== paymentsTypeFilter) {
-          return false;
+
+        if (paymentsTypeFilter === 'CASH') {
+          const cashTypes = ['CASH', 'LATER'];
+
+          if (!cashTypes.includes(type)) {
+            return false;
+          }
         }
       }
 
@@ -675,9 +679,8 @@ export default function Payments({ refreshKey }) {
             <div className="flex bg-surface-container-highest/40 rounded-xl p-0.5 border border-outline-variant/20">
               {[
                 { value: 'ALL', label: 'All' },
-                { value: 'RAZORPAY', label: 'Online' },
-                { value: 'LATER', label: 'Pay Later' },
-                { value: 'UPI', label: 'UPI' }
+                { value: 'ONLINE', label: 'Online' },
+                { value: 'CASH', label: 'Cash' }
               ].map(type => (
                 <button
                   key={type.value}
