@@ -59,23 +59,25 @@ export default function LiveKDS({
     fetchActiveOrders();
   }, [refreshKey, fetchActiveOrders]);
 
-  // ponytail: Web Audio API chime — no external file needed
-  const playNewOrderSound = useCallback(() => {
-    console.log('[LiveKDS] playNewOrderSound called. kdsSoundEnabled:', kdsSoundEnabled);
-    if (!kdsSoundEnabled) {
-      console.log('[LiveKDS] playNewOrderSound: sound is disabled by preference.');
-      return;
-    }
+  // ponytail: ensure AudioContext is created and resumed inside a user-gesture callstack.
+  // Browsers (Chrome, Brave, Firefox) suspend AudioContext created without a gesture.
+  // ctx.resume() is async — oscillators scheduled before it resolves produce silence.
+  const ensureAudioUnlocked = useCallback(() => {
     try {
       const ctx = audioCtxRef.current || new (window.AudioContext || window.webkitAudioContext)();
       audioCtxRef.current = ctx;
-      if (ctx.state === 'suspended') {
-        console.log('[LiveKDS] AudioContext is suspended, resuming...');
-        ctx.resume();
-      }
+      if (ctx.state === 'suspended') ctx.resume(); // resolves within same gesture frame
+    } catch (e) { /* AudioContext unavailable */ }
+  }, []);
+
+  // Web Audio API two-tone chime — no external file needed
+  const playNewOrderSound = useCallback(() => {
+    if (!kdsSoundEnabled) return;
+    const ctx = audioCtxRef.current;
+    if (!ctx) return; // no unlocked context yet — browser blocked before first gesture
+    // ponytail: resume() returns a promise; schedule oscillators only after it resolves
+    const play = () => {
       const now = ctx.currentTime;
-      console.log('[LiveKDS] Synthesizing chime tone...');
-      // Two-tone chime: C5 then E5
       [523.25, 659.25].forEach((freq, i) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -87,31 +89,48 @@ export default function LiveKDS({
         osc.start(now + i * 0.15);
         osc.stop(now + i * 0.15 + 0.25);
       });
-    } catch (e) {
-      console.error('[LiveKDS] Failed to play sound alert:', e);
+    };
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(play).catch(() => {});
+    } else {
+      play();
     }
   }, [kdsSoundEnabled]);
 
+  // Play a single confirmation tone (used for test and toggle-on feedback)
+  const playTestTone = useCallback(() => {
+    ensureAudioUnlocked();
+    const ctx = audioCtxRef.current;
+    if (!ctx) return;
+    const go = () => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 523.25;
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.2);
+    };
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(go).catch(() => {});
+    } else {
+      go();
+    }
+  }, [ensureAudioUnlocked]);
+
   // Handle live ORDER_CREATED handoff with sequence & stale protection guards
   useEffect(() => {
-    console.log('[LiveKDS] lastOrderCreatedEvent changed:', lastOrderCreatedEvent);
     if (!lastOrderCreatedEvent) return;
 
     // Ignore events that occurred before the component mounted (cached/stale parent state)
-    console.log('[LiveKDS] Event timestamp:', lastOrderCreatedEvent.timestamp, 'Mount time:', mountTimeRef.current);
-    if (lastOrderCreatedEvent.timestamp < mountTimeRef.current) {
-      console.log('[LiveKDS] Ignoring stale order created event.');
-      return;
-    }
+    if (lastOrderCreatedEvent.timestamp < mountTimeRef.current) return;
 
     // Guard: ensure we only process each unique event ID once
-    if (processedEventsRef.current.has(lastOrderCreatedEvent.id)) {
-      console.log('[LiveKDS] Event already processed. Skipping.');
-      return;
-    }
+    if (processedEventsRef.current.has(lastOrderCreatedEvent.id)) return;
     processedEventsRef.current.add(lastOrderCreatedEvent.id);
 
-    console.log('[LiveKDS] Processing live ORDER_CREATED event. Playing sound...');
     // Play sound and show toast alert
     playNewOrderSound();
     const tableName = lastOrderCreatedEvent.table;
@@ -124,35 +143,20 @@ export default function LiveKDS({
     return () => clearTimeout(timer);
   }, [lastOrderCreatedEvent, playNewOrderSound, fetchActiveOrders]);
 
-  // Sound preference toggle and test chime
+  // Sound preference toggle — unlocks AudioContext on user gesture
   const toggleKdsSound = useCallback(() => {
+    ensureAudioUnlocked(); // unlock on every click regardless of direction
     setKdsSoundEnabled(prev => {
       const next = !prev;
       localStorage.setItem('aurum_kds_sound_enabled', String(next));
-      if (next) {
-        setTimeout(() => {
-          try {
-            const ctx = audioCtxRef.current || new (window.AudioContext || window.webkitAudioContext)();
-            audioCtxRef.current = ctx;
-            if (ctx.state === 'suspended') ctx.resume();
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.type = 'sine';
-            osc.frequency.value = 523.25;
-            gain.gain.setValueAtTime(0.2, ctx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
-            osc.connect(gain).connect(ctx.destination);
-            osc.start();
-            osc.stop(ctx.currentTime + 0.2);
-          } catch (e) {}
-        }, 50);
-      }
+      if (next) setTimeout(() => playTestTone(), 50); // audible confirmation
       return next;
     });
-  }, []);
+  }, [ensureAudioUnlocked, playTestTone]);
 
-  // Kitchen mode toggle
+  // Kitchen mode toggle — also unlocks AudioContext opportunistically
   const toggleKitchenMode = useCallback(() => {
+    ensureAudioUnlocked();
     if (!isKitchenMode) {
       setIsKitchenMode(true);
       try {
@@ -166,7 +170,7 @@ export default function LiveKDS({
         if (document.fullscreenElement) document.exitFullscreen?.();
       } catch (e) {}
     }
-  }, [isKitchenMode, setIsKitchenMode]);
+  }, [isKitchenMode, setIsKitchenMode, ensureAudioUnlocked]);
 
   // Sync kitchen mode state with browser fullscreen changes (Escape key)
   useEffect(() => {
@@ -323,6 +327,11 @@ export default function LiveKDS({
               <span className="material-symbols-outlined text-lg">{kdsSoundEnabled ? 'volume_up' : 'volume_off'}</span>
               <span className="text-[10px] font-label-caps uppercase tracking-wider font-semibold hidden sm:inline">{kdsSoundEnabled ? 'Sound On' : 'Sound Off'}</span>
             </button>
+            {kdsSoundEnabled && (
+              <button onClick={playTestTone} className="text-on-surface-variant hover:text-primary transition-all cursor-pointer p-1.5 rounded-lg hover:bg-primary/10" title="Test Sound">
+                <span className="material-symbols-outlined text-lg">notifications_active</span>
+              </button>
+            )}
             <button onClick={handleThemeToggle} className="text-on-surface-variant hover:text-primary transition-all cursor-pointer p-1.5 rounded-lg hover:bg-primary/10">
               <span className="material-symbols-outlined text-lg">{isDark ? 'light_mode' : 'dark_mode'}</span>
             </button>
@@ -349,6 +358,11 @@ export default function LiveKDS({
                 <button onClick={toggleKdsSound} className="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-all px-1.5 py-1 rounded-lg hover:bg-primary/10 cursor-pointer" title={kdsSoundEnabled ? 'Sound On' : 'Sound Off'}>
                   <span className="material-symbols-outlined text-[16px]">{kdsSoundEnabled ? 'volume_up' : 'volume_off'}</span>
                 </button>
+                {kdsSoundEnabled && (
+                  <button onClick={playTestTone} className="text-on-surface-variant hover:text-primary transition-all cursor-pointer p-1 rounded-lg hover:bg-primary/10" title="Test Sound">
+                    <span className="material-symbols-outlined text-[16px]">notifications_active</span>
+                  </button>
+                )}
                 <button onClick={toggleKitchenMode} className="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-all px-1.5 py-1 rounded-lg hover:bg-primary/10 cursor-pointer" title="Enter Kitchen Mode">
                   <span className="material-symbols-outlined text-[16px]">fullscreen</span>
                 </button>
