@@ -85,12 +85,30 @@ function MenuPage() {
       return [];
     }
   });
+
+  const cartLookup = useMemo(() => {
+    const map = {};
+    cart.forEach(item => {
+      map[item._id] = item;
+    });
+    return map;
+  }, [cart]);
+
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [selectedTable] = useState(tableParam);
   const [selectedLocation] = useState(locationParam);
   const [activeOrder, setActiveOrder] = useState(null);
   const [activeOrders, setActiveOrders] = useState([]);
+
+  // Debounce search input changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchQuery(searchInput);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   useEffect(() => {
     localStorage.setItem('aurum_cart', JSON.stringify(cart));
@@ -101,6 +119,9 @@ function MenuPage() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [notification, setNotification] = useState('');
   const [selectedItem, setSelectedItem] = useState(null);
+  const selectedCartItem = useMemo(() => {
+    return selectedItem ? cartLookup[selectedItem._id] : null;
+  }, [selectedItem, cartLookup]);
   const [verificationCode, setVerificationCode] = useState('');
   const [pendingOrderId, setPendingOrderId] = useState('');
 
@@ -299,19 +320,23 @@ function MenuPage() {
         const data = await res.json();
         if (active) {
           const itemsList = Array.isArray(data) ? data : [];
-          const more = itemsList.length === PAGE_SIZE;
-          setMenuItems(itemsList);
+          const processedItems = itemsList.map(item => ({
+            ...item,
+            dietaryTags: getDietaryTags(item)
+          }));
+          const more = processedItems.length === PAGE_SIZE;
+          setMenuItems(processedItems);
           setHasMore(more);
 
           // If hero item is not set yet, set it from the first category fetch (normally "All")
-          if (!heroItem && itemsList.length > 0) {
-            const foundHero = itemsList.find(item => item.chefPick) || itemsList[0] || null;
+          if (!heroItem && processedItems.length > 0) {
+            const foundHero = processedItems.find(item => item.chefPick) || processedItems[0] || null;
             setHeroItem(foundHero);
           }
 
           // Save to cache
           menuCache.current[cacheKey] = {
-            items: itemsList,
+            items: processedItems,
             hasMore: more,
             offset: 0
           };
@@ -341,8 +366,12 @@ function MenuPage() {
       if (!res.ok) throw new Error('Failed to load more');
       const data = await res.json();
       if (Array.isArray(data)) {
-        const updatedItems = [...menuItems, ...data];
-        const more = data.length === PAGE_SIZE;
+        const processedNew = data.map(item => ({
+          ...item,
+          dietaryTags: getDietaryTags(item)
+        }));
+        const updatedItems = [...menuItems, ...processedNew];
+        const more = processedNew.length === PAGE_SIZE;
         setMenuItems(updatedItems);
         setOffset(newOffset);
         setHasMore(more);
@@ -776,8 +805,8 @@ function MenuPage() {
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
                 <input 
                   type="text" 
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
                   placeholder="Search menu..." 
                   className="w-full bg-surface-container-high border-outline-variant border text-on-surface pl-10 pr-4 py-2 rounded focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors font-body-md text-body-md placeholder-on-surface-variant/50" 
                 />
@@ -836,7 +865,7 @@ function MenuPage() {
         <div className="max-w-[1200px] mx-auto w-full">
           <AnimatePresence mode="wait">
             <motion.section 
-              key={activeCategory + '_' + searchQuery}
+              key={activeCategory}
               variants={{
                 hidden: { opacity: 0 },
                 show: {
@@ -874,7 +903,7 @@ function MenuPage() {
                 ))
               ) : menuItems.length > 0 ? (
                 menuItems.map((item) => {
-                  const cartItem = cart.find(ci => ci._id === item._id);
+                  const cartItem = cartLookup[item._id];
                   return (
                     <motion.article 
                       variants={{
@@ -883,9 +912,9 @@ function MenuPage() {
                           opacity: 1, 
                           y: 0,
                           transition: { 
-                            type: "spring", 
-                            stiffness: 260, 
-                            damping: 24 
+                            type: "tween",
+                            ease: "easeOut",
+                            duration: 0.25
                           } 
                         }
                       }}
@@ -919,7 +948,7 @@ function MenuPage() {
                         
                         {/* Dietary Tags Overlay */}
                         <div className="absolute top-3 left-3 z-20 flex flex-col gap-1.5 pointer-events-none">
-                          {getDietaryTags(item).map(tag => (
+                          {(item.dietaryTags || getDietaryTags(item) || []).map(tag => (
                             <div 
                               key={tag.type} 
                               className={`flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-semibold font-label-caps uppercase tracking-wider rounded-md border backdrop-blur-md shadow-sm ${tag.color}`}
@@ -1584,7 +1613,7 @@ function MenuPage() {
               </div>
               
               <div className="p-6 border-t border-outline-variant/10 bg-surface-container-lowest shrink-0">
-                {cart.find(i => i._id === selectedItem._id) ? (
+                {selectedCartItem ? (
                   <div className="flex gap-4 items-center justify-between w-full">
                     {/* Quantity Selector */}
                     <div className="flex items-center gap-3 bg-surface-container-high border border-outline-variant/30 rounded-xl p-0.5 shadow-sm shrink-0">
@@ -1596,7 +1625,7 @@ function MenuPage() {
                         <span className="material-symbols-outlined text-[20px]">remove</span>
                       </button>
                       <span className="font-body-md text-on-surface w-6 text-center text-[15px] font-bold">
-                        {cart.find(i => i._id === selectedItem._id).quantity}
+                        {selectedCartItem.quantity}
                       </span>
                       <button 
                         onClick={() => updateQuantity(selectedItem._id, 1)} 
