@@ -39,10 +39,15 @@ function shapeTable(table, lookups) {
   const locationName = resolvedLocation?.name || fallbackLocation;
 
   return {
-    ...table,
+    _id: table._id,
+    number: table.number,
+    name: table.name,
     locationId: table.locationId ? String(table.locationId) : (resolvedLocation?._id ? String(resolvedLocation._id) : null),
     location: locationName,
-    locationName
+    locationName,
+    seats: table.seats,
+    qrUrl: table.qrUrl,
+    orderUrl: table.orderUrl
   };
 }
 
