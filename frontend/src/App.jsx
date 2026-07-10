@@ -104,6 +104,89 @@ function MenuPage() {
   const [verificationCode, setVerificationCode] = useState('');
   const [pendingOrderId, setPendingOrderId] = useState('');
 
+  // Category scrolling and fade indicators
+  const categoryContainerRef = useRef(null);
+  const categoryRefs = useRef({});
+  const [showLeftFade, setShowLeftFade] = useState(false);
+  const [showRightFade, setShowRightFade] = useState(false);
+
+  const updateCategoryFades = useCallback(() => {
+    const el = categoryContainerRef.current;
+    if (el) {
+      const { scrollLeft, scrollWidth, clientWidth } = el;
+      setShowLeftFade(scrollLeft > 5);
+      setShowRightFade(scrollWidth - scrollLeft - clientWidth > 5);
+    }
+  }, []);
+
+  const handleCategoryScroll = useCallback(() => {
+    updateCategoryFades();
+  }, [updateCategoryFades]);
+
+  useEffect(() => {
+    updateCategoryFades();
+    window.addEventListener('resize', updateCategoryFades);
+    return () => window.removeEventListener('resize', updateCategoryFades);
+  }, [categories, updateCategoryFades]);
+
+  useEffect(() => {
+    const activeChip = categoryRefs.current[activeCategory];
+    if (activeChip) {
+      activeChip.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center'
+      });
+    }
+    const timer = setTimeout(updateCategoryFades, 300);
+    return () => clearTimeout(timer);
+  }, [activeCategory, updateCategoryFades]);
+
+  // Floating Mobile Cart Summary Auto-Collapse
+  const [isCartExpanded, setIsCartExpanded] = useState(true);
+  const cartTimerRef = useRef(null);
+  const previousCartRef = useRef([]);
+
+  useEffect(() => {
+    if (cart.length === 0) {
+      setIsCartExpanded(true);
+      if (cartTimerRef.current) {
+        clearTimeout(cartTimerRef.current);
+        cartTimerRef.current = null;
+      }
+      previousCartRef.current = [];
+      return;
+    }
+
+    const hasCartChanged = () => {
+      if (previousCartRef.current.length !== cart.length) return true;
+      for (let i = 0; i < cart.length; i++) {
+        const prevItem = previousCartRef.current.find(item => item._id === cart[i]._id);
+        if (!prevItem || prevItem.quantity !== cart[i].quantity) return true;
+      }
+      return false;
+    };
+
+    if (hasCartChanged()) {
+      setIsCartExpanded(true);
+      if (cartTimerRef.current) {
+        clearTimeout(cartTimerRef.current);
+      }
+      cartTimerRef.current = setTimeout(() => {
+        setIsCartExpanded(false);
+      }, 3000);
+      previousCartRef.current = cart.map(item => ({ _id: item._id, quantity: item.quantity }));
+    }
+  }, [cart]);
+
+  useEffect(() => {
+    return () => {
+      if (cartTimerRef.current) {
+        clearTimeout(cartTimerRef.current);
+      }
+    };
+  }, []);
+
   // Razorpay configuration and states
   const [razorpayKeyId, setRazorpayKeyId] = useState('');
   const [restaurantName, setRestaurantName] = useState('Aurum Restaurant');
@@ -589,7 +672,7 @@ function MenuPage() {
       </header>
 
       {/* Main Content Area */}
-      <main className="pt-16 w-full">
+      <main className="pt-16 pb-36 md:pb-0 w-full">
         
         {/* Hero Section */}
         {heroItem ? (
@@ -686,8 +769,8 @@ function MenuPage() {
         )}
 
         {/* Sticky Search & Filters */}
-        <section className="sticky top-16 z-40 bg-background/95 backdrop-blur-xl border-b border-outline-variant/30 py-4 w-full">
-          <div className="max-w-[1200px] mx-auto px-margin-mobile md:px-margin-desktop flex flex-col gap-3 w-full">
+        <section className="sticky top-16 z-40 bg-background/95 backdrop-blur-xl border-b border-outline-variant/30 py-2 md:py-3 w-full">
+          <div className="max-w-[1200px] mx-auto px-margin-mobile md:px-margin-desktop flex flex-col gap-2.5 w-full">
             <div className="flex gap-4 items-center justify-between w-full">
               <div className="relative flex-1 max-w-md">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
@@ -709,24 +792,42 @@ function MenuPage() {
               </div>
             </div>
             
-            {/* Horizontally Scrollable Categories Bar */}
-            <div className="overflow-x-auto hide-scrollbar scroll-smooth-horizontal flex gap-2 w-full py-1">
-              {categories.map(cat => {
-                const isActive = activeCategory === cat;
-                return (
-                  <button
-                    key={cat}
-                    onClick={() => setActiveCategory(cat)}
-                    className={`relative px-5 py-2 text-[10px] md:text-[11px] font-label-caps uppercase tracking-widest transition-all duration-200 whitespace-nowrap rounded-full font-semibold border ${
-                      isActive 
-                        ? 'bg-gold-metallic text-on-primary-fixed shadow-sm border-transparent' 
-                        : 'text-on-surface-variant/85 hover:text-primary bg-surface-container-low border-outline-variant/20'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                );
-              })}
+            {/* Horizontally Scrollable Categories Bar Wrapper */}
+            <div className="relative w-full overflow-hidden">
+              {/* Left Scroll Indicator Fade */}
+              {showLeftFade && (
+                <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-background to-transparent pointer-events-none z-10" />
+              )}
+              
+              {/* Categories scroll container */}
+              <div 
+                ref={categoryContainerRef}
+                onScroll={handleCategoryScroll}
+                className="overflow-x-auto hide-scrollbar flex gap-2 w-full py-1"
+              >
+                {categories.map(cat => {
+                  const isActive = activeCategory === cat;
+                  return (
+                    <button
+                      key={cat}
+                      ref={el => { categoryRefs.current[cat] = el; }}
+                      onClick={() => setActiveCategory(cat)}
+                      className={`relative px-5 py-2 text-[10px] md:text-[11px] font-label-caps uppercase tracking-widest transition-all duration-200 whitespace-nowrap rounded-full font-semibold border ${
+                        isActive 
+                          ? 'bg-gold-metallic text-on-primary-fixed shadow-sm border-transparent' 
+                          : 'text-on-surface-variant/85 hover:text-primary bg-surface-container-low border-outline-variant/20'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Right Scroll Indicator Fade */}
+              {showRightFade && (
+                <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none z-10" />
+              )}
             </div>
           </div>
         </section>
@@ -806,7 +907,7 @@ function MenuPage() {
                             src={item.image} 
                             alt={item.name} 
                             loading="lazy"
-                            className="w-full h-full object-cover grayscale-[20%] group-hover:grayscale-0 group-hover:scale-105 transition-all duration-700" 
+                            className="w-full h-full object-cover group-hover:scale-105 group-hover:brightness-[1.03] transition-all duration-700" 
                           />
                         ) : (
                           <div className="w-full h-full bg-surface-variant flex items-center justify-center">
@@ -854,28 +955,28 @@ function MenuPage() {
                           <span className="font-price-display text-[15px] md:text-price-display text-on-surface font-semibold">₹{item.price}</span>
                           <div onClick={(e) => e.stopPropagation()}>
                             {cartItem ? (
-                              <div className="flex items-center gap-2 bg-surface-container-high border border-outline-variant/30 rounded-full px-2 py-0.5 shadow-sm">
+                              <div className="flex items-center gap-1 bg-surface-container-high border border-outline-variant/30 rounded-full p-0.5 shadow-sm">
                                 <button 
                                   onClick={() => updateQuantity(item._id, -1)} 
                                   aria-label={`Decrease quantity of ${item.name}`}
-                                  className="text-on-surface-variant hover:text-primary p-0.5 flex items-center justify-center rounded-full hover:bg-surface-container-highest transition-colors focus-ring-gold focus:outline-none"
+                                  className="text-on-surface-variant hover:text-primary w-11 h-11 flex items-center justify-center rounded-full hover:bg-surface-container-highest transition-colors focus-ring-gold focus:outline-none shrink-0"
                                 >
-                                  <span className="material-symbols-outlined text-[15px] md:text-[18px]">remove</span>
+                                  <span className="material-symbols-outlined text-[16px] md:text-[18px]">remove</span>
                                 </button>
-                                <span className="font-body-md text-on-surface w-4 text-center text-[12px] md:text-[13px] font-bold">{cartItem.quantity}</span>
+                                <span className="font-body-md text-on-surface w-6 text-center text-[12px] md:text-[13px] font-bold shrink-0">{cartItem.quantity}</span>
                                 <button 
                                   onClick={() => updateQuantity(item._id, 1)} 
                                   aria-label={`Increase quantity of ${item.name}`}
-                                  className="text-on-surface-variant hover:text-primary p-0.5 flex items-center justify-center rounded-full hover:bg-surface-container-highest transition-colors focus-ring-gold focus:outline-none"
+                                  className="text-on-surface-variant hover:text-primary w-11 h-11 flex items-center justify-center rounded-full hover:bg-surface-container-highest transition-colors focus-ring-gold focus:outline-none shrink-0"
                                 >
-                                  <span className="material-symbols-outlined text-[15px] md:text-[18px]">add</span>
+                                  <span className="material-symbols-outlined text-[16px] md:text-[18px]">add</span>
                                 </button>
                               </div>
                             ) : (
                               <button 
                                 onClick={() => addToCart(item)}
                                 aria-label={`Add ${item.name} to cart`}
-                                className="bg-primary/15 hover:bg-primary border border-primary/20 hover:border-primary text-primary hover:text-on-primary font-label-caps text-[9px] md:text-[10px] px-3.5 py-1.5 rounded-full uppercase tracking-wider transition-all duration-300 flex items-center gap-1 shadow-sm font-bold focus-ring-gold focus:outline-none"
+                                className="bg-primary/15 hover:bg-primary border border-primary/20 hover:border-primary text-primary hover:text-on-primary font-label-caps text-[9px] md:text-[10px] px-4 min-h-[44px] min-w-[72px] flex items-center justify-center gap-1 rounded-full uppercase tracking-wider transition-all duration-300 shadow-sm font-bold focus-ring-gold focus:outline-none"
                               >
                                 <span className="material-symbols-outlined text-[12px] md:text-[14px]">add</span> Add
                               </button>
@@ -910,15 +1011,71 @@ function MenuPage() {
         </div>
       </main>
 
+      <AnimatePresence>
+        {cartCount > 0 && !isCartOpen && !isCheckoutOpen && !paidOrderDetails && !selectedItem && !isFilterOpen && (
+          <motion.div
+            layout
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            onClick={() => setIsCartOpen(true)}
+            className={`md:hidden fixed bottom-24 left-4 right-4 z-40 bg-gold-metallic text-on-primary-fixed rounded-2xl shadow-xl flex justify-between items-center gold-glow cursor-pointer transition-all duration-300 ${
+              isCartExpanded ? 'px-5 py-4' : 'px-4 py-2.5'
+            }`}
+          >
+            {isCartExpanded ? (
+              <>
+                <motion.div layout className="flex flex-col text-left">
+                  <span className="text-[11px] font-label-caps uppercase tracking-wider opacity-90">{cartCount} {cartCount === 1 ? 'item' : 'items'}</span>
+                  <span className="font-price-display font-bold text-base mt-0.5">₹{cartTotal.toFixed(2)}</span>
+                </motion.div>
+                <motion.button
+                  layout
+                  className="flex items-center gap-1.5 font-label-caps text-xs uppercase tracking-widest font-bold bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl border border-white/20 transition-all pointer-events-none"
+                >
+                  View Cart <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                </motion.button>
+              </>
+            ) : (
+              <>
+                <motion.div layout className="flex items-center gap-2 text-left font-sans text-xs font-semibold">
+                  <span className="text-sm">🛍</span>
+                  <span>{cartCount} {cartCount === 1 ? 'item' : 'items'}</span>
+                  <span className="opacity-60">•</span>
+                  <span className="font-price-display font-bold">₹{cartTotal.toFixed(0)}</span>
+                </motion.div>
+                <motion.div
+                  layout
+                  className="flex items-center gap-1 font-label-caps text-[11px] uppercase tracking-wider font-bold opacity-90"
+                >
+                  View <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                </motion.div>
+              </>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* BottomNavBar (Mobile Only) */}
       <nav className="md:hidden bg-surface-container-lowest/95 backdrop-blur-lg border-t border-outline-variant/10 shadow-lg fixed bottom-0 w-full z-50 rounded-t-xl flex justify-around items-center h-20 px-4 pb-safe">
-        <button className="flex flex-col items-center justify-center bg-secondary-container/30 text-primary rounded-xl px-3 py-1 hover:text-primary-fixed-dim transition-colors translate-y-[-2px] duration-300">
+        <button 
+          onClick={() => isCartOpen && toggleCart()}
+          className={`flex flex-col items-center justify-center transition-all duration-300 ${
+            !isCartOpen 
+              ? 'bg-secondary-container/30 text-primary rounded-xl px-3 py-1 translate-y-[-2px]' 
+              : 'text-on-surface-variant hover:text-primary-fixed-dim px-3 py-1'
+          }`}
+        >
           <span className="material-symbols-outlined">restaurant_menu</span>
           <span className="font-label-caps text-label-caps mt-1">Menu</span>
         </button>
         <button 
           onClick={toggleCart}
-          className="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary-fixed-dim transition-colors"
+          className={`flex flex-col items-center justify-center transition-all duration-300 ${
+            isCartOpen 
+              ? 'bg-secondary-container/30 text-primary rounded-xl px-3 py-1 translate-y-[-2px]' 
+              : 'text-on-surface-variant hover:text-primary-fixed-dim px-3 py-1'
+          }`}
         >
           <div className="relative">
             <span className="material-symbols-outlined">shopping_bag</span>
@@ -1383,13 +1540,13 @@ function MenuPage() {
                 <button 
                   onClick={() => setSelectedItem(null)}
                   aria-label="Close details dialog"
-                  className="absolute top-4 right-4 bg-black/50 hover:bg-black/80 text-white p-2 rounded-full backdrop-blur-md transition-colors focus-ring-gold focus:outline-none"
+                  className="absolute top-4 right-4 bg-black/50 hover:bg-black/80 text-white w-11 h-11 flex items-center justify-center rounded-full backdrop-blur-md transition-colors focus-ring-gold focus:outline-none shadow-md z-30"
                 >
-                  <span className="material-symbols-outlined">close</span>
+                  <span className="material-symbols-outlined text-[20px]">close</span>
                 </button>
               </div>
               
-              <div className="p-6 md:p-8 flex-1 overflow-y-auto hide-scrollbar">
+              <div className="p-6 md:p-8 overflow-y-auto max-h-[40vh] md:max-h-[50vh] hide-scrollbar">
                 <div className="flex justify-between items-start mb-4 gap-4">
                   <h2 className="font-headline-md text-primary text-2xl md:text-3xl">{selectedItem.name}</h2>
                   <span className="font-price-display text-on-surface text-xl md:text-2xl shrink-0">₹{selectedItem.price}</span>
@@ -1397,17 +1554,17 @@ function MenuPage() {
                 
                 <div className="flex flex-wrap gap-2 mb-6">
                   {(selectedItem.categories || (selectedItem.category ? [selectedItem.category] : [])).map(cat => (
-                    <span key={cat} className="bg-surface-variant text-on-surface-variant px-3 py-1 rounded-full text-[12px] font-label-caps uppercase tracking-widest">{cat}</span>
+                    <span key={cat} className="border border-outline-variant/30 bg-surface-container-high text-on-surface-variant px-3 py-1 rounded-full text-[11px] font-label-caps uppercase tracking-wider font-semibold">{cat}</span>
                   ))}
                   {selectedItem.chefPick && (
-                    <span className="bg-primary/20 text-primary border border-primary/30 px-3 py-1 rounded-full text-[12px] font-label-caps uppercase tracking-widest flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[14px]">star</span> Chef's Pick
+                    <span className="bg-primary/20 text-primary border border-primary/30 px-3 py-1 rounded-full text-[11px] font-label-caps uppercase tracking-wider font-semibold flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[13px] font-bold">star</span> Chef's Pick
                     </span>
                   )}
                   {getDietaryTags(selectedItem).map(tag => (
                     <span 
                       key={tag.type} 
-                      className={`px-3 py-1 rounded-full text-[12px] font-label-caps uppercase tracking-widest flex items-center gap-1.5 border backdrop-blur-md shadow-sm ${tag.color}`}
+                      className={`px-3 py-1 rounded-full text-[11px] font-label-caps uppercase tracking-wider font-semibold flex items-center gap-1.5 border backdrop-blur-md shadow-sm ${tag.color}`}
                     >
                       {tag.type === 'veg' || tag.type === 'nonveg' ? (
                         <span className={`w-2.5 h-2.5 flex items-center justify-center border ${tag.type === 'veg' ? 'border-green-500' : 'border-red-500'} rounded-sm p-[1px]`}>
@@ -1426,45 +1583,49 @@ function MenuPage() {
                 </p>
               </div>
               
-              <div className="p-6 border-t border-outline-variant/10 bg-surface-container-lowest flex gap-4 items-center justify-between shrink-0">
+              <div className="p-6 border-t border-outline-variant/10 bg-surface-container-lowest shrink-0">
                 {cart.find(i => i._id === selectedItem._id) ? (
-                  <div className="flex items-center gap-3 bg-surface-container-high border border-outline-variant/30 rounded-xl px-4 py-2 shadow-sm">
+                  <div className="flex gap-4 items-center justify-between w-full">
+                    {/* Quantity Selector */}
+                    <div className="flex items-center gap-3 bg-surface-container-high border border-outline-variant/30 rounded-xl p-0.5 shadow-sm shrink-0">
+                      <button 
+                        onClick={() => updateQuantity(selectedItem._id, -1)} 
+                        aria-label={`Decrease quantity of ${selectedItem.name}`}
+                        className="text-on-surface-variant hover:text-primary w-11 h-11 flex items-center justify-center rounded-full hover:bg-surface-container-highest transition-colors focus-ring-gold focus:outline-none"
+                      >
+                        <span className="material-symbols-outlined text-[20px]">remove</span>
+                      </button>
+                      <span className="font-body-md text-on-surface w-6 text-center text-[15px] font-bold">
+                        {cart.find(i => i._id === selectedItem._id).quantity}
+                      </span>
+                      <button 
+                        onClick={() => updateQuantity(selectedItem._id, 1)} 
+                        aria-label={`Increase quantity of ${selectedItem.name}`}
+                        className="text-on-surface-variant hover:text-primary w-11 h-11 flex items-center justify-center rounded-full hover:bg-surface-container-highest transition-colors focus-ring-gold focus:outline-none"
+                      >
+                        <span className="material-symbols-outlined text-[20px]">add</span>
+                      </button>
+                    </div>
+                    
+                    {/* View Cart Button */}
                     <button 
-                      onClick={() => updateQuantity(selectedItem._id, -1)} 
-                      className="text-on-surface-variant hover:text-primary flex items-center justify-center p-1 rounded-full hover:bg-surface-container-highest transition-colors"
+                      onClick={() => {
+                        setIsCartOpen(true);
+                        setSelectedItem(null);
+                      }}
+                      className="flex-1 bg-gold-metallic text-on-primary-fixed font-label-caps text-[14px] min-h-[44px] py-3 rounded-xl uppercase tracking-widest gold-glow font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5"
                     >
-                      <span className="material-symbols-outlined text-[20px]">remove</span>
-                    </button>
-                    <span className="font-body-md text-on-surface w-6 text-center text-[15px] font-bold">
-                      {cart.find(i => i._id === selectedItem._id).quantity}
-                    </span>
-                    <button 
-                      onClick={() => updateQuantity(selectedItem._id, 1)} 
-                      className="text-on-surface-variant hover:text-primary flex items-center justify-center p-1 rounded-full hover:bg-surface-container-highest transition-colors"
-                    >
-                      <span className="material-symbols-outlined text-[20px]">add</span>
+                      <span className="material-symbols-outlined text-[18px]">shopping_bag</span> View Cart
                     </button>
                   </div>
                 ) : (
                   <button 
                     onClick={() => addToCart(selectedItem)}
-                    className="flex-1 bg-surface-container-highest hover:bg-surface-bright text-on-surface border border-outline-variant/30 font-label-caps text-[14px] py-3 md:py-4 rounded-xl uppercase tracking-wider transition-colors"
+                    className="w-full bg-gold-metallic text-on-primary-fixed font-label-caps text-[14px] min-h-[44px] py-3 rounded-xl uppercase tracking-widest gold-glow font-bold transition-all active:scale-95 flex items-center justify-center gap-2"
                   >
-                    Add to Cart
+                    <span className="material-symbols-outlined text-[18px]">add_shopping_cart</span> Add to Cart
                   </button>
                 )}
-                <button 
-                  onClick={() => {
-                    if (!cart.find(i => i._id === selectedItem._id)) {
-                      addToCart(selectedItem);
-                    }
-                    setIsCartOpen(true);
-                    setSelectedItem(null);
-                  }}
-                  className="flex-1 bg-gold-metallic text-on-primary-fixed font-label-caps text-[14px] py-3 md:py-4 rounded-xl uppercase tracking-wider gold-glow transition-all flex items-center justify-center gap-1.5"
-                >
-                  <span className="material-symbols-outlined text-[18px]">shopping_bag</span> View Cart
-                </button>
               </div>
             </motion.div>
           </motion.div>
