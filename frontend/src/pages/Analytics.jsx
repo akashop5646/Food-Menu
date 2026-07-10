@@ -130,6 +130,7 @@ export default function Analytics() {
 
   const mountRef = useRef(null);
   const isFetchInFlightRef = useRef(false);
+  const activeRequestIdRef = useRef(0);
   const ordersAbortControllerRef = useRef(null);
   const menuAbortControllerRef = useRef(null);
 
@@ -182,6 +183,10 @@ export default function Analytics() {
       setRefreshing(true);
     }
 
+    // Increment request ID and capture it locally in closure
+    activeRequestIdRef.current += 1;
+    const requestId = activeRequestIdRef.current;
+
     // Cancel any stale order requests
     if (ordersAbortControllerRef.current) {
       ordersAbortControllerRef.current.abort();
@@ -198,21 +203,31 @@ export default function Analytics() {
 
       if (ordersRes.ok) {
         const ordersData = await ordersRes.json();
-        setOrders(ordersData);
-        setLastUpdatedAt(new Date());
-        setFetchError(false);
+        // Guard state updates: only write if this request is still the active/latest one
+        if (activeRequestIdRef.current === requestId) {
+          setOrders(ordersData);
+          setLastUpdatedAt(new Date());
+          setFetchError(false);
+        }
       } else {
-        setFetchError(true);
+        if (activeRequestIdRef.current === requestId) {
+          setFetchError(true);
+        }
       }
     } catch (err) {
       if (err.name !== 'AbortError') {
         console.error('Failed to fetch orders:', err);
-        setFetchError(true);
+        if (activeRequestIdRef.current === requestId) {
+          setFetchError(true);
+        }
       }
     } finally {
-      isFetchInFlightRef.current = false;
-      setLoading(false);
-      setRefreshing(false);
+      // Guard cleanup updates: only clear indicators if this request is still the active/latest one
+      if (activeRequestIdRef.current === requestId) {
+        isFetchInFlightRef.current = false;
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 
@@ -220,6 +235,15 @@ export default function Analytics() {
   useEffect(() => {
     fetchOrders(false);
   }, [fetchOrders]);
+
+  // Cleanup in-flight requests on component unmount
+  useEffect(() => {
+    return () => {
+      if (ordersAbortControllerRef.current) {
+        ordersAbortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   // Page visibility & Polling handler (60s fallback interval)
   useEffect(() => {
