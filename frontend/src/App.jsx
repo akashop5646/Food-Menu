@@ -529,7 +529,19 @@ function MenuPage() {
         if (res.ok) {
           const data = await res.json();
           if (data.verified && data.order && isToday(data.order.createdAt)) {
-            setActiveOrder(data.order);
+            setActiveOrder(prevOrder => {
+              if (prevOrder && prevOrder.paymentStatus !== 'PAID' && data.order.paymentStatus === 'PAID') {
+                showNotification('Payment successful! Your order is being prepared.');
+                setPaidOrderDetails({ 
+                  orderId: data.order._id, 
+                  subtotal: data.order.total,
+                  convenienceFee: data.order.convenienceFee ?? 0,
+                  amount: data.order.totalPayable ?? data.order.total
+                });
+                setIsCheckoutOpen(false);
+              }
+              return data.order;
+            });
             setIsOrderVerified(true);
             setPendingOrderId('');
             // Clear cart & session ID if the order was just placed/verified

@@ -356,17 +356,39 @@ router.patch('/:id/payment', requireAuth, async (req, res) => {
     }
 
     const db = await getDB();
-    const result = await db.collection('orders').updateOne(
-      { _id: new ObjectId(id) },
-      { $set: { paymentStatus: 'PAID' } }
-    );
-
-    if (result.matchedCount === 0) {
+    const order = await db.collection('orders').findOne({ _id: new ObjectId(id) });
+    if (!order) {
       return res.status(404).json({ error: 'Order not found.' });
     }
 
-    // Broadcast payment update
-    broadcast('PAYMENT_UPDATED', { id, paymentStatus: 'PAID' });
+    // Idempotency: if already paid, return success but don't broadcast
+    if (order.paymentStatus === 'PAID') {
+      return res.json({ success: true, id, paymentStatus: 'PAID', alreadyPaid: true });
+    }
+
+    const result = await db.collection('orders').updateOne(
+      { 
+        _id: new ObjectId(id),
+        paymentStatus: { $ne: 'PAID' }
+      },
+      { 
+        $set: { 
+          paymentStatus: 'PAID',
+          paymentVerifiedBy: 'ADMIN',
+          manuallyVerifiedAt: new Date()
+        } 
+      }
+    );
+
+    if (result.modifiedCount > 0) {
+      // Broadcast payment update
+      broadcast('PAYMENT_UPDATED', { 
+        _id: id, 
+        id, 
+        paymentStatus: 'PAID',
+        table: order.table
+      });
+    }
 
     res.json({ success: true, id, paymentStatus: 'PAID' });
   } catch (error) {
@@ -439,6 +461,138 @@ router.post('/razorpay-order', async (req, res) => {
 });
 
 // Verify payment signature and update order (Public/Customer endpoint)
+// Fetch payment details from Razorpay API
+async function fetchRazorpayPaymentDetails(paymentId) {
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  if (!keyId || !keySecret) {
+    throw new Error('Razorpay keys not configured');
+  }
+  const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+  const response = await fetch(`https://api.razorpay.com/v1/payments/${paymentId}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Basic ${auth}`
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch payment details from Razorpay: ${response.statusText}`);
+  }
+  return await response.json();
+}
+
+// Shared payment reconciliation helper
+export async function reconcileSuccessfulRazorpayPayment({
+  razorpayOrderId,
+  razorpayPaymentId,
+  amount,
+  currency,
+  paidAt,
+  source
+}) {
+  if (!razorpayOrderId || !razorpayPaymentId) {
+    return { success: false, reason: 'INVALID_IDENTIFIERS' };
+  }
+
+  const db = await getDB();
+
+  // Find order by razorpayOrderId
+  const order = await db.collection('orders').findOne({ razorpayOrderId });
+  if (!order) {
+    console.warn(`⚠️ Razorpay reconciliation warning: No local order found with razorpayOrderId=${razorpayOrderId}`);
+    return { success: false, reason: 'ORDER_NOT_FOUND' };
+  }
+
+  // Calculate authoritative expected amount in paise
+  const expectedAmountInPaise = Math.round(
+    Number(order.totalPayable ?? order.total) * 100
+  );
+
+  // Validate amount and currency
+  if (Number(amount) !== expectedAmountInPaise) {
+    console.warn(`⚠️ Razorpay reconciliation warning: Amount mismatch. Expected ${expectedAmountInPaise} paise, got ${amount} paise for razorpayOrderId=${razorpayOrderId}`);
+    return { success: false, reason: 'AMOUNT_MISMATCH' };
+  }
+  if (String(currency).toUpperCase() !== 'INR') {
+    console.warn(`⚠️ Razorpay reconciliation warning: Currency mismatch. Expected INR, got ${currency} for razorpayOrderId=${razorpayOrderId}`);
+    return { success: false, reason: 'CURRENCY_MISMATCH' };
+  }
+
+  // Idempotency: check if already PAID
+  if (order.paymentStatus === 'PAID') {
+    return {
+      success: true,
+      changed: false,
+      alreadyPaid: true,
+      order
+    };
+  }
+
+  // Never allow one Razorpay payment ID to be attached to multiple internal orders
+  const duplicatePayment = await db.collection('orders').findOne({
+    razorpayPaymentId,
+    _id: { $ne: order._id }
+  });
+  if (duplicatePayment) {
+    console.warn(`⚠️ Razorpay reconciliation warning: Duplicate payment ID ${razorpayPaymentId} already used for another order`);
+    return { success: false, reason: 'DUPLICATE_PAYMENT_ID' };
+  }
+
+  // Atomic update to PAID to prevent race conditions
+  const result = await db.collection('orders').findOneAndUpdate(
+    {
+      _id: order._id,
+      paymentStatus: { $ne: 'PAID' }
+    },
+    {
+      $set: {
+        paymentStatus: 'PAID',
+        paymentType: 'RAZORPAY',
+        razorpayPaymentId,
+        paidAt: paidAt || new Date(),
+        paymentUpdatedAt: new Date(),
+        paymentVerifiedBy: source // 'WEBHOOK' or 'FRONTEND'
+      }
+    },
+    {
+      returnDocument: 'after'
+    }
+  );
+
+  if (!result) {
+    // In case of a race where it became PAID concurrently, fetch and return the order
+    const updatedOrder = await db.collection('orders').findOne({ _id: order._id });
+    return {
+      success: true,
+      changed: false,
+      alreadyPaid: true,
+      order: updatedOrder
+    };
+  }
+
+  const updatedOrder = result;
+
+  // Broadcast payment update
+  broadcast('PAYMENT_UPDATED', {
+    _id: updatedOrder._id.toString(),
+    id: updatedOrder._id.toString(),
+    paymentStatus: 'PAID',
+    paymentType: 'RAZORPAY',
+    razorpayOrderId: updatedOrder.razorpayOrderId,
+    razorpayPaymentId: updatedOrder.razorpayPaymentId,
+    paidAt: updatedOrder.paidAt,
+    table: updatedOrder.table
+  });
+
+  return {
+    success: true,
+    changed: true,
+    alreadyPaid: false,
+    order: updatedOrder
+  };
+}
+
+// Verify payment signature and update order (Public/Customer endpoint)
 router.post('/:id/verify-payment', async (req, res) => {
   try {
     const { id } = req.params;
@@ -466,29 +620,7 @@ router.post('/:id/verify-payment', async (req, res) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    // Idempotent payment checking
-    if (order.paymentStatus === 'PAID') {
-      if (order.razorpayPaymentId === razorpay_payment_id) {
-        return res.json({ success: true, message: 'Payment already verified' });
-      }
-      return res.status(409).json({ error: 'Order has already been paid with a different transaction' });
-    }
-
-    // Cryptographically and logically bind the Razorpay order to the correct internal order
-    if (!order.razorpayOrderId || order.razorpayOrderId !== razorpay_order_id) {
-      return res.status(409).json({ error: 'Razorpay order ID mismatch or not associated with this order' });
-    }
-
-    // Never allow one Razorpay payment ID to be attached to multiple internal orders
-    const duplicatePayment = await db.collection('orders').findOne({
-      razorpayPaymentId: razorpay_payment_id,
-      _id: { $ne: new ObjectId(id) }
-    });
-    if (duplicatePayment) {
-      return res.status(409).json({ error: 'This payment transaction has already been used for another order' });
-    }
-
-    // Verify signature using timing-safe comparison
+    // Cryptographically verify checkout signature using keySecret
     const hmac = crypto.createHmac('sha256', keySecret);
     hmac.update(`${razorpay_order_id}|${razorpay_payment_id}`);
     const generatedSignature = hmac.digest('hex');
@@ -500,22 +632,28 @@ router.post('/:id/verify-payment', async (req, res) => {
       return res.status(400).json({ error: 'Invalid payment signature' });
     }
 
-    // Update order with payment verification fields
-    await db.collection('orders').updateOne(
-      { _id: new ObjectId(id) },
-      { 
-        $set: { 
-          paymentStatus: 'PAID',
-          paymentType: 'RAZORPAY',
-          razorpayOrderId: razorpay_order_id,
-          razorpayPaymentId: razorpay_payment_id,
-          paidAt: new Date()
-        } 
-      }
-    );
+    // Fetch authoritative payment details from Razorpay API
+    let paymentDetails;
+    try {
+      paymentDetails = await fetchRazorpayPaymentDetails(razorpay_payment_id);
+    } catch (fetchErr) {
+      console.error('Failed to fetch Razorpay payment details during verification:', fetchErr.message);
+      return res.status(400).json({ error: 'Failed to verify payment details with payment gateway' });
+    }
 
-    // Broadcast payment status change to waiter and KDS
-    broadcast('PAYMENT_UPDATED', { id, paymentStatus: 'PAID' });
+    // Call the shared payment reconciliation helper
+    const result = await reconcileSuccessfulRazorpayPayment({
+      razorpayOrderId: razorpay_order_id,
+      razorpayPaymentId: razorpay_payment_id,
+      amount: paymentDetails.amount,
+      currency: paymentDetails.currency,
+      paidAt: paymentDetails.created_at ? new Date(paymentDetails.created_at * 1000) : new Date(),
+      source: 'FRONTEND'
+    });
+
+    if (!result.success) {
+      return res.status(400).json({ error: `Reconciliation failed: ${result.reason}` });
+    }
 
     res.json({ success: true });
   } catch (error) {

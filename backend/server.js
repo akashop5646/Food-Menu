@@ -12,6 +12,7 @@ import uploadRoutes from './routes/upload.js';
 import categoriesRoutes from './routes/categories.js';
 import settingsRoutes from './routes/settings.js';
 import ordersRoutes from './routes/orders.js';
+import paymentsRoutes from './routes/payments.js';
 import { initWebSocket } from './websocket.js';
 
 dotenv.config();
@@ -66,6 +67,9 @@ app.use(cors({
   },
   credentials: true,
 }));
+
+// Mount payments route before global JSON parser to allow raw body signature verification
+app.use('/api/payments', paymentsRoutes);
 
 // Body parsing with size limits (M5 fix)
 app.use(express.json({ limit: '1mb' }));
