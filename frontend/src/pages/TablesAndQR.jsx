@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE } from '../config';
 
@@ -8,7 +8,7 @@ export default function TablesAndQR() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
-  const [fetchError, setFetchError] = useState(null);
+  const [fetchError, setFetchError] = useState(false);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
@@ -37,11 +37,41 @@ export default function TablesAndQR() {
   const originalOverflowRef = useRef('');
   const lastFocusedRef = useRef(null);
 
-  const showToast = (message, type) => {
+  const createInputRef = useRef(null);
+  const editInputRef = useRef(null);
+  const locationInputRef = useRef(null);
+  const deleteCancelButtonRef = useRef(null);
+
+  // Focus management on open
+  useEffect(() => {
+    if (isModalOpen) {
+      setTimeout(() => createInputRef.current?.focus(), 50);
+    }
+  }, [isModalOpen]);
+
+  useEffect(() => {
+    if (isLocationModalOpen) {
+      setTimeout(() => locationInputRef.current?.focus(), 50);
+    }
+  }, [isLocationModalOpen]);
+
+  useEffect(() => {
+    if (editingTable) {
+      setTimeout(() => editInputRef.current?.focus(), 50);
+    }
+  }, [editingTable]);
+
+  useEffect(() => {
+    if (deleteTargetId) {
+      setTimeout(() => deleteCancelButtonRef.current?.focus(), 50);
+    }
+  }, [deleteTargetId]);
+
+  const showToast = useCallback((message, type) => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     setToast({ message, type });
     toastTimeoutRef.current = setTimeout(() => setToast(null), 2000);
-  };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -54,8 +84,8 @@ export default function TablesAndQR() {
 
   const getTableLabel = (table) => table.name || (table.number ? `Table ${table.number}` : 'Table');
 
-  const currentDeleteTarget = useMemo(
-    () => (deleteTargetId ? tables.find((t) => t._id === deleteTargetId) || null : null),
+  const deleteTarget = useMemo(
+    () => (deleteTargetId ? tables.find((t) => String(t._id) === String(deleteTargetId)) || null : null),
     [deleteTargetId, tables]
   );
 
@@ -75,32 +105,47 @@ export default function TablesAndQR() {
 
   const hasOpenOverlay = isModalOpen || isLocationModalOpen || !!editingTable || !!deleteTargetId;
 
+  // Safe scroll lock handling open overlays
   useEffect(() => {
     if (hasOpenOverlay) {
-      originalOverflowRef.current = document.body.style.overflow;
+      if (document.body.style.overflow !== 'hidden') {
+        originalOverflowRef.current = document.body.style.overflow;
+      }
       document.body.style.overflow = 'hidden';
     } else {
-      document.body.style.overflow = originalOverflowRef.current || '';
+      document.body.style.overflow = originalOverflowRef.current;
     }
-    return () => {
-      document.body.style.overflow = originalOverflowRef.current || '';
-    };
   }, [hasOpenOverlay]);
 
+  // Restore scroll on unmount
+  useEffect(() => {
+    return () => {
+      if (originalOverflowRef.current !== undefined) {
+        document.body.style.overflow = originalOverflowRef.current;
+      }
+    };
+  }, []);
+
+  // Escape key handler: Escape closes the topmost active dialog, or dropdown
   useEffect(() => {
     if (!hasOpenOverlay && !openDropdownId) return;
 
     const handleEscape = (e) => {
       if (e.key !== 'Escape') return;
-      e.preventDefault();
+      
+      // Do not close multiple overlays at once, prioritize topmost
       if (deleteTargetId) {
         setDeleteTargetId(null);
+        restoreFocus();
       } else if (editingTable) {
         setEditingTable(null);
-      } else if (isModalOpen) {
-        setIsModalOpen(false);
+        restoreFocus();
       } else if (isLocationModalOpen) {
         setIsLocationModalOpen(false);
+        restoreFocus();
+      } else if (isModalOpen) {
+        setIsModalOpen(false);
+        restoreFocus();
       } else if (openDropdownId) {
         setOpenDropdownId(null);
       }
@@ -110,6 +155,7 @@ export default function TablesAndQR() {
     return () => document.removeEventListener('keydown', handleEscape);
   }, [deleteTargetId, editingTable, isModalOpen, isLocationModalOpen, openDropdownId, hasOpenOverlay]);
 
+  // Click outside to close three-dot menu dropdown
   useEffect(() => {
     if (!openDropdownId) return;
 
@@ -142,6 +188,8 @@ export default function TablesAndQR() {
     if (fetchInFlightRef.current) return;
     fetchInFlightRef.current = true;
 
+    setFetchError(false); // Clear previous fetch error before new request
+
     if (hasLoadedOnceRef.current) {
       setIsRefreshing(true);
     }
@@ -159,14 +207,15 @@ export default function TablesAndQR() {
 
       setTables(Array.isArray(tablesData) ? tablesData : tablesData.tables || []);
       setLocations(Array.isArray(locsData) ? locsData : []);
-      setFetchError(null);
+      setFetchError(false);
 
       if (!hasLoadedOnceRef.current) {
         hasLoadedOnceRef.current = true;
       }
     } catch (err) {
+      console.error(err);
       if (!hasLoadedOnceRef.current) {
-        setFetchError('Something went wrong loading tables');
+        setFetchError(true);
       } else {
         showToast('Something went wrong. Please try again.', 'error');
       }
@@ -252,7 +301,6 @@ export default function TablesAndQR() {
 
   const handleStartEdit = (table) => {
     if (!table._id) return;
-    lastFocusedRef.current = document.activeElement;
     setEditingTable(table);
     setEditFormData({
       name: table.name,
@@ -288,7 +336,7 @@ export default function TablesAndQR() {
     }
   };
 
-  const confirmDeleteTable = async () => {
+  const handleConfirmDelete = async () => {
     if (!deleteTargetId || isDeletingTable) return;
     setIsDeletingTable(true);
     try {
@@ -312,25 +360,33 @@ export default function TablesAndQR() {
   };
 
   const handleRetry = () => {
+    if (isRetrying) return;
     setIsRetrying(true);
-    setFetchError(null);
+    setFetchError(false);
     fetchData();
   };
 
   const handleDeleteClick = (tableId) => {
-    lastFocusedRef.current = document.activeElement;
     setOpenDropdownId(null);
     setDeleteTargetId(tableId);
   };
 
-  const safeTableLabel = (table) => getTableLabel(table).replace(/\s+/g, '_');
+  const safeTableLabel = (table) => {
+    const label = table.name?.trim() || `Table ${table.number ?? ''}`.trim() || 'Table';
+    return label.replace(/\s+/g, '_');
+  };
+
 
   const renderSkeletons = () => (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-gutter pb-8">
+      <div className="sr-only" role="status">
+        Loading tables and QR codes
+      </div>
       {Array.from({ length: 6 }).map((_, i) => (
         <div
           key={i}
           className="bg-surface-container/40 rounded-2xl p-5 border border-primary/15 animate-pulse"
+          aria-hidden="true"
         >
           <div className="flex justify-between items-start mb-6">
             <div className="space-y-2 flex-1">
@@ -345,7 +401,6 @@ export default function TablesAndQR() {
             <div className="h-4 bg-surface-container-high rounded w-16" />
             <div className="h-6 w-6 bg-surface-container-high rounded" />
           </div>
-          <span className="sr-only">Loading tables and QR codes</span>
         </div>
       ))}
     </div>
@@ -363,7 +418,7 @@ export default function TablesAndQR() {
       <button
         onClick={handleRetry}
         disabled={isRetrying}
-        className="bg-primary text-on-primary font-title-md text-[14px] font-semibold px-6 py-2.5 rounded-xl gold-glow flex items-center gap-2 disabled:opacity-60"
+        className="bg-primary text-on-primary font-title-md text-[14px] font-semibold px-6 py-2.5 rounded-xl gold-glow flex items-center gap-2 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
       >
         {isRetrying ? (
           <>
@@ -398,7 +453,7 @@ export default function TablesAndQR() {
           }
           setIsModalOpen(true);
         }}
-        className="bg-primary text-on-primary font-title-md text-[14px] font-semibold px-6 py-2.5 rounded-xl gold-glow flex items-center gap-2"
+        className="bg-primary text-on-primary font-title-md text-[14px] font-semibold px-6 py-2.5 rounded-xl gold-glow flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
       >
         <span className="material-symbols-outlined text-[18px]">qr_code</span>
         Generate QR
@@ -419,8 +474,9 @@ export default function TablesAndQR() {
         onClick={() => {
           setSearchQuery('');
           setSelectedFilter('All');
+          setOpenDropdownId(null);
         }}
-        className="bg-surface-container-high border border-outline-variant/50 text-on-surface font-title-md text-[14px] font-semibold px-6 py-2.5 rounded-xl hover:border-primary/50 transition-colors flex items-center gap-2"
+        className="bg-surface-container-high border border-outline-variant/50 text-on-surface font-title-md text-[14px] font-semibold px-6 py-2.5 rounded-xl hover:border-primary/50 transition-colors flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
       >
         <span className="material-symbols-outlined text-[18px]">filter_alt_off</span>
         Clear filters
@@ -435,7 +491,10 @@ export default function TablesAndQR() {
           <div className="relative">
             <select
               value={selectedFilter}
-              onChange={(e) => setSelectedFilter(e.target.value)}
+              onChange={(e) => {
+                setSelectedFilter(e.target.value);
+                setOpenDropdownId(null);
+              }}
               aria-label="Filter by location"
               className="bg-none bg-surface-container-high hover:bg-surface-container-highest border border-outline-variant text-on-surface pl-4 pr-10 py-2.5 rounded-xl font-label-caps text-[12px] font-bold tracking-[0.1em] transition-colors appearance-none outline-none focus:border-primary cursor-pointer shadow-sm w-full sm:w-auto"
             >
@@ -451,7 +510,7 @@ export default function TablesAndQR() {
             </span>
           </div>
 
-          <div className="relative group w-full sm:w-64">
+          <div className="relative group flex-1 min-w-[160px] sm:flex-none sm:w-64">
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -466,13 +525,14 @@ export default function TablesAndQR() {
           </div>
         </div>
 
-        <div className="flex gap-3 sm:flex-shrink-0">
+        <div className="flex flex-wrap gap-3 sm:flex-shrink-0">
           <button
             onClick={() => {
+              setOpenDropdownId(null);
               lastFocusedRef.current = document.activeElement;
               setIsLocationModalOpen(true);
             }}
-            className="bg-surface-container-high border border-outline-variant/50 text-on-surface font-title-md text-[14px] sm:text-[16px] font-semibold px-4 py-2.5 rounded-xl hover:border-primary/50 transition-colors flex items-center gap-2 shadow-sm"
+            className="bg-surface-container-high border border-outline-variant/50 text-on-surface font-title-md text-[14px] sm:text-[16px] font-semibold px-4 py-2.5 rounded-xl hover:border-primary/50 transition-colors flex items-center gap-2 shadow-sm focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
             aria-label="Create new location"
           >
             <span className="material-symbols-outlined text-[18px] hidden sm:block">
@@ -482,14 +542,16 @@ export default function TablesAndQR() {
             <span className="sm:hidden">Location +</span>
           </button>
           <button
+            type="button"
             onClick={() => {
               if (locations.length > 0 && !formData.locationId) {
                 setFormData((prev) => ({ ...prev, locationId: String(locations[0]._id) }));
               }
+              setOpenDropdownId(null);
               lastFocusedRef.current = document.activeElement;
               setIsModalOpen(true);
             }}
-            className="bg-primary text-on-primary font-title-md text-[14px] sm:text-[16px] font-semibold px-4 sm:px-6 py-2.5 rounded-xl ripple shadow-[0_0_15px_rgba(212,175,55,0.3)] hover:shadow-[0_0_25px_rgba(212,175,55,0.5)] transition-shadow duration-300 flex items-center gap-2"
+            className="bg-primary text-on-primary font-title-md text-[14px] sm:text-[16px] font-semibold px-4 sm:px-6 py-2.5 rounded-xl ripple shadow-[0_0_15px_rgba(212,175,55,0.3)] hover:shadow-[0_0_25px_rgba(212,175,55,0.5)] transition-shadow duration-300 flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
             aria-label="Generate new table QR code"
           >
             <span className="material-symbols-outlined hidden sm:block">qr_code</span>
@@ -573,7 +635,7 @@ export default function TablesAndQR() {
                         );
                       }}
                       className="text-on-surface-variant hover:text-primary transition-colors rounded p-2 min-w-[44px] min-h-[44px] flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                      aria-label={`Actions for ${getTableLabel(table)}`}
+                      aria-label={`Actions for ${table.name || `Table ${table.number || ''}`}`}
                       aria-haspopup="menu"
                       aria-expanded={openDropdownId === table._id}
                       aria-controls={`table-actions-${table._id}`}
@@ -596,7 +658,7 @@ export default function TablesAndQR() {
                             role="menuitem"
                             onClick={() => handleStartEdit(table)}
                             className="w-full text-left px-4 py-3 min-h-[44px] font-body-sm text-[13px] text-on-surface hover:bg-surface-bright transition-colors flex items-center gap-2 border-b border-outline-variant/10 outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                            aria-label={`Edit ${getTableLabel(table)}`}
+                            aria-label={`Edit ${table.name || `Table ${table.number || ''}`}`}
                           >
                             <span className="material-symbols-outlined text-[16px]">edit</span>{' '}
                             Edit Table
@@ -606,7 +668,7 @@ export default function TablesAndQR() {
                             role="menuitem"
                             onClick={() => handleDeleteClick(table._id)}
                             className="w-full text-left px-4 py-3 min-h-[44px] font-body-sm text-[13px] text-error hover:bg-surface-bright transition-colors flex items-center gap-2 outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                            aria-label={`Delete ${getTableLabel(table)}`}
+                            aria-label={`Delete ${table.name || `Table ${table.number || ''}`}`}
                           >
                             <span className="material-symbols-outlined text-[16px]">delete</span>{' '}
                             Delete Table
@@ -646,7 +708,7 @@ export default function TablesAndQR() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {deleteTargetId && currentDeleteTarget && (
+        {deleteTargetId && deleteTarget && (
           <motion.div
             key="delete-dialog"
             initial={{ opacity: 0 }}
@@ -674,31 +736,32 @@ export default function TablesAndQR() {
                   id="delete-dialog-title"
                   className="font-headline-sm text-on-surface text-[20px]"
                 >
-                  Delete {getTableLabel(currentDeleteTarget)}?
+                  Delete {getTableLabel(deleteTarget)}?
                 </h2>
               </div>
               <p className="font-body-sm text-[14px] text-on-surface-variant/80 mb-2">
                 This action cannot be undone. The table and its QR record will be removed.
               </p>
               <p className="font-body-sm text-[13px] text-on-surface-variant/60 mb-6">
-                {getLocationLabel(currentDeleteTarget)}
+                {getLocationLabel(deleteTarget)}
               </p>
               <div className="flex justify-end gap-3">
                 <button
+                  ref={deleteCancelButtonRef}
                   type="button"
                   onClick={() => {
                     setDeleteTargetId(null);
                     restoreFocus();
                   }}
-                  className="px-5 py-2 min-h-[44px] text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  className="px-5 py-2 min-h-[44px] text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
-                  onClick={confirmDeleteTable}
+                  onClick={handleConfirmDelete}
                   disabled={isDeletingTable}
-                  className="bg-error text-on-error px-6 py-2 min-h-[44px] rounded-lg font-label-caps text-[12px] uppercase tracking-widest flex items-center gap-2 disabled:opacity-60 outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  className="bg-error text-on-error px-6 py-2 min-h-[44px] rounded-lg font-label-caps text-[12px] uppercase tracking-widest flex items-center gap-2 disabled:opacity-60 outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
                 >
                   {isDeletingTable ? (
                     <>
@@ -755,7 +818,7 @@ export default function TablesAndQR() {
                     restoreFocus();
                   }}
                   aria-label="Close"
-                  className="text-on-surface-variant hover:text-primary transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg"
+                  className="text-on-surface-variant hover:text-primary transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
                 >
                   <span className="material-symbols-outlined">close</span>
                 </button>
@@ -766,6 +829,7 @@ export default function TablesAndQR() {
                     Location Name
                   </label>
                   <input
+                    ref={locationInputRef}
                     required
                     type="text"
                     value={newLocationName}
@@ -776,19 +840,19 @@ export default function TablesAndQR() {
                 </div>
                 <div className="pt-4 flex justify-end gap-3">
                   <button
-                    type="button"
-                    onClick={() => {
-                      setIsLocationModalOpen(false);
-                      restoreFocus();
-                    }}
-                    className="px-5 py-2 min-h-[44px] text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                     type="button"
+                     onClick={() => {
+                       setIsLocationModalOpen(false);
+                       restoreFocus();
+                     }}
+                     className="px-5 py-2 min-h-[44px] text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isCreatingLocation}
-                    className="bg-primary text-on-primary px-6 py-2 min-h-[44px] rounded font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center gap-2 disabled:opacity-60"
+                    className="bg-primary text-on-primary px-6 py-2 min-h-[44px] rounded font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center gap-2 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
                   >
                     {isCreatingLocation ? (
                       <>
@@ -846,7 +910,7 @@ export default function TablesAndQR() {
                     restoreFocus();
                   }}
                   aria-label="Close"
-                  className="text-on-surface-variant hover:text-primary transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg"
+                  className="text-on-surface-variant hover:text-primary transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
                 >
                   <span className="material-symbols-outlined">close</span>
                 </button>
@@ -857,6 +921,7 @@ export default function TablesAndQR() {
                     Table Name / Number
                   </label>
                   <input
+                    ref={createInputRef}
                     required
                     type="text"
                     value={formData.name}
@@ -909,14 +974,14 @@ export default function TablesAndQR() {
                       setIsModalOpen(false);
                       restoreFocus();
                     }}
-                    className="px-5 py-2 min-h-[44px] text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="px-5 py-2 min-h-[44px] text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={locations.length === 0 || isCreatingTable}
-                    className="bg-primary text-on-primary px-6 py-2 min-h-[44px] rounded font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="bg-primary text-on-primary px-6 py-2 min-h-[44px] rounded font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
                   >
                     {isCreatingTable ? (
                       <>
@@ -974,7 +1039,7 @@ export default function TablesAndQR() {
                     restoreFocus();
                   }}
                   aria-label="Close"
-                  className="text-on-surface-variant hover:text-primary transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg"
+                  className="text-on-surface-variant hover:text-primary transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
                 >
                   <span className="material-symbols-outlined">close</span>
                 </button>
@@ -985,6 +1050,7 @@ export default function TablesAndQR() {
                     Table Name / Number
                   </label>
                   <input
+                    ref={editInputRef}
                     required
                     type="text"
                     value={editFormData.name}
@@ -1036,14 +1102,14 @@ export default function TablesAndQR() {
                       setEditingTable(null);
                       restoreFocus();
                     }}
-                    className="px-5 py-2 min-h-[44px] text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="px-5 py-2 min-h-[44px] text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isSavingTable}
-                    className="bg-primary text-on-primary px-6 py-2 min-h-[44px] rounded font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center gap-2 disabled:opacity-60"
+                    className="bg-primary text-on-primary px-6 py-2 min-h-[44px] rounded font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center gap-2 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
                   >
                     {isSavingTable ? (
                       <>
