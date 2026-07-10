@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import crypto from 'crypto';
 import { reconcileSuccessfulRazorpayPayment } from './orders.js';
 
@@ -7,6 +7,7 @@ const router = Router();
 // Handle Razorpay payment webhook (Public endpoint, called by Razorpay servers)
 router.post(
   '/razorpay/webhook',
+  express.raw({ type: 'application/json', limit: '1mb' }),
   async (req, res) => {
     try {
       const receivedSignature = req.headers['x-razorpay-signature'];
