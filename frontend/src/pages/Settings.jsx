@@ -101,7 +101,10 @@ export default function Settings({ user }) {
 
   const applySettlementConfig = (config) => {
     setSettlementConfig(config);
-    setSettlementRecipients(config.draft?.recipients || []);
+    setSettlementRecipients((config.draft?.recipients || []).map((recipient) => ({
+      ...recipient,
+      percentageInput: formatSettlementPercentage(recipient.allocationBasisPoints),
+    })));
     setSettlementDirty(false);
   };
 
@@ -291,6 +294,7 @@ export default function Settings({ user }) {
       label: '',
       linkedAccountId: '',
       allocationBasisPoints: 0,
+      percentageInput: '0',
       enabled: true,
     }]);
     setSettlementDirty(true);
@@ -327,7 +331,7 @@ export default function Settings({ user }) {
         credentials: 'include',
         body: JSON.stringify({
           revision: settlementConfig?.revision,
-          recipients: settlementRecipients,
+          recipients: settlementRecipients.map(({ percentageInput, ...recipient }) => recipient),
         }),
       });
       const data = await res.json();
@@ -401,7 +405,7 @@ export default function Settings({ user }) {
     (total, recipient) => total + (recipient.enabled ? Number(recipient.allocationBasisPoints || 0) : 0),
     0
   );
-  const settlementRemainingBasisPoints = TOTAL_SETTLEMENT_BASIS_POINTS - settlementTotalBasisPoints;
+  const platformRetainedBasisPoints = Math.max(0, TOTAL_SETTLEMENT_BASIS_POINTS - settlementTotalBasisPoints);
   const savedDraftIsActivatable = Boolean(settlementConfig?.draft?.isValidForActivation);
 
 
@@ -1046,11 +1050,17 @@ export default function Settings({ user }) {
                             min="0"
                             max="100"
                             step="0.01"
-                            value={formatSettlementPercentage(recipient.allocationBasisPoints)}
+                            value={recipient.percentageInput ?? formatSettlementPercentage(recipient.allocationBasisPoints)}
                             onChange={(e) => {
-                              const allocationBasisPoints = percentageToBasisPoints(e.target.value);
-                              if (allocationBasisPoints !== null) updateSettlementRecipient(index, { allocationBasisPoints });
+                              const percentageInput = e.target.value;
+                              const allocationBasisPoints = percentageToBasisPoints(percentageInput);
+                              if (allocationBasisPoints !== null) {
+                                updateSettlementRecipient(index, { percentageInput, allocationBasisPoints });
+                              }
                             }}
+                            onBlur={() => updateSettlementRecipient(index, {
+                              percentageInput: formatSettlementPercentage(recipient.allocationBasisPoints),
+                            })}
                             className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors"
                           />
                         </div>
@@ -1095,17 +1105,25 @@ export default function Settings({ user }) {
                   <p className="text-xs text-on-surface-variant">A maximum of {MAX_SETTLEMENT_RECIPIENTS} recipients is allowed.</p>
                 )}
 
-                <div className={`p-4 rounded-xl border ${settlementTotalBasisPoints === TOTAL_SETTLEMENT_BASIS_POINTS ? 'bg-primary/10 border-primary/30' : settlementTotalBasisPoints > TOTAL_SETTLEMENT_BASIS_POINTS ? 'bg-error/10 border-error/30' : 'bg-surface-container-low border-outline-variant/15'}`}>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="font-label-caps text-[11px] uppercase tracking-widest text-on-surface-variant">Total allocation</span>
-                    <span className="font-mono font-semibold text-on-surface">{formatSettlementPercentage(settlementTotalBasisPoints)}%</span>
+                <div className={`p-4 rounded-xl border ${settlementTotalBasisPoints > TOTAL_SETTLEMENT_BASIS_POINTS ? 'bg-error/10 border-error/30' : 'bg-surface-container-low border-outline-variant/15'}`}>
+                  <div className="flex flex-col gap-2.5">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="font-label-caps text-[11px] uppercase tracking-widest text-on-surface-variant">External Route allocation</span>
+                      <span className="font-mono font-semibold text-on-surface">{formatSettlementPercentage(settlementTotalBasisPoints)}%</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="font-label-caps text-[11px] uppercase tracking-widest text-primary">Platform retained share</span>
+                      <span className="font-mono font-semibold text-primary">{settlementTotalBasisPoints > TOTAL_SETTLEMENT_BASIS_POINTS ? '—' : `${formatSettlementPercentage(platformRetainedBasisPoints)}%`}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 pt-2 border-t border-outline-variant/10">
+                      <span className="font-label-caps text-[11px] uppercase tracking-widest text-on-surface">Total</span>
+                      <span className="font-mono font-semibold text-on-surface">100.00%</span>
+                    </div>
                   </div>
-                  <p className={`mt-2 text-sm ${settlementTotalBasisPoints === TOTAL_SETTLEMENT_BASIS_POINTS ? 'text-primary' : settlementTotalBasisPoints > TOTAL_SETTLEMENT_BASIS_POINTS ? 'text-error' : 'text-on-surface-variant'}`}>
-                    {settlementTotalBasisPoints === TOTAL_SETTLEMENT_BASIS_POINTS
-                      ? '100% allocated — ready to activate after saving.'
-                      : settlementTotalBasisPoints > TOTAL_SETTLEMENT_BASIS_POINTS
-                        ? `${formatSettlementPercentage(Math.abs(settlementRemainingBasisPoints))}% over the allowed allocation.`
-                        : `${formatSettlementPercentage(settlementRemainingBasisPoints)}% remaining. Drafts may be saved below 100%.`}
+                  <p className={`mt-3 text-sm ${settlementTotalBasisPoints > TOTAL_SETTLEMENT_BASIS_POINTS ? 'text-error' : 'text-on-surface-variant'}`}>
+                    {settlementTotalBasisPoints > TOTAL_SETTLEMENT_BASIS_POINTS
+                      ? 'Enabled external recipients cannot receive more than 100%.'
+                      : 'The unallocated share remains in the primary Razorpay account. Only enabled linked-account recipients are transferred through Razorpay Route. Fees, taxes, adjustments, and settlement deductions may affect the final net amount settled to the primary bank account.'}
                   </p>
                 </div>
 
@@ -1133,7 +1151,7 @@ export default function Settings({ user }) {
                     disabled={!savedDraftIsActivatable || settlementDirty || isActivatingSettlement}
                     onClick={handleActivateSettlement}
                     className="px-5 py-2.5 rounded-lg bg-primary text-on-primary font-label-caps text-[11px] uppercase tracking-widest gold-glow disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={settlementDirty ? 'Save the current draft before activating it.' : !savedDraftIsActivatable ? 'A saved draft with exactly 100% enabled allocation is required.' : ''}
+                    title={settlementDirty ? 'Save the current draft before activating it.' : !savedDraftIsActivatable ? 'Enabled external recipients must receive more than 0% and no more than 100%.' : ''}
                   >
                     {isActivatingSettlement ? 'Activating…' : 'Activate configuration'}
                   </button>

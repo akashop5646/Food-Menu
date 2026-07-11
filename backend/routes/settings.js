@@ -56,6 +56,14 @@ function getTotalBasisPoints(recipients) {
   );
 }
 
+export function getAllocationSummary(recipients) {
+  const externalAllocationBasisPoints = getTotalBasisPoints(recipients);
+  return {
+    externalAllocationBasisPoints,
+    platformRetainedBasisPoints: TOTAL_BASIS_POINTS - externalAllocationBasisPoints,
+  };
+}
+
 function normalizeRecipients(recipients) {
   if (!Array.isArray(recipients)) {
     throw new SettlementValidationError('Recipients must be an array');
@@ -114,7 +122,7 @@ function normalizeRecipients(recipients) {
   });
 }
 
-function validateDraftRecipients(recipients) {
+export function validateDraftRecipients(recipients) {
   const normalizedRecipients = normalizeRecipients(recipients);
   const totalBasisPoints = getTotalBasisPoints(normalizedRecipients);
 
@@ -125,15 +133,11 @@ function validateDraftRecipients(recipients) {
   return { recipients: normalizedRecipients, totalBasisPoints };
 }
 
-function validateDraftForActivation(draft) {
+export function validateDraftForActivation(draft) {
   const { recipients, totalBasisPoints } = validateDraftRecipients(draft?.recipients || []);
-  const enabledRecipients = recipients.filter((recipient) => recipient.enabled);
 
-  if (enabledRecipients.length === 0) {
-    throw new SettlementValidationError('At least one enabled recipient is required to activate split settlement');
-  }
-  if (totalBasisPoints !== TOTAL_BASIS_POINTS) {
-    throw new SettlementValidationError('Enabled allocations must equal exactly 100% to activate split settlement');
+  if (totalBasisPoints <= 0 || totalBasisPoints > TOTAL_BASIS_POINTS) {
+    throw new SettlementValidationError('Enabled external recipients must receive more than 0% and no more than 100%');
   }
 
   return { recipients, totalBasisPoints };
@@ -141,11 +145,12 @@ function validateDraftForActivation(draft) {
 
 function presentSettlementConfig(config) {
   const draft = config.draft || createEmptyDraft();
-  const draftTotal = Number.isInteger(draft.totalBasisPoints)
-    ? draft.totalBasisPoints
-    : getTotalBasisPoints(draft.recipients || []);
-  const enabledDraftRecipients = (draft.recipients || []).filter((recipient) => recipient.enabled);
-  const isValidForActivation = enabledDraftRecipients.length > 0 && draftTotal === TOTAL_BASIS_POINTS;
+  const draftSummary = getAllocationSummary(draft.recipients || []);
+  const draftTotal = draftSummary.externalAllocationBasisPoints;
+  const activeSummary = config.active
+    ? getAllocationSummary(config.active.recipients || [])
+    : null;
+  const isValidForActivation = draftTotal > 0 && draftTotal <= TOTAL_BASIS_POINTS;
 
   return {
     provider: 'RAZORPAY_ROUTE',
@@ -163,6 +168,8 @@ function presentSettlementConfig(config) {
       version: config.active.version,
       recipients: config.active.recipients,
       totalBasisPoints: config.active.totalBasisPoints,
+      externalAllocationBasisPoints: activeSummary.externalAllocationBasisPoints,
+      platformRetainedBasisPoints: activeSummary.platformRetainedBasisPoints,
       activatedAt: config.active.activatedAt,
       activatedBy: config.active.activatedBy,
       disabledAt: config.disabledAt || null,
@@ -171,6 +178,8 @@ function presentSettlementConfig(config) {
     draft: {
       recipients: draft.recipients || [],
       totalBasisPoints: draftTotal,
+      externalAllocationBasisPoints: draftSummary.externalAllocationBasisPoints,
+      platformRetainedBasisPoints: draftSummary.platformRetainedBasisPoints,
       isValidForActivation,
       updatedAt: draft.updatedAt || null,
     },
