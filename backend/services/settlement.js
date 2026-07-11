@@ -1,0 +1,219 @@
+import { getDB } from '../db.js';
+import { randomUUID } from 'crypto';
+
+const TOTAL_BASIS_POINTS = 10000;
+const MINIMUM_TRANSFER_PAISE = 100;
+const CLAIM_LEASE_MS = 5 * 60 * 1000;
+
+export function allocateExternalAmounts(sourceAmountPaise, recipients) {
+  const enabled = recipients.filter((recipient) => recipient.enabled);
+  const externalAllocationBasisPoints = enabled.reduce((total, recipient) => total + recipient.allocationBasisPoints, 0);
+  const targetExternalAmountPaise = Math.floor((sourceAmountPaise * externalAllocationBasisPoints) / TOTAL_BASIS_POINTS);
+  const allocations = enabled.map((recipient) => {
+    const numerator = sourceAmountPaise * recipient.allocationBasisPoints;
+    return { ...recipient, amountPaise: Math.floor(numerator / TOTAL_BASIS_POINTS), remainder: numerator % TOTAL_BASIS_POINTS };
+  });
+  let remainingPaise = targetExternalAmountPaise - allocations.reduce((total, recipient) => total + recipient.amountPaise, 0);
+  [...allocations]
+    .sort((a, b) => b.remainder - a.remainder || a.id.localeCompare(b.id))
+    .forEach((recipient) => {
+      if (remainingPaise > 0) {
+        recipient.amountPaise += 1;
+        remainingPaise -= 1;
+      }
+    });
+  return {
+    externalAllocationBasisPoints,
+    targetExternalAmountPaise,
+    platformRetainedBasisPoints: TOTAL_BASIS_POINTS - externalAllocationBasisPoints,
+    platformRetainedAmountPaise: sourceAmountPaise - targetExternalAmountPaise,
+    allocations,
+  };
+}
+
+export function buildSettlementSnapshot(order, activeConfiguration) {
+  const sourceAmountPaise = Math.round(Number(order.total) * 100);
+  const allocation = allocateExternalAmounts(sourceAmountPaise, activeConfiguration.recipients);
+  const now = new Date();
+  return {
+    provider: 'RAZORPAY_ROUTE',
+    splitBase: 'FOOD_SUBTOTAL',
+    configurationVersion: activeConfiguration.version,
+    razorpayPaymentId: order.razorpayPaymentId,
+    sourceAmountPaise,
+    externalAllocationBasisPoints: allocation.externalAllocationBasisPoints,
+    platformRetainedBasisPoints: allocation.platformRetainedBasisPoints,
+    externalTransferAmountPaise: allocation.targetExternalAmountPaise,
+    platformRetainedAmountPaise: allocation.platformRetainedAmountPaise,
+    status: 'PENDING',
+    recipients: allocation.allocations.map((recipient) => ({
+      recipientId: recipient.id,
+      label: recipient.label,
+      linkedAccountId: recipient.linkedAccountId,
+      allocationBasisPoints: recipient.allocationBasisPoints,
+      amountPaise: recipient.amountPaise,
+      status: recipient.amountPaise === 0 ? 'SKIPPED_ZERO_AMOUNT' : recipient.amountPaise < MINIMUM_TRANSFER_PAISE ? 'SKIPPED_MINIMUM_AMOUNT' : 'PENDING',
+      transferId: null,
+      transferStatus: null,
+      attemptCount: 0,
+      lastAttemptAt: null,
+      processedAt: null,
+      failureCode: recipient.amountPaise > 0 && recipient.amountPaise < MINIMUM_TRANSFER_PAISE ? 'MINIMUM_TRANSFER_AMOUNT' : null,
+      failureDescription: recipient.amountPaise > 0 && recipient.amountPaise < MINIMUM_TRANSFER_PAISE ? 'Route transfers require at least 100 paise.' : null,
+    })),
+    processingStartedAt: null,
+    processingLeaseUntil: null,
+    processedAt: null,
+    lastErrorAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function isEligibleOrder(order) {
+  return order?.paymentStatus === 'PAID' && order.paymentType === 'RAZORPAY' && Boolean(order.razorpayPaymentId) && Number.isFinite(Number(order.total)) && Number(order.total) > 0;
+}
+
+function deriveOverallStatus(recipients) {
+  const actionable = recipients.filter((recipient) => !['SKIPPED_ZERO_AMOUNT', 'SKIPPED_MINIMUM_AMOUNT'].includes(recipient.status));
+  const hasSkippedExternalAmount = actionable.length !== recipients.length;
+  if (actionable.length === 0) return 'SKIPPED';
+  if (actionable.every((recipient) => recipient.status === 'PROCESSED')) return hasSkippedExternalAmount ? 'PARTIALLY_PROCESSED' : 'PROCESSED';
+  if (actionable.some((recipient) => recipient.status === 'RECONCILIATION_REQUIRED')) return 'RECONCILIATION_REQUIRED';
+  if (actionable.some((recipient) => recipient.status === 'RETRY_PENDING')) return actionable.some((recipient) => recipient.status === 'PROCESSED') ? 'PARTIALLY_PROCESSED' : 'RETRY_PENDING';
+  if (actionable.some((recipient) => recipient.status === 'FAILED')) return actionable.some((recipient) => recipient.status === 'PROCESSED') ? 'PARTIALLY_PROCESSED' : 'FAILED';
+  return 'PROCESSING';
+}
+
+function basicAuthHeaders() {
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  if (!keyId || !keySecret) throw new Error('Razorpay credentials are not configured');
+  return { Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}` };
+}
+
+async function fetchPaymentTransfers(paymentId) {
+  const response = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}/transfers`, { headers: basicAuthHeaders() });
+  if (!response.ok) throw new Error('Unable to reconcile Razorpay Route transfers');
+  const body = await response.json();
+  return Array.isArray(body.items) ? body.items : [];
+}
+
+async function createPaymentTransfer(paymentId, recipient, orderId) {
+  const response = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}/transfers`, {
+    method: 'POST',
+    headers: { ...basicAuthHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transfers: [{
+      account: recipient.linkedAccountId,
+      amount: recipient.amountPaise,
+      currency: 'INR',
+      notes: { settlement_order_id: String(orderId), settlement_recipient_id: recipient.recipientId },
+    }] }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = body.error || {};
+    return { ok: false, retryable: response.status === 429 || response.status >= 500, code: error.code || `HTTP_${response.status}`, description: 'Route transfer request failed' };
+  }
+  return { ok: true, transfer: body.items?.[0] };
+}
+
+function applyRemoteTransfer(recipient, transfer) {
+  recipient.transferId = transfer.id;
+  recipient.transferStatus = transfer.status || transfer.transfer_status || null;
+  recipient.lastAttemptAt = new Date();
+  if (recipient.transferStatus === 'processed') {
+    recipient.status = 'PROCESSED';
+    recipient.processedAt = new Date();
+  } else if (recipient.transferStatus === 'failed') {
+    recipient.status = 'FAILED';
+    recipient.failureCode = transfer.error?.code || 'RAZORPAY_TRANSFER_FAILED';
+    recipient.failureDescription = 'Razorpay Route transfer failed';
+  } else {
+    recipient.status = 'PROCESSING';
+  }
+}
+
+async function persistClaimedSettlement(db, orderId, claimToken, settlement) {
+  settlement.updatedAt = new Date();
+  const result = await db.collection('orders').updateOne(
+    { _id: orderId, 'splitSettlement.status': 'PROCESSING', 'splitSettlement.processingClaimToken': claimToken },
+    { $set: { splitSettlement: settlement } }
+  );
+  if (result.modifiedCount !== 1) throw new Error('Settlement claim was lost');
+}
+
+export async function initializeAndProcessSettlementForPaidOrder(orderId) {
+  const db = await getDB();
+  let order = await db.collection('orders').findOne({ _id: orderId });
+  if (!isEligibleOrder(order)) return { initialized: false, reason: 'NOT_ELIGIBLE' };
+
+  if (!order.splitSettlement) {
+    const config = await db.collection('settlement_configs').findOne({ _id: 'razorpay_route_split_settlement' });
+    const active = config?.activeStatus === 'ACTIVE' ? config.active : null;
+    const snapshot = active?.recipients?.some((recipient) => recipient.enabled)
+      ? buildSettlementSnapshot(order, active)
+      : { status: 'SKIPPED', reason: active ? 'NO_ENABLED_EXTERNAL_RECIPIENTS' : config?.activeStatus === 'DISABLED' ? 'CONFIGURATION_DISABLED' : 'NO_ACTIVE_CONFIGURATION', createdAt: new Date(), updatedAt: new Date() };
+    const result = await db.collection('orders').findOneAndUpdate(
+      { _id: order._id, splitSettlement: { $exists: false } },
+      { $set: { splitSettlement: snapshot } },
+      { returnDocument: 'after' }
+    );
+    order = result || await db.collection('orders').findOne({ _id: order._id });
+  }
+
+  if (process.env.RAZORPAY_ROUTE_TRANSFERS_ENABLED !== 'true' || order.splitSettlement.status !== 'PENDING') return { initialized: true, processed: false, order };
+
+  const now = new Date();
+  const claimToken = randomUUID();
+  const claimed = await db.collection('orders').findOneAndUpdate(
+    { _id: order._id, $or: [
+      { 'splitSettlement.status': { $in: ['PENDING', 'RETRY_PENDING'] }, $or: [{ 'splitSettlement.processingLeaseUntil': null }, { 'splitSettlement.processingLeaseUntil': { $lte: now } }] },
+      { 'splitSettlement.status': 'PROCESSING', 'splitSettlement.processingLeaseUntil': { $lte: now } },
+    ] },
+    { $set: { 'splitSettlement.status': 'PROCESSING', 'splitSettlement.processingStartedAt': now, 'splitSettlement.processingLeaseUntil': new Date(now.getTime() + CLAIM_LEASE_MS), 'splitSettlement.processingClaimToken': claimToken, 'splitSettlement.updatedAt': now } },
+    { returnDocument: 'after' }
+  );
+  if (!claimed) return { initialized: true, processed: false, reason: 'CLAIM_NOT_ACQUIRED' };
+
+  const settlement = claimed.splitSettlement;
+  try {
+    const remoteTransfers = await fetchPaymentTransfers(settlement.razorpayPaymentId);
+    for (const recipient of settlement.recipients) {
+      if (!['PENDING', 'RETRY_PENDING', 'PROCESSING'].includes(recipient.status) || recipient.transferId) continue;
+      const existing = remoteTransfers.find((transfer) => transfer.recipient === recipient.linkedAccountId && transfer.amount === recipient.amountPaise && transfer.notes?.settlement_order_id === String(order._id) && transfer.notes?.settlement_recipient_id === recipient.recipientId);
+      if (existing) {
+        applyRemoteTransfer(recipient, existing);
+        await persistClaimedSettlement(db, order._id, claimToken, settlement);
+        continue;
+      }
+      recipient.attemptCount += 1;
+      recipient.lastAttemptAt = new Date();
+      recipient.status = 'PROCESSING';
+      await persistClaimedSettlement(db, order._id, claimToken, settlement);
+      const result = await createPaymentTransfer(settlement.razorpayPaymentId, recipient, order._id);
+      if (result.ok && result.transfer) {
+        applyRemoteTransfer(recipient, result.transfer);
+        await persistClaimedSettlement(db, order._id, claimToken, settlement);
+      }
+      else if (result.ok) { recipient.status = 'RECONCILIATION_REQUIRED'; recipient.failureCode = 'MISSING_TRANSFER_RESPONSE'; recipient.failureDescription = 'Route response did not contain a transfer record.'; await persistClaimedSettlement(db, order._id, claimToken, settlement); }
+      else { recipient.status = result.retryable ? 'RETRY_PENDING' : 'FAILED'; recipient.failureCode = result.code; recipient.failureDescription = result.description; await persistClaimedSettlement(db, order._id, claimToken, settlement); }
+    }
+  } catch {
+    settlement.recipients.forEach((recipient) => {
+      if (['PENDING', 'RETRY_PENDING', 'PROCESSING'].includes(recipient.status) && !recipient.transferId) {
+        recipient.status = 'RECONCILIATION_REQUIRED';
+        recipient.failureCode = 'RECONCILIATION_UNAVAILABLE';
+        recipient.failureDescription = 'Transfer outcome could not be verified safely.';
+      }
+    });
+    settlement.lastErrorAt = new Date();
+  }
+  settlement.status = deriveOverallStatus(settlement.recipients);
+  settlement.processingLeaseUntil = null;
+  settlement.processingClaimToken = null;
+  settlement.updatedAt = new Date();
+  if (settlement.status === 'PROCESSED') settlement.processedAt = new Date();
+  await persistClaimedSettlement(db, order._id, claimToken, settlement);
+  return { initialized: true, processed: true, status: settlement.status };
+}

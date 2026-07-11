@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { getDB } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { broadcast } from '../websocket.js';
+import { initializeAndProcessSettlementForPaidOrder } from '../services/settlement.js';
 
 const router = Router();
 
@@ -582,6 +583,11 @@ export async function reconcileSuccessfulRazorpayPayment({
     razorpayPaymentId: updatedOrder.razorpayPaymentId,
     paidAt: updatedOrder.paidAt,
     table: updatedOrder.table
+  });
+
+  // Settlement is independent from payment confirmation. It must never make a captured payment appear to fail.
+  initializeAndProcessSettlementForPaidOrder(updatedOrder._id).catch(() => {
+    console.error('Failed to initialize split settlement for a paid order');
   });
 
   return {

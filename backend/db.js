@@ -32,6 +32,7 @@ export async function connectDB() {
     await db.collection('menu_items').createIndex({ chefPick: -1, createdAt: -1 });
     await db.collection('menu_items').createIndex({ categories: 1 });
     await db.collection('menu_items').createIndex({ name: 1 });
+    await db.collection('orders').createIndex({ 'splitSettlement.status': 1, 'splitSettlement.processingLeaseUntil': 1 });
     console.log('✅ MongoDB Indexes verified/created successfully.');
   } catch (err) {
     console.warn('⚠️ Non-blocking index creation error:', err.message);
@@ -44,4 +45,3 @@ export async function getDB() {
   if (!db) await connectDB();
   return db;
 }
-
