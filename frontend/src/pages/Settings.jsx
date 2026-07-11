@@ -2,6 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE } from '../config';
 
+const MAX_SETTLEMENT_RECIPIENTS = 10;
+const TOTAL_SETTLEMENT_BASIS_POINTS = 10000;
+
+const formatSettlementPercentage = (basisPoints) => (Number(basisPoints || 0) / 100).toFixed(2);
+
+const percentageToBasisPoints = (value) => {
+  const input = String(value).trim();
+  if (!/^\d{0,3}(?:\.\d{0,2})?$/.test(input)) return null;
+  const [whole = '0', decimal = ''] = input.split('.');
+  return (Number(whole || 0) * 100) + Number((decimal + '00').slice(0, 2));
+};
+
 export default function Settings({ user }) {
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +46,17 @@ export default function Settings({ user }) {
   const [isSavingFee, setIsSavingFee] = useState(false);
   const [feeSuccess, setFeeSuccess] = useState(false);
   const [feeError, setFeeError] = useState('');
+
+  // Split settlement state is fetched only for MASTER_ADMIN users. Linked account IDs never enter public settings state.
+  const [settlementConfig, setSettlementConfig] = useState(null);
+  const [settlementRecipients, setSettlementRecipients] = useState([]);
+  const [isSettlementLoading, setIsSettlementLoading] = useState(false);
+  const [isSavingSettlement, setIsSavingSettlement] = useState(false);
+  const [isActivatingSettlement, setIsActivatingSettlement] = useState(false);
+  const [isDisablingSettlement, setIsDisablingSettlement] = useState(false);
+  const [settlementDirty, setSettlementDirty] = useState(false);
+  const [settlementSuccess, setSettlementSuccess] = useState('');
+  const [settlementError, setSettlementError] = useState('');
 
   const fetchStaff = async () => {
     try {
@@ -76,10 +99,34 @@ export default function Settings({ user }) {
     }
   };
 
+  const applySettlementConfig = (config) => {
+    setSettlementConfig(config);
+    setSettlementRecipients(config.draft?.recipients || []);
+    setSettlementDirty(false);
+  };
+
+  const fetchSettlementConfig = async () => {
+    if (user?.role !== 'MASTER_ADMIN') return;
+
+    setIsSettlementLoading(true);
+    setSettlementError('');
+    try {
+      const res = await fetch(API_BASE + '/api/settings/split-settlement', { credentials: 'include' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load split settlement configuration');
+      applySettlementConfig(data);
+    } catch (err) {
+      setSettlementError(err.message);
+    } finally {
+      setIsSettlementLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchStaff();
     fetchConfigs();
-  }, []);
+    fetchSettlementConfig();
+  }, [user?.role]);
 
   const handleUpdateRole = async (memberId, newRole) => {
     setIsUpdatingRole(true);
@@ -228,6 +275,134 @@ export default function Settings({ user }) {
       setIsSavingFee(false);
     }
   };
+
+  const updateSettlementRecipient = (index, changes) => {
+    setSettlementRecipients((current) => current.map((recipient, recipientIndex) => (
+      recipientIndex === index ? { ...recipient, ...changes } : recipient
+    )));
+    setSettlementDirty(true);
+    setSettlementSuccess('');
+    setSettlementError('');
+  };
+
+  const addSettlementRecipient = () => {
+    if (settlementRecipients.length >= MAX_SETTLEMENT_RECIPIENTS) return;
+    setSettlementRecipients((current) => [...current, {
+      label: '',
+      linkedAccountId: '',
+      allocationBasisPoints: 0,
+      enabled: true,
+    }]);
+    setSettlementDirty(true);
+    setSettlementSuccess('');
+  };
+
+  const removeSettlementRecipient = (index) => {
+    setSettlementRecipients((current) => current.filter((_, recipientIndex) => recipientIndex !== index));
+    setSettlementDirty(true);
+    setSettlementSuccess('');
+  };
+
+  const handleSaveSettlementDraft = async () => {
+    const totalBasisPoints = settlementRecipients.reduce(
+      (total, recipient) => total + (recipient.enabled ? Number(recipient.allocationBasisPoints || 0) : 0),
+      0
+    );
+    if (settlementRecipients.length > MAX_SETTLEMENT_RECIPIENTS) {
+      setSettlementError(`A maximum of ${MAX_SETTLEMENT_RECIPIENTS} recipients is allowed.`);
+      return;
+    }
+    if (totalBasisPoints > TOTAL_SETTLEMENT_BASIS_POINTS) {
+      setSettlementError('Enabled allocation cannot exceed 100%.');
+      return;
+    }
+
+    setIsSavingSettlement(true);
+    setSettlementError('');
+    setSettlementSuccess('');
+    try {
+      const res = await fetch(API_BASE + '/api/settings/split-settlement/draft', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          revision: settlementConfig?.revision,
+          recipients: settlementRecipients,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save settlement draft');
+      applySettlementConfig(data);
+      setSettlementSuccess('Settlement draft saved.');
+    } catch (err) {
+      setSettlementError(err.message);
+    } finally {
+      setIsSavingSettlement(false);
+    }
+  };
+
+  const handleActivateSettlement = async () => {
+    if (settlementDirty) {
+      setSettlementError('Save the current draft before activating it.');
+      return;
+    }
+    if (!window.confirm('Activate Split Settlement? This configuration will apply to future eligible payments. Settlement percentages apply to the food subtotal only; convenience fees are excluded.')) {
+      return;
+    }
+
+    setIsActivatingSettlement(true);
+    setSettlementError('');
+    setSettlementSuccess('');
+    try {
+      const res = await fetch(API_BASE + '/api/settings/split-settlement/activate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ revision: settlementConfig?.revision }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to activate split settlement configuration');
+      applySettlementConfig(data);
+      setSettlementSuccess('Split settlement configuration activated.');
+    } catch (err) {
+      setSettlementError(err.message);
+    } finally {
+      setIsActivatingSettlement(false);
+    }
+  };
+
+  const handleDisableSettlement = async () => {
+    if (!window.confirm('Disable Split Settlement? Future eligible payments will not use this configuration. The active snapshot and draft will be preserved.')) {
+      return;
+    }
+
+    setIsDisablingSettlement(true);
+    setSettlementError('');
+    setSettlementSuccess('');
+    try {
+      const res = await fetch(API_BASE + '/api/settings/split-settlement/disable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ revision: settlementConfig?.revision }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to disable split settlement configuration');
+      applySettlementConfig(data);
+      setSettlementSuccess('Split settlement disabled. The saved configuration was preserved.');
+    } catch (err) {
+      setSettlementError(err.message);
+    } finally {
+      setIsDisablingSettlement(false);
+    }
+  };
+
+  const settlementTotalBasisPoints = settlementRecipients.reduce(
+    (total, recipient) => total + (recipient.enabled ? Number(recipient.allocationBasisPoints || 0) : 0),
+    0
+  );
+  const settlementRemainingBasisPoints = TOTAL_SETTLEMENT_BASIS_POINTS - settlementTotalBasisPoints;
+  const savedDraftIsActivatable = Boolean(settlementConfig?.draft?.isValidForActivation);
 
 
 
@@ -763,6 +938,211 @@ export default function Settings({ user }) {
           </div>
         </form>
       </div>
+
+      {user?.role === 'MASTER_ADMIN' && (
+        <div className="bg-surface-container rounded-2xl border border-outline-variant/20 shadow-lg overflow-hidden">
+          <div className="p-6 md:p-8 border-b border-outline-variant/10 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+            <div>
+              <h2 className="font-headline-md text-2xl text-on-surface flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary">account_tree</span>
+                Split Settlement
+              </h2>
+              <p className="font-body-md text-on-surface-variant mt-1">Configure how the food subtotal will be distributed through Razorpay Route.</p>
+            </div>
+            <span className="self-start px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary font-label-caps text-[10px] uppercase tracking-widest">Master Admin only</span>
+          </div>
+
+          <div className="p-6 md:p-8 flex flex-col gap-6">
+            {settlementSuccess && (
+              <div className="bg-primary/10 text-primary px-4 py-3 rounded-lg border border-primary/20 text-sm font-medium">
+                {settlementSuccess}
+              </div>
+            )}
+            {settlementError && (
+              <div className="bg-error/10 text-error px-4 py-3 rounded-lg border border-error/20 text-sm font-medium">
+                {settlementError}
+              </div>
+            )}
+
+            {isSettlementLoading ? (
+              <div className="py-10 text-center text-on-surface-variant flex items-center justify-center gap-2">
+                <span className="material-symbols-outlined animate-spin text-primary">progress_activity</span>
+                Loading split settlement configuration…
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="p-4 rounded-xl bg-surface-container-highest/40 border border-outline-variant/20">
+                    <span className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">Status</span>
+                    <p className="mt-1 font-semibold text-on-surface">{settlementConfig?.status?.replace('_', ' ') || 'Not configured'}</p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-surface-container-highest/40 border border-outline-variant/20">
+                    <span className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">Active version</span>
+                    <p className="mt-1 font-semibold text-on-surface">{settlementConfig?.active?.version ? `v${settlementConfig.active.version}` : '—'}</p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-surface-container-highest/40 border border-outline-variant/20">
+                    <span className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">Last updated</span>
+                    <p className="mt-1 font-semibold text-on-surface text-sm">{settlementConfig?.draft?.updatedAt ? new Date(settlementConfig.draft.updatedAt).toLocaleString() : 'Not saved'}</p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-surface-container-highest/40 border border-outline-variant/20">
+                    <span className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">Last activated</span>
+                    <p className="mt-1 font-semibold text-on-surface text-sm">{settlementConfig?.active?.activatedAt ? new Date(settlementConfig.active.activatedAt).toLocaleString() : 'Not activated'}</p>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-surface-container-low border border-outline-variant/15 text-sm text-on-surface-variant leading-relaxed">
+                  Settlement percentages apply to the food subtotal only. Convenience fees are excluded from this split. Changes affect future eligible payments only.
+                </div>
+
+                {settlementConfig?.active && (
+                  <div className="p-4 rounded-xl bg-surface-container-low border border-outline-variant/15">
+                    <div className="flex items-center justify-between gap-4 mb-3">
+                      <span className="font-label-caps text-[11px] text-primary uppercase tracking-widest">Current active snapshot</span>
+                      <span className="text-xs text-on-surface-variant">v{settlementConfig.active.version} · {settlementConfig.status === 'DISABLED' ? 'Disabled' : 'Active'}</span>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {settlementConfig.active.recipients.map((recipient) => (
+                        <div key={recipient.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-sm text-on-surface-variant">
+                          <span>{recipient.label}{!recipient.enabled ? ' (disabled)' : ''}</span>
+                          <span className="font-mono text-xs">{formatSettlementPercentage(recipient.allocationBasisPoints)}% · {recipient.linkedAccountId || 'No linked account ID'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-4">
+                  {settlementRecipients.map((recipient, index) => (
+                    <div key={recipient.id || `new-recipient-${index}`} className="p-4 md:p-5 rounded-xl bg-surface-container-highest/40 border border-outline-variant/20 flex flex-col gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block font-label-caps text-[11px] text-on-surface-variant mb-1.5 uppercase tracking-widest">Recipient name</label>
+                          <input
+                            type="text"
+                            maxLength={80}
+                            value={recipient.label}
+                            onChange={(e) => updateSettlementRecipient(index, { label: e.target.value })}
+                            className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors"
+                            placeholder="e.g. Restaurant Owner"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-label-caps text-[11px] text-on-surface-variant mb-1.5 uppercase tracking-widest">Razorpay Route account ID</label>
+                          <input
+                            type="text"
+                            value={recipient.linkedAccountId}
+                            onChange={(e) => updateSettlementRecipient(index, { linkedAccountId: e.target.value })}
+                            className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors"
+                            placeholder="acc_xxxxxxxxx"
+                            autoComplete="off"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row sm:items-end gap-4">
+                        <div className="w-full sm:w-52">
+                          <label className="block font-label-caps text-[11px] text-on-surface-variant mb-1.5 uppercase tracking-widest">Settlement share (%)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            value={formatSettlementPercentage(recipient.allocationBasisPoints)}
+                            onChange={(e) => {
+                              const allocationBasisPoints = percentageToBasisPoints(e.target.value);
+                              if (allocationBasisPoints !== null) updateSettlementRecipient(index, { allocationBasisPoints });
+                            }}
+                            className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors"
+                          />
+                        </div>
+                        <div className="w-full sm:w-auto flex items-center gap-2">
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={recipient.enabled}
+                            aria-label={`Enable or disable ${recipient.label || 'recipient'}`}
+                            onClick={() => updateSettlementRecipient(index, { enabled: !recipient.enabled })}
+                            className="h-11 w-11 shrink-0 rounded-full flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-container-highest"
+                          >
+                            <span className={`relative flex h-6 w-10 items-center rounded-full p-0.5 transition-colors duration-200 ${recipient.enabled ? 'bg-primary' : 'bg-outline-variant/60'}`}>
+                              <span className={`h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${recipient.enabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                            </span>
+                          </button>
+                          <span className={`font-label-caps text-[11px] uppercase tracking-widest ${recipient.enabled ? 'text-primary' : 'text-on-surface-variant'}`}>
+                            {recipient.enabled ? 'Enabled' : 'Disabled'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeSettlementRecipient(index)}
+                          className="w-full sm:w-auto px-4 py-3 rounded-lg border border-error/30 text-error font-label-caps text-[11px] uppercase tracking-widest hover:bg-error/10 transition-colors"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={addSettlementRecipient}
+                  disabled={settlementRecipients.length >= MAX_SETTLEMENT_RECIPIENTS}
+                  className="self-start px-4 py-2.5 rounded-lg border border-primary/40 text-primary font-label-caps text-[11px] uppercase tracking-widest hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  + Add recipient
+                </button>
+                {settlementRecipients.length >= MAX_SETTLEMENT_RECIPIENTS && (
+                  <p className="text-xs text-on-surface-variant">A maximum of {MAX_SETTLEMENT_RECIPIENTS} recipients is allowed.</p>
+                )}
+
+                <div className={`p-4 rounded-xl border ${settlementTotalBasisPoints === TOTAL_SETTLEMENT_BASIS_POINTS ? 'bg-primary/10 border-primary/30' : settlementTotalBasisPoints > TOTAL_SETTLEMENT_BASIS_POINTS ? 'bg-error/10 border-error/30' : 'bg-surface-container-low border-outline-variant/15'}`}>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="font-label-caps text-[11px] uppercase tracking-widest text-on-surface-variant">Total allocation</span>
+                    <span className="font-mono font-semibold text-on-surface">{formatSettlementPercentage(settlementTotalBasisPoints)}%</span>
+                  </div>
+                  <p className={`mt-2 text-sm ${settlementTotalBasisPoints === TOTAL_SETTLEMENT_BASIS_POINTS ? 'text-primary' : settlementTotalBasisPoints > TOTAL_SETTLEMENT_BASIS_POINTS ? 'text-error' : 'text-on-surface-variant'}`}>
+                    {settlementTotalBasisPoints === TOTAL_SETTLEMENT_BASIS_POINTS
+                      ? '100% allocated — ready to activate after saving.'
+                      : settlementTotalBasisPoints > TOTAL_SETTLEMENT_BASIS_POINTS
+                        ? `${formatSettlementPercentage(Math.abs(settlementRemainingBasisPoints))}% over the allowed allocation.`
+                        : `${formatSettlementPercentage(settlementRemainingBasisPoints)}% remaining. Drafts may be saved below 100%.`}
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:justify-end gap-3 pt-4 border-t border-outline-variant/10">
+                  {settlementConfig?.active && settlementConfig?.status === 'ACTIVE' && (
+                    <button
+                      type="button"
+                      disabled={isDisablingSettlement}
+                      onClick={handleDisableSettlement}
+                      className="px-5 py-2.5 rounded-lg border border-error/30 text-error font-label-caps text-[11px] uppercase tracking-widest hover:bg-error/10 transition-colors disabled:opacity-50"
+                    >
+                      {isDisablingSettlement ? 'Disabling…' : 'Disable split settlement'}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={isSavingSettlement}
+                    onClick={handleSaveSettlementDraft}
+                    className="px-5 py-2.5 rounded-lg border border-primary/40 text-primary font-label-caps text-[11px] uppercase tracking-widest hover:bg-primary/10 transition-colors disabled:opacity-50"
+                  >
+                    {isSavingSettlement ? 'Saving…' : 'Save draft'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!savedDraftIsActivatable || settlementDirty || isActivatingSettlement}
+                    onClick={handleActivateSettlement}
+                    className="px-5 py-2.5 rounded-lg bg-primary text-on-primary font-label-caps text-[11px] uppercase tracking-widest gold-glow disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={settlementDirty ? 'Save the current draft before activating it.' : !savedDraftIsActivatable ? 'A saved draft with exactly 100% enabled allocation is required.' : ''}
+                  >
+                    {isActivatingSettlement ? 'Activating…' : 'Activate configuration'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

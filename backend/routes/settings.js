@@ -1,10 +1,194 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { ObjectId } from 'mongodb';
+import { randomUUID } from 'crypto';
 import { getDB } from '../db.js';
-import { requireAdmin } from '../middleware/auth.js';
+import { requireAdmin, requireMasterAdmin } from '../middleware/auth.js';
 
 const router = Router();
+
+const SETTLEMENT_CONFIG_ID = 'razorpay_route_split_settlement';
+const MAX_SETTLEMENT_RECIPIENTS = 10;
+const TOTAL_BASIS_POINTS = 10000;
+const LINKED_ACCOUNT_ID_PATTERN = /^acc_[A-Za-z0-9_]{3,100}$/;
+const RECIPIENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,100}$/;
+
+class SettlementValidationError extends Error {}
+
+const createEmptyDraft = () => ({
+  recipients: [],
+  totalBasisPoints: 0,
+  updatedAt: null,
+  updatedBy: null,
+});
+
+const createDefaultSettlementConfig = (userId) => {
+  const now = new Date();
+  return {
+    provider: 'RAZORPAY_ROUTE',
+    splitBase: 'FOOD_SUBTOTAL',
+    version: 0,
+    revision: 0,
+    activeStatus: 'NOT_CONFIGURED',
+    active: null,
+    draft: createEmptyDraft(),
+    createdAt: now,
+    createdBy: userId,
+    updatedAt: now,
+    updatedBy: userId,
+  };
+};
+
+async function getSettlementConfig(db, userId) {
+  const config = await db.collection('settlement_configs').findOneAndUpdate(
+    { _id: SETTLEMENT_CONFIG_ID },
+    { $setOnInsert: createDefaultSettlementConfig(userId) },
+    { upsert: true, returnDocument: 'after' }
+  );
+
+  return config;
+}
+
+function getTotalBasisPoints(recipients) {
+  return recipients.reduce(
+    (total, recipient) => total + (recipient.enabled ? recipient.allocationBasisPoints : 0),
+    0
+  );
+}
+
+function normalizeRecipients(recipients) {
+  if (!Array.isArray(recipients)) {
+    throw new SettlementValidationError('Recipients must be an array');
+  }
+
+  if (recipients.length > MAX_SETTLEMENT_RECIPIENTS) {
+    throw new SettlementValidationError(`A maximum of ${MAX_SETTLEMENT_RECIPIENTS} recipients is allowed`);
+  }
+
+  const seenIds = new Set();
+  const seenEnabledAccountIds = new Set();
+
+  return recipients.map((recipient) => {
+    if (!recipient || typeof recipient !== 'object') {
+      throw new SettlementValidationError('Each recipient must be an object');
+    }
+
+    const id = recipient.id ? String(recipient.id) : randomUUID();
+    if (!RECIPIENT_ID_PATTERN.test(id) || seenIds.has(id)) {
+      throw new SettlementValidationError('Recipient IDs must be unique valid identifiers');
+    }
+    seenIds.add(id);
+
+    const label = typeof recipient.label === 'string' ? recipient.label.trim() : '';
+    if (!label || label.length > 80) {
+      throw new SettlementValidationError('Each recipient label must be between 1 and 80 characters');
+    }
+
+    if (typeof recipient.enabled !== 'boolean') {
+      throw new SettlementValidationError('Recipient enabled status must be a boolean');
+    }
+
+    const linkedAccountId = typeof recipient.linkedAccountId === 'string'
+      ? recipient.linkedAccountId.trim()
+      : '';
+    const allocationBasisPoints = Number(recipient.allocationBasisPoints);
+
+    if (!Number.isInteger(allocationBasisPoints) || allocationBasisPoints < 0 || allocationBasisPoints > TOTAL_BASIS_POINTS) {
+      throw new SettlementValidationError('Recipient allocation must be an integer between 0 and 10000 basis points');
+    }
+
+    if (recipient.enabled) {
+      if (!LINKED_ACCOUNT_ID_PATTERN.test(linkedAccountId)) {
+        throw new SettlementValidationError('Each enabled recipient requires a valid Razorpay linked account ID');
+      }
+      if (seenEnabledAccountIds.has(linkedAccountId)) {
+        throw new SettlementValidationError('Enabled recipients cannot use duplicate Razorpay linked account IDs');
+      }
+      if (allocationBasisPoints <= 0) {
+        throw new SettlementValidationError('Each enabled recipient must have an allocation greater than 0');
+      }
+      seenEnabledAccountIds.add(linkedAccountId);
+    }
+
+    return { id, label, linkedAccountId, allocationBasisPoints, enabled: recipient.enabled };
+  });
+}
+
+function validateDraftRecipients(recipients) {
+  const normalizedRecipients = normalizeRecipients(recipients);
+  const totalBasisPoints = getTotalBasisPoints(normalizedRecipients);
+
+  if (totalBasisPoints > TOTAL_BASIS_POINTS) {
+    throw new SettlementValidationError('Enabled allocation cannot exceed 100%');
+  }
+
+  return { recipients: normalizedRecipients, totalBasisPoints };
+}
+
+function validateDraftForActivation(draft) {
+  const { recipients, totalBasisPoints } = validateDraftRecipients(draft?.recipients || []);
+  const enabledRecipients = recipients.filter((recipient) => recipient.enabled);
+
+  if (enabledRecipients.length === 0) {
+    throw new SettlementValidationError('At least one enabled recipient is required to activate split settlement');
+  }
+  if (totalBasisPoints !== TOTAL_BASIS_POINTS) {
+    throw new SettlementValidationError('Enabled allocations must equal exactly 100% to activate split settlement');
+  }
+
+  return { recipients, totalBasisPoints };
+}
+
+function presentSettlementConfig(config) {
+  const draft = config.draft || createEmptyDraft();
+  const draftTotal = Number.isInteger(draft.totalBasisPoints)
+    ? draft.totalBasisPoints
+    : getTotalBasisPoints(draft.recipients || []);
+  const enabledDraftRecipients = (draft.recipients || []).filter((recipient) => recipient.enabled);
+  const isValidForActivation = enabledDraftRecipients.length > 0 && draftTotal === TOTAL_BASIS_POINTS;
+
+  return {
+    provider: 'RAZORPAY_ROUTE',
+    splitBase: 'FOOD_SUBTOTAL',
+    status: config.activeStatus === 'ACTIVE'
+      ? 'ACTIVE'
+      : config.activeStatus === 'DISABLED'
+        ? 'DISABLED'
+        : (draft.recipients || []).length > 0 ? 'DRAFT' : 'NOT_CONFIGURED',
+    version: config.version || 0,
+    revision: config.revision || 0,
+    createdAt: config.createdAt || null,
+    updatedAt: config.updatedAt || null,
+    active: config.active ? {
+      version: config.active.version,
+      recipients: config.active.recipients,
+      totalBasisPoints: config.active.totalBasisPoints,
+      activatedAt: config.active.activatedAt,
+      activatedBy: config.active.activatedBy,
+      disabledAt: config.disabledAt || null,
+      disabledBy: config.disabledBy || null,
+    } : null,
+    draft: {
+      recipients: draft.recipients || [],
+      totalBasisPoints: draftTotal,
+      isValidForActivation,
+      updatedAt: draft.updatedAt || null,
+    },
+  };
+}
+
+function parseRevision(revision) {
+  if (!Number.isInteger(revision) || revision < 0) {
+    throw new SettlementValidationError('A valid settlement configuration revision is required');
+  }
+  return revision;
+}
+
+function sendSettlementConflict(res) {
+  return res.status(409).json({
+    error: 'Settlement configuration changed in another session. Refresh and try again.',
+  });
+}
 
 // Get all staff members
 router.get('/staff', requireAdmin, async (req, res) => {
@@ -297,6 +481,151 @@ router.post('/convenience-fee', requireAdmin, async (req, res) => {
     res.json({ success: true, enabled, amount: numAmount });
   } catch (error) {
     res.status(500).json({ error: 'Failed to update convenience fee configuration' });
+  }
+});
+
+// Split settlement configuration is intentionally isolated from public and normal-admin settings.
+// It stores Route configuration only; it never creates or manages Razorpay transfers.
+router.get('/split-settlement', requireMasterAdmin, async (req, res) => {
+  try {
+    const db = await getDB();
+    const config = await getSettlementConfig(db, req.user.id);
+    res.json(presentSettlementConfig(config));
+  } catch (error) {
+    console.error('Failed to fetch split settlement configuration');
+    res.status(500).json({ error: 'Failed to fetch split settlement configuration' });
+  }
+});
+
+router.put('/split-settlement/draft', requireMasterAdmin, async (req, res) => {
+  try {
+    const revision = parseRevision(req.body?.revision);
+    const { recipients, totalBasisPoints } = validateDraftRecipients(req.body?.recipients);
+    const db = await getDB();
+    const now = new Date();
+    const draft = {
+      recipients,
+      totalBasisPoints,
+      updatedAt: now,
+      updatedBy: req.user.id,
+    };
+
+    const config = await db.collection('settlement_configs').findOneAndUpdate(
+      { _id: SETTLEMENT_CONFIG_ID, revision },
+      {
+        $set: {
+          draft,
+          updatedAt: now,
+          updatedBy: req.user.id,
+        },
+        $inc: { revision: 1 },
+      },
+      { returnDocument: 'after' }
+    );
+
+    if (!config) {
+      return sendSettlementConflict(res);
+    }
+
+    res.json(presentSettlementConfig(config));
+  } catch (error) {
+    if (error instanceof SettlementValidationError) {
+      return res.status(400).json({ error: error.message });
+    }
+    console.error('Failed to save split settlement draft');
+    res.status(500).json({ error: 'Failed to save split settlement draft' });
+  }
+});
+
+router.post('/split-settlement/activate', requireMasterAdmin, async (req, res) => {
+  try {
+    const revision = parseRevision(req.body?.revision);
+    const db = await getDB();
+    const currentConfig = await db.collection('settlement_configs').findOne({
+      _id: SETTLEMENT_CONFIG_ID,
+      revision,
+    });
+
+    if (!currentConfig) {
+      return sendSettlementConflict(res);
+    }
+
+    const { recipients, totalBasisPoints } = validateDraftForActivation(currentConfig.draft);
+    const now = new Date();
+    const nextVersion = (currentConfig.version || 0) + 1;
+    const active = {
+      version: nextVersion,
+      recipients,
+      totalBasisPoints,
+      activatedAt: now,
+      activatedBy: req.user.id,
+    };
+
+    const config = await db.collection('settlement_configs').findOneAndUpdate(
+      { _id: SETTLEMENT_CONFIG_ID, revision },
+      {
+        $set: {
+          active,
+          activeStatus: 'ACTIVE',
+          version: nextVersion,
+          updatedAt: now,
+          updatedBy: req.user.id,
+        },
+        $unset: { disabledAt: '', disabledBy: '' },
+        $inc: { revision: 1 },
+      },
+      { returnDocument: 'after' }
+    );
+
+    if (!config) {
+      return sendSettlementConflict(res);
+    }
+
+    res.json(presentSettlementConfig(config));
+  } catch (error) {
+    if (error instanceof SettlementValidationError) {
+      return res.status(400).json({ error: error.message });
+    }
+    console.error('Failed to activate split settlement configuration');
+    res.status(500).json({ error: 'Failed to activate split settlement configuration' });
+  }
+});
+
+router.post('/split-settlement/disable', requireMasterAdmin, async (req, res) => {
+  try {
+    const revision = parseRevision(req.body?.revision);
+    const db = await getDB();
+    const now = new Date();
+    const config = await db.collection('settlement_configs').findOneAndUpdate(
+      { _id: SETTLEMENT_CONFIG_ID, revision, active: { $ne: null }, activeStatus: 'ACTIVE' },
+      {
+        $set: {
+          activeStatus: 'DISABLED',
+          disabledAt: now,
+          disabledBy: req.user.id,
+          updatedAt: now,
+          updatedBy: req.user.id,
+        },
+        $inc: { revision: 1 },
+      },
+      { returnDocument: 'after' }
+    );
+
+    if (!config) {
+      const existingConfig = await db.collection('settlement_configs').findOne({ _id: SETTLEMENT_CONFIG_ID });
+      if (existingConfig && existingConfig.revision === revision) {
+        return res.status(400).json({ error: 'There is no active split settlement configuration to disable' });
+      }
+      return sendSettlementConflict(res);
+    }
+
+    res.json(presentSettlementConfig(config));
+  } catch (error) {
+    if (error instanceof SettlementValidationError) {
+      return res.status(400).json({ error: error.message });
+    }
+    console.error('Failed to disable split settlement configuration');
+    res.status(500).json({ error: 'Failed to disable split settlement configuration' });
   }
 });
 
