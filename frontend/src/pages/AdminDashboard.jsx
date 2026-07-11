@@ -455,7 +455,8 @@ export default function AdminDashboard() {
           </div>
           <ul className="flex-1 space-y-2">
             {SIDEBAR_ITEMS.map((item) => {
-              if (item.adminOnly && user?.role !== 'ADMIN') return null;
+              const isAdminLevel = user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN';
+              if (item.adminOnly && !isAdminLevel) return null;
               const isActive = activeTab === item.id;
               return (
                 <li key={item.id}>
@@ -486,7 +487,7 @@ export default function AdminDashboard() {
                     {user?.name || 'NupurStaff'}
                   </span>
                   <span className="text-[12px] text-[#6d8285] dark:text-on-surface-variant/80 mt-0.5 leading-none">
-                    {user?.role === 'ADMIN' ? 'Store Owner' : (user?.role === 'STAFF' ? 'Staff Member' : 'Store Owner')}
+                    {user?.role === 'MASTER_ADMIN' ? 'Master Admin' : (user?.role === 'ADMIN' ? 'Store Owner' : (user?.role === 'STAFF' ? 'Staff Member' : 'Store Owner'))}
                   </span>
                 </div>
               </div>
@@ -721,7 +722,8 @@ export default function AdminDashboard() {
 
               <ul className="flex-1 space-y-2">
                 {SIDEBAR_ITEMS.map((item) => {
-                  if (item.adminOnly && user?.role !== 'ADMIN') return null;
+                  const isAdminLevel = user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN';
+                  if (item.adminOnly && !isAdminLevel) return null;
                   const isActive = activeTab === item.id;
                   return (
                     <li key={item.id}>
@@ -757,7 +759,7 @@ export default function AdminDashboard() {
                         {user?.name || 'NupurStaff'}
                       </span>
                       <span className="text-[12px] text-[#6d8285] dark:text-on-surface-variant/80 mt-0.5 leading-none">
-                        {user?.role === 'ADMIN' ? 'Store Owner' : (user?.role === 'STAFF' ? 'Staff Member' : 'Store Owner')}
+                        {user?.role === 'MASTER_ADMIN' ? 'Master Admin' : (user?.role === 'ADMIN' ? 'Store Owner' : (user?.role === 'STAFF' ? 'Staff Member' : 'Store Owner'))}
                       </span>
                     </div>
                   </div>

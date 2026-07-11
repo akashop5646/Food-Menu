@@ -62,7 +62,7 @@ router.patch('/staff/:id/role', requireAdmin, async (req, res) => {
     const { role } = req.body;
 
     if (role !== 'ADMIN' && role !== 'STAFF') {
-      return res.status(400).json({ error: 'Invalid role' });
+      return res.status(400).json({ error: 'Invalid role. Master Admin role cannot be assigned.' });
     }
 
     if (id === req.user.id) {
@@ -76,8 +76,13 @@ router.patch('/staff/:id/role', requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Staff member not found' });
     }
 
+    // A MASTER_ADMIN account cannot be edited or demoted
+    if (targetUser.role === 'MASTER_ADMIN') {
+      return res.status(403).json({ error: 'Forbidden: Master Admin account is protected.' });
+    }
+
     // Admin cannot change any other admin roles
-    if (targetUser.role === 'ADMIN') {
+    if (targetUser.role === 'ADMIN' && req.user.role !== 'MASTER_ADMIN') {
       return res.status(403).json({ error: 'You cannot modify the role of another Admin' });
     }
 
@@ -109,8 +114,13 @@ router.delete('/staff/:id', requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Staff member not found' });
     }
 
+    // A MASTER_ADMIN account cannot be deleted
+    if (targetUser.role === 'MASTER_ADMIN') {
+      return res.status(403).json({ error: 'Forbidden: Master Admin account is protected.' });
+    }
+
     // Admin cannot delete other admin accounts
-    if (targetUser.role === 'ADMIN') {
+    if (targetUser.role === 'ADMIN' && req.user.role !== 'MASTER_ADMIN') {
       return res.status(403).json({ error: 'You cannot delete another Admin account' });
     }
 

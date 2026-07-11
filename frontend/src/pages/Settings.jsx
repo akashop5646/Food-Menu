@@ -278,7 +278,7 @@ export default function Settings({ user }) {
                       <span className="font-title-md text-on-surface text-lg">
                         {member.name || member.email.split('@')[0]}
                       </span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-label-caps tracking-wider uppercase ${member.role === 'ADMIN' ? 'bg-primary/20 text-primary border border-primary/30' : 'bg-surface-variant text-on-surface-variant'}`}>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-label-caps tracking-wider uppercase ${member.role === 'ADMIN' || member.role === 'MASTER_ADMIN' ? 'bg-primary/20 text-primary border border-primary/30' : 'bg-surface-variant text-on-surface-variant'}`}>
                         {member.role || 'ADMIN'}
                       </span>
                       {user?.id === member._id && (
@@ -438,14 +438,18 @@ export default function Settings({ user }) {
                     Role Management
                   </label>
                   
-                  {selectedMember.role === 'ADMIN' ? (
+                  {selectedMember.role === 'MASTER_ADMIN' || (selectedMember.role === 'ADMIN' && user?.role !== 'MASTER_ADMIN') ? (
                     <div className="bg-surface-container-high/40 border border-outline-variant/10 rounded-xl p-4 mt-2">
                       <div className="flex items-center gap-2 text-primary">
                         <span className="material-symbols-outlined text-lg">shield</span>
-                        <span className="font-title-sm text-sm font-semibold">System Administrator</span>
+                        <span className="font-title-sm text-sm font-semibold">
+                          {selectedMember.role === 'MASTER_ADMIN' ? 'Master Administrator' : 'System Administrator'}
+                        </span>
                       </div>
                       <p className="font-body-sm text-[11px] text-on-surface-variant/80 mt-2 leading-relaxed">
-                        This account has full Admin access. For system security, other Admins cannot modify or remove Admin roles.
+                        {selectedMember.role === 'MASTER_ADMIN' 
+                          ? 'This account is a Master Administrator. For system security, Master Admin accounts cannot be modified or removed.' 
+                          : 'This account has full Admin access. For system security, other Admins cannot modify or remove Admin roles.'}
                       </p>
                     </div>
                   ) : (
@@ -483,8 +487,7 @@ export default function Settings({ user }) {
                   )}
                 </div>
 
-                {/* Remove Member option if not an Admin */}
-                {selectedMember.role !== 'ADMIN' && (
+                {!(selectedMember.role === 'MASTER_ADMIN' || (selectedMember.role === 'ADMIN' && user?.role !== 'MASTER_ADMIN')) && (
                   <div className="border-t border-outline-variant/10 pt-4 mt-2">
                     <button
                       type="button"
