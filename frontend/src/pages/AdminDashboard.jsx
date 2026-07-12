@@ -10,6 +10,7 @@ import Analytics from './Analytics';
 import LiveKDS from './LiveKDS';
 import Payments from './Payments';
 import SettlementMonitor from './SettlementMonitor';
+import Employees from './Employees';
 
 const SIDEBAR_ITEMS = [
   { id: 'dashboard', icon: 'monitor_heart', label: 'Live KDS', fill: true },
@@ -19,6 +20,7 @@ const SIDEBAR_ITEMS = [
   { id: 'tables', icon: 'grid_view', label: 'Tables & QR' },
   { id: 'analytics', icon: 'analytics', label: 'Analytics' },
   { id: 'settlements', icon: 'account_balance_wallet', label: 'Settlements', masterAdminOnly: true },
+  { id: 'employees', icon: 'group', label: 'Employees', adminOnly: true },
   { id: 'settings', icon: 'settings', label: 'Settings', adminOnly: true },
 ];
 
@@ -707,8 +709,9 @@ export default function AdminDashboard() {
           {activeTab === 'payments' && <Payments refreshKey={refreshKey} />}
           {activeTab === 'analytics' && <Analytics />}
           {activeTab === 'settlements' && user?.role === 'MASTER_ADMIN' && <SettlementMonitor />}
+          {activeTab === 'employees' && (user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN') && <Employees />}
 
-          {activeTab !== 'dashboard' && activeTab !== 'tables' && activeTab !== 'menu' && activeTab !== 'settings' && activeTab !== 'scanner' && activeTab !== 'payments' && activeTab !== 'analytics' && activeTab !== 'settlements' && (
+          {activeTab !== 'dashboard' && activeTab !== 'tables' && activeTab !== 'menu' && activeTab !== 'settings' && activeTab !== 'scanner' && activeTab !== 'payments' && activeTab !== 'analytics' && activeTab !== 'settlements' && activeTab !== 'employees' && (
              <motion.div
                initial={{ opacity: 0, y: 20 }}
                animate={{ opacity: 1, y: 0 }}

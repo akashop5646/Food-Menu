@@ -31,20 +31,8 @@ const googleLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-export function normalizeProfileImage(value) {
-  if (typeof value !== 'string') return null;
-  const imageUrl = value.trim();
-  if (!imageUrl) return null;
-  try {
-    const parsed = new URL(imageUrl);
-    if (parsed.protocol !== 'https:') {
-      return null;
-    }
-    return parsed.toString();
-  } catch {
-    return null;
-  }
-}
+import { normalizeProfileImage } from '../utils/profileImage.js';
+export { normalizeProfileImage };
 
 function getSecret() {
   return process.env.JWT_SECRET;

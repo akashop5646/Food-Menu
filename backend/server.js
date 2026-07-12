@@ -14,6 +14,7 @@ import settingsRoutes from './routes/settings.js';
 import ordersRoutes from './routes/orders.js';
 import paymentsRoutes from './routes/payments.js';
 import internalRoutes from './routes/internal.js';
+import employeesRoutes from './routes/employees.js';
 import { initWebSocket } from './websocket.js';
 
 dotenv.config();
@@ -86,6 +87,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/categories', categoriesRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/orders', ordersRoutes);
+app.use('/api/employees', employeesRoutes);
 app.use('/api/internal', internalRoutes);
 
 // Health check
