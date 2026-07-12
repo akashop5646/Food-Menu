@@ -5,6 +5,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
 import dotenv from 'dotenv';
 import { requireAdmin } from '../middleware/auth.js';
+import jwt from 'jsonwebtoken';
 
 dotenv.config();
 
@@ -80,7 +81,7 @@ function uploadBufferToCloudinary(buffer) {
 // GET menu items (public, supports ?all=true, ?limit, ?offset, ?search, ?category, ?status parameters)
 router.get('/', async (req, res) => {
   try {
-    const { all, limit, offset, search, category, status } = req.query;
+    const { all, limit, offset, search, category, status, sort, adminMetadata } = req.query;
     const db = await getDB();
     
     const query = {};
@@ -122,16 +123,31 @@ router.get('/', async (req, res) => {
       }
     }
 
+    // Determine sorting logic using a strict allowlist
+    let mongoSort = { chefPick: -1, createdAt: -1, _id: -1 }; // Default fallback
+    if (sort === 'newest') {
+      mongoSort = { createdAt: -1, _id: -1 };
+    } else if (sort === 'oldest') {
+      mongoSort = { createdAt: 1, _id: 1 };
+    } else if (sort === 'name_asc') {
+      mongoSort = { name: 1, _id: 1 };
+    } else if (sort === 'name_desc') {
+      mongoSort = { name: -1, _id: -1 };
+    } else if (sort === 'price_asc') {
+      mongoSort = { price: 1, name: 1, _id: 1 };
+    } else if (sort === 'price_desc') {
+      mongoSort = { price: -1, name: 1, _id: -1 };
+    }
+
     let cursor = db.collection('menu_items')
       .find(query)
-      .sort({ chefPick: -1, createdAt: -1 });
+      .sort(mongoSort);
 
-    if (limit) {
-      const parsedLimit = parseInt(limit, 10);
-      const parsedOffset = parseInt(offset, 10) || 0;
-      if (!isNaN(parsedLimit) && parsedLimit > 0) {
-        cursor = cursor.skip(parsedOffset).limit(parsedLimit);
-      }
+    const parsedLimit = parseInt(limit, 10) || 0;
+    const parsedOffset = parseInt(offset, 10) || 0;
+
+    if (parsedLimit > 0) {
+      cursor = cursor.skip(parsedOffset).limit(parsedLimit);
     }
 
     let items = await cursor.toArray();
@@ -143,6 +159,37 @@ router.get('/', async (req, res) => {
       }
       return item;
     });
+
+    if (adminMetadata === 'true') {
+      // Inline Admin/MasterAdmin Authorization Check for metadata mode
+      let hasAdminAccess = false;
+      try {
+        const token = req.cookies?.token;
+        if (token) {
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          if (decoded.role === 'ADMIN' || decoded.role === 'MASTER_ADMIN') {
+            hasAdminAccess = true;
+          }
+        }
+      } catch (err) {
+        // Ignore token decode/verification error and deny access
+      }
+
+      if (!hasAdminAccess) {
+        return res.status(403).json({ error: 'Forbidden: Admin access required for metadata.' });
+      }
+
+      const totalCount = await db.collection('menu_items').countDocuments(query);
+      const hasMore = parsedLimit > 0 ? (parsedOffset + items.length < totalCount) : false;
+
+      return res.json({
+        items,
+        totalCount,
+        limit: parsedLimit || 10,
+        offset: parsedOffset,
+        hasMore
+      });
+    }
     
     res.json(items);
   } catch (error) {
@@ -198,6 +245,88 @@ router.post('/', requireAdmin, upload.single('imageFile'), async (req, res) => {
     res.status(201).json(newItem);
   } catch (error) {
     console.error('Error creating menu item:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH bulk availability updates (H1 fix: requireAdmin added)
+router.patch('/bulk-availability', requireAdmin, async (req, res) => {
+  try {
+    // Require JSON content-type
+    const contentType = req.headers['content-type'] || '';
+    if (!contentType.includes('application/json')) {
+      return res.status(415).json({ error: 'Content-Type must be application/json' });
+    }
+
+    const { ids, available } = req.body;
+
+    // available must be an actual boolean
+    if (typeof available !== 'boolean') {
+      return res.status(400).json({ error: 'available must be a boolean.' });
+    }
+
+    // ids must be an array
+    if (!Array.isArray(ids)) {
+      return res.status(400).json({ error: 'ids must be an array.' });
+    }
+
+    // Reject empty array
+    if (ids.length === 0) {
+      return res.status(400).json({ error: 'ids array cannot be empty.' });
+    }
+
+    // Enforce maximum batch size
+    if (ids.length > 100) {
+      return res.status(400).json({ error: 'Maximum batch size is 100 items.' });
+    }
+
+    // Validate and trim every ID, require string
+    const validatedIds = [];
+    for (const id of ids) {
+      if (typeof id !== 'string') {
+        return res.status(400).json({ error: 'Every ID must be a string.' });
+      }
+      const trimmed = id.trim();
+      if (!trimmed) {
+        return res.status(400).json({ error: 'IDs cannot be empty strings.' });
+      }
+      if (!ObjectId.isValid(trimmed)) {
+        return res.status(400).json({ error: `Invalid ObjectId format: ${trimmed}` });
+      }
+      validatedIds.push(trimmed);
+    }
+
+    // Deduplicate
+    const uniqueIds = [...new Set(validatedIds)];
+
+    const db = await getDB();
+    const objectIds = uniqueIds.map(id => new ObjectId(id));
+
+    // Find current state of matched items to calculate modified count
+    const items = await db.collection('menu_items')
+      .find({ _id: { $in: objectIds } })
+      .project({ _id: 1, available: 1 })
+      .toArray();
+
+    const matchedCount = items.length;
+    const modifiedCount = items.filter(item => item.available !== available).length;
+    const missingCount = uniqueIds.length - matchedCount;
+
+    // Perform bulk update
+    await db.collection('menu_items').updateMany(
+      { _id: { $in: objectIds } },
+      { $set: { available, updatedAt: new Date() } }
+    );
+
+    res.json({
+      requested: ids.length,
+      unique: uniqueIds.length,
+      matched: matchedCount,
+      modified: modifiedCount,
+      missing: missingCount
+    });
+  } catch (error) {
+    console.error('Error updating bulk availability:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

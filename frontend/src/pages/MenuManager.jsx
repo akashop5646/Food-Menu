@@ -2,6 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE } from '../config';
 
+// Sub-components
+import MenuItemImage from './menu/MenuItemImage';
+import AvailabilityToggle from './menu/AvailabilityToggle';
+import BulkActionBar from './menu/BulkActionBar';
+import MenuEmptyState from './menu/MenuEmptyState';
+import MenuItemRow from './menu/MenuItemRow';
+import MenuItemCard from './menu/MenuItemCard';
+
 export default function MenuManager() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,11 +30,39 @@ export default function MenuManager() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
+  const [selectedSort, setSelectedSort] = useState('newest'); // Strict sorting requested by admin
   
-  // Pagination & Loading States
+  // Selection State
+  const [selectedItems, setSelectedItems] = useState(() => new Set());
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false);
+
+  // Mutation Race Prevention State
+  const [updatingItems, setUpdatingItems] = useState(() => new Set());
+
+  // Pagination & Count States
+  const [totalItems, setTotalItems] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [errorState, setErrorState] = useState(null);
+
   const observerTarget = useRef(null);
+  const isMountedRef = useRef(true);
+
+  // Request concurrency control refs
+  const latestResetControllerRef = useRef(null);
+  const activeFiltersRef = useRef({ search: '', category: 'All', status: 'All', sort: 'newest' });
+  const isFetchingRef = useRef(false);
+
+  // Set mounted flag
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (latestResetControllerRef.current) {
+        latestResetControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   // Debounce search query changes to prevent rapid API requests
   useEffect(() => {
@@ -35,8 +71,6 @@ export default function MenuManager() {
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
-
-  const filteredItems = items;
 
   const [formData, setFormData] = useState({
     name: '',
@@ -90,11 +124,8 @@ export default function MenuManager() {
     try {
       const res = await fetch(API_BASE + '/api/categories');
       const data = await res.json();
-      setCategories(Array.isArray(data) ? data : []);
-      
-      // Update form default category if categories exist and form is empty
-      if (data.length > 0 && formData.categories.length === 0) {
-        setFormData(prev => ({ ...prev, categories: [data[0].name] }));
+      if (isMountedRef.current) {
+        setCategories(Array.isArray(data) ? data : []);
       }
     } catch (err) {
       console.error('Failed to fetch categories:', err);
@@ -103,50 +134,108 @@ export default function MenuManager() {
 
   const showNotification = (msg) => {
     setNotification(msg);
-    setTimeout(() => setNotification(''), 3000);
+    setTimeout(() => {
+      if (isMountedRef.current) setNotification('');
+    }, 3000);
   };
 
   const fetchMenu = async (reset = false) => {
-    const currentOffset = reset ? 0 : items.length;
     if (reset) {
+      // Abort previous active reset request
+      if (latestResetControllerRef.current) {
+        latestResetControllerRef.current.abort();
+      }
+      const controller = new AbortController();
+      latestResetControllerRef.current = controller;
+
+      // Capture active filters snapshot
+      activeFiltersRef.current = {
+        search: debouncedSearch,
+        category: selectedCategory,
+        status: selectedStatus,
+        sort: selectedSort
+      };
+
       setLoading(true);
+      setErrorState(null);
       setHasMore(true);
     } else {
+      // Prevent fetching more if currently busy or completed
+      if (isFetchingRef.current || loading || loadingMore || !hasMore) return;
       setLoadingMore(true);
+      setErrorState(null);
     }
 
+    isFetchingRef.current = true;
+
     try {
+      const currentOffset = reset ? 0 : items.length;
+      const filters = activeFiltersRef.current;
+
       const params = new URLSearchParams({
         all: 'true',
         limit: '10',
         offset: String(currentOffset),
-        search: debouncedSearch,
-        category: selectedCategory,
-        status: selectedStatus
+        search: filters.search,
+        category: filters.category,
+        status: filters.status,
+        sort: filters.sort,
+        adminMetadata: 'true' // Request admin metadata shape
       });
 
-      const res = await fetch(`${API_BASE}/api/menu?${params.toString()}`);
+      const fetchOptions = {
+        credentials: 'include'
+      };
+      if (reset && latestResetControllerRef.current) {
+        fetchOptions.signal = latestResetControllerRef.current.signal;
+      }
+
+      const res = await fetch(`${API_BASE}/api/menu?${params.toString()}`, fetchOptions);
+      if (!res.ok) {
+        if (res.status === 403) {
+          throw new Error('Forbidden: Admin access required.');
+        }
+        throw new Error('Failed to fetch menu items.');
+      }
+
       const data = await res.json();
       
-      const newItems = Array.isArray(data) ? data : [];
-      if (reset) {
-        setItems(newItems);
-      } else {
+      if (isMountedRef.current) {
+        const newItems = data.items || [];
+        const totalCount = data.totalCount || 0;
+        const serverHasMore = data.hasMore ?? false;
+
         setItems(prev => {
-          const existingIds = new Set(prev.map(i => i._id));
-          const filteredNew = newItems.filter(i => !existingIds.has(i._id));
-          return [...prev, ...filteredNew];
+          if (reset) {
+            return newItems;
+          } else {
+            // Deduplicate items to avoid double rendering
+            const existingIds = new Set(prev.map(i => i._id));
+            const filteredNew = newItems.filter(i => !existingIds.has(i._id));
+            return [...prev, ...filteredNew];
+          }
         });
-      }
-      
-      if (newItems.length < 10) {
-        setHasMore(false);
+        setTotalItems(totalCount);
+        setHasMore(serverHasMore);
       }
     } catch (err) {
+      if (err.name === 'AbortError') {
+        // Silently discard aborted request errors
+        return;
+      }
       console.error('Failed to fetch menu:', err);
+      if (isMountedRef.current) {
+        setErrorState(err.message || 'Failed to load menu items.');
+      }
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (isMountedRef.current) {
+        isFetchingRef.current = false;
+        if (reset) {
+          setLoading(false);
+        } else {
+          setLoadingMore(false);
+        }
+      }
     }
   };
 
@@ -155,18 +244,18 @@ export default function MenuManager() {
     fetchCategories();
   }, []);
 
-  // Trigger page load or reset when search parameters change
+  // Trigger page load or reset when search/filter parameters change
   useEffect(() => {
     fetchMenu(true);
-  }, [debouncedSearch, selectedCategory, selectedStatus]);
+  }, [debouncedSearch, selectedCategory, selectedStatus, selectedSort]);
 
   // Setup intersection observer for infinite scrolling
   useEffect(() => {
-    if (!hasMore || loading || loadingMore) return;
+    if (!hasMore || loading || loadingMore || errorState) return;
 
     const observer = new IntersectionObserver(
       entries => {
-        if (entries[0].isIntersecting && !loadingMore) {
+        if (entries[0].isIntersecting && !loadingMore && !isFetchingRef.current) {
           fetchMenu(false);
         }
       },
@@ -183,7 +272,29 @@ export default function MenuManager() {
         observer.unobserve(currentTarget);
       }
     };
-  }, [hasMore, loading, loadingMore, items.length]);
+  }, [hasMore, loading, loadingMore, items.length, errorState]);
+
+  // Selection Cleanup logic: Remove IDs that disappear after a reset/refetch establishes new list
+  useEffect(() => {
+    setSelectedItems(prev => {
+      const visibleIds = new Set(items.map(i => i._id));
+      const next = new Set();
+      for (const id of prev) {
+        if (visibleIds.has(id)) {
+          next.add(id);
+        }
+      }
+      if (next.size !== prev.size) {
+        return next;
+      }
+      return prev;
+    });
+  }, [items]);
+
+  // Clear selections on query changes
+  useEffect(() => {
+    setSelectedItems(new Set());
+  }, [debouncedSearch, selectedCategory, selectedStatus, selectedSort]);
 
   const handleOpenModal = (item = null) => {
     if (item) {
@@ -210,6 +321,21 @@ export default function MenuManager() {
       resetImageSelection('');
     }
     setIsModalOpen(true);
+  };
+
+  const handleDuplicateItem = (item) => {
+    setEditingItem(null); // Force creation mode
+    setFormData({
+      name: `${item.name} Copy`,
+      categories: item.categories || (item.category ? [item.category] : []),
+      price: item.price,
+      description: item.description || '',
+      image: '', // CRITICAL: Reset image to preserve Cloudinary ownership safety
+      chefPick: !!item.chefPick
+    });
+    resetImageSelection('');
+    setIsModalOpen(true);
+    showNotification('Item text fields duplicated. Please select a new image.');
   };
 
   const handleSave = async (e) => {
@@ -243,11 +369,11 @@ export default function MenuManager() {
         fetchMenu(true);
       } else {
         const data = await res.json().catch(() => ({}));
-        alert(data.error || 'Failed to save item');
+        showNotification(data.error || 'Failed to save item.');
       }
     } catch (err) {
       console.error('Error saving item:', err);
-      alert('Failed to save item');
+      showNotification('Failed to save item.');
     } finally {
       setIsSaving(false);
     }
@@ -261,14 +387,35 @@ export default function MenuManager() {
         credentials: 'include'
       });
       if (res.ok) {
-        setItems(items.filter(i => i._id !== id));
+        if (isMountedRef.current) {
+          setItems(prev => prev.filter(i => i._id !== id));
+          setSelectedItems(prev => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+          showNotification('Item deleted successfully!');
+        }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showNotification(data.error || 'Failed to delete item.');
       }
     } catch (err) {
       console.error('Error deleting item:', err);
+      showNotification('Failed to delete item.');
     }
   };
 
   const toggleStatus = async (item) => {
+    // Mutation Race Prevention
+    if (isBulkProcessing || updatingItems.has(item._id)) return;
+
+    setUpdatingItems(prev => {
+      const next = new Set(prev);
+      next.add(item._id);
+      return next;
+    });
+
     try {
       const newStatus = item.available === false ? true : false;
       const res = await fetch(`${API_BASE}/api/menu/${item._id}`, {
@@ -279,10 +426,77 @@ export default function MenuManager() {
       });
 
       if (res.ok) {
-        setItems(items.map(i => i._id === item._id ? { ...i, available: newStatus } : i));
+        if (isMountedRef.current) {
+          setItems(prev => prev.map(i => i._id === item._id ? { ...i, available: newStatus } : i));
+          showNotification(`Availability updated for ${item.name}.`);
+        }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showNotification(data.error || 'Failed to update availability.');
       }
     } catch (err) {
       console.error('Error updating status:', err);
+      showNotification('Failed to update availability.');
+    } finally {
+      if (isMountedRef.current) {
+        setUpdatingItems(prev => {
+          const next = new Set(prev);
+          next.delete(item._id);
+          return next;
+        });
+      }
+    }
+  };
+
+  const handleBulkAvailability = async (available) => {
+    if (selectedItems.size === 0 || isBulkProcessing) return;
+
+    // Check if any selected item is currently pending individual update
+    const selectedArray = Array.from(selectedItems);
+    const hasPendingToggle = selectedArray.some(id => updatingItems.has(id));
+    if (hasPendingToggle) {
+      showNotification('Cannot perform bulk action while selected items are toggling.');
+      return;
+    }
+
+    setIsBulkProcessing(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/menu/bulk-availability`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ids: selectedArray,
+          available
+        }),
+        credentials: 'include'
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        if (isMountedRef.current) {
+          // Update confirmed changes locally
+          setItems(prev =>
+            prev.map(item =>
+              selectedItems.has(item._id) ? { ...item, available } : item
+            )
+          );
+          setSelectedItems(new Set());
+          showNotification(
+            `Bulk update completed: ${result.modified} items updated, ${result.missing} items missing.`
+          );
+        }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showNotification(data.error || 'Failed to perform bulk update.');
+      }
+    } catch (err) {
+      console.error('Error in bulk availability:', err);
+      showNotification('Failed to perform bulk update.');
+    } finally {
+      if (isMountedRef.current) {
+        setIsBulkProcessing(false);
+      }
     }
   };
 
@@ -315,7 +529,7 @@ export default function MenuManager() {
         fetchCategories();
       } else {
         const data = await res.json();
-        alert(data.error || 'Failed to add category');
+        showNotification(data.error || 'Failed to add category.');
       }
     } catch (err) {
       console.error('Failed to add category:', err);
@@ -336,6 +550,37 @@ export default function MenuManager() {
       console.error('Failed to delete category:', err);
     }
   };
+
+  const handleSelectToggle = (id) => {
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const isAllSelected = items.length > 0 && items.every(item => selectedItems.has(item._id));
+  const isSomeSelected = items.length > 0 && items.some(item => selectedItems.has(item._id)) && !isAllSelected;
+
+  const handleSelectAllToggle = () => {
+    if (isAllSelected) {
+      setSelectedItems(new Set());
+    } else {
+      setSelectedItems(new Set(items.map(item => item._id)));
+    }
+  };
+
+  // Determine current active empty state screen type
+  const hasActiveFilters = searchQuery !== '' || selectedCategory !== 'All' || selectedStatus !== 'All';
+  const emptyStateType = errorState
+    ? 'error'
+    : (totalItems === 0 && !loading)
+      ? (hasActiveFilters ? 'no-results' : 'empty')
+      : null;
 
   return (
     <div className="flex flex-col min-h-full w-full pb-10">
@@ -363,88 +608,116 @@ export default function MenuManager() {
       </div>
 
       {/* Search & Filter Controls */}
-      {!loading && items.length > 0 && (
-        <div className="flex flex-col md:flex-row gap-4 mb-6 animate-[fadeUp_0.7s_ease-out_forwards]">
-          {/* Search Bar */}
-          <div className="relative flex-1">
-            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60 text-[20px]">
-              search
-            </span>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search items by name or description..."
-              className="w-full bg-surface-container border border-outline-variant/20 text-on-surface pl-10 pr-10 py-2.5 rounded-xl focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all placeholder:text-on-surface-variant/40 font-body-md text-sm"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60 hover:text-primary transition-colors flex items-center justify-center"
-              >
-                <span className="material-symbols-outlined text-[18px]">close</span>
-              </button>
-            )}
-          </div>
-
-          {/* Category Filter */}
-          <div className="relative min-w-[160px]">
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="w-full bg-surface-container border border-outline-variant/20 text-on-surface px-4 py-2.5 pr-10 rounded-xl focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all cursor-pointer font-body-md text-sm appearance-none"
+      <div className="flex flex-col md:flex-row gap-4 mb-6 animate-[fadeUp_0.7s_ease-out_forwards]">
+        {/* Search Bar */}
+        <div className="relative flex-1">
+          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60 text-[20px]">
+            search
+          </span>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search items by name or description..."
+            className="w-full bg-surface-container border border-outline-variant/20 text-on-surface pl-10 pr-10 py-2.5 rounded-xl focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all placeholder:text-on-surface-variant/40 font-body-md text-sm"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60 hover:text-primary transition-colors flex items-center justify-center"
             >
-              <option value="All">All Categories</option>
-              {categories.map((cat) => (
-                <option key={cat._id} value={cat.name}>
-                  {cat.name}
-                </option>
-              ))}
-            </select>
-            <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant/60 text-[20px]">
-              unfold_more
-            </span>
-          </div>
+              <span className="material-symbols-outlined text-[18px]">close</span>
+            </button>
+          )}
+        </div>
 
-          {/* Status Filter */}
-          <div className="relative min-w-[150px]">
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="w-full bg-surface-container border border-outline-variant/20 text-on-surface px-4 py-2.5 pr-10 rounded-xl focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all cursor-pointer font-body-md text-sm appearance-none"
-            >
-              <option value="All">All Statuses</option>
-              <option value="In Stock">In Stock</option>
-              <option value="Out of Stock">Out of Stock</option>
-            </select>
-            <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant/60 text-[20px]">
-              unfold_more
-            </span>
-          </div>
+        {/* Category Filter */}
+        <div className="relative min-w-[160px]">
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="w-full bg-surface-container border border-outline-variant/20 text-on-surface px-4 py-2.5 pr-10 rounded-xl focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all cursor-pointer font-body-md text-sm appearance-none"
+          >
+            <option value="All">All Categories</option>
+            {categories.map((cat) => (
+              <option key={cat._id} value={cat.name}>
+                {cat.name}
+              </option>
+            ))}
+          </select>
+          <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant/60 text-[20px]">
+            unfold_more
+          </span>
+        </div>
+
+        {/* Status Filter */}
+        <div className="relative min-w-[150px]">
+          <select
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value)}
+            className="w-full bg-surface-container border border-outline-variant/20 text-on-surface px-4 py-2.5 pr-10 rounded-xl focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all cursor-pointer font-body-md text-sm appearance-none"
+          >
+            <option value="All">All Statuses</option>
+            <option value="In Stock">In Stock</option>
+            <option value="Out of Stock">Out of Stock</option>
+          </select>
+          <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant/60 text-[20px]">
+            unfold_more
+          </span>
+        </div>
+
+        {/* Sort Selector */}
+        <div className="relative min-w-[170px]">
+          <select
+            value={selectedSort}
+            onChange={(e) => setSelectedSort(e.target.value)}
+            className="w-full bg-surface-container border border-outline-variant/20 text-on-surface px-4 py-2.5 pr-10 rounded-xl focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all cursor-pointer font-body-md text-sm appearance-none"
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="name_asc">Name A–Z</option>
+            <option value="name_desc">Name Z–A</option>
+            <option value="price_asc">Price: Low to High</option>
+            <option value="price_desc">Price: High to Low</option>
+          </select>
+          <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant/60 text-[20px]">
+            sort
+          </span>
+        </div>
+      </div>
+
+      {/* Result Information */}
+      {!loading && !errorState && totalItems > 0 && (
+        <div className="mb-4 text-sm text-on-surface-variant font-medium animate-[fadeUp_0.75s_ease-out_forwards]">
+          {hasActiveFilters ? (
+            <span>{totalItems} matching item{totalItems === 1 ? '' : 's'}</span>
+          ) : (
+            <span>{totalItems} menu item{totalItems === 1 ? '' : 's'}</span>
+          )}
         </div>
       )}
 
-      {loading ? (
+      {loading && items.length === 0 ? (
         <div className="flex justify-center items-center py-20">
           <span className="material-symbols-outlined text-primary text-4xl animate-spin">progress_activity</span>
         </div>
-      ) : items.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 opacity-50 bg-surface-container-low rounded-xl border border-outline-variant/20">
-          <span className="material-symbols-outlined text-6xl mb-4">restaurant_menu</span>
-          <p className="font-body-lg text-[16px]">No menu items found. Add one to get started.</p>
-        </div>
-      ) : filteredItems.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 opacity-50 bg-surface-container-low rounded-xl border border-outline-variant/20">
-          <span className="material-symbols-outlined text-5xl mb-3">search_off</span>
-          <p className="font-body-lg text-[16px] font-medium">No items match your search filters.</p>
-          <button 
-            onClick={() => { setSearchQuery(''); setSelectedCategory('All'); setSelectedStatus('All'); }} 
-            className="mt-3 text-primary text-xs font-label-caps uppercase tracking-wider hover:underline"
-          >
-            Reset Filters
-          </button>
-        </div>
+      ) : emptyStateType ? (
+        <MenuEmptyState
+          type={emptyStateType}
+          errorMessage={errorState}
+          onAction={() => {
+            if (emptyStateType === 'error') {
+              fetchMenu(true);
+            } else if (emptyStateType === 'no-results') {
+              setSearchQuery('');
+              setSelectedCategory('All');
+              setSelectedStatus('All');
+            } else {
+              handleOpenModal();
+            }
+          }}
+        />
       ) : (
         <>
           {/* Desktop Table View */}
@@ -453,6 +726,20 @@ export default function MenuManager() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-surface-container-high border-b border-outline-variant/30">
+                    <th className="px-6 py-4 w-12 text-center">
+                      <label className="flex items-center justify-center cursor-pointer min-h-[40px] min-w-[40px]">
+                        <input
+                          type="checkbox"
+                          checked={isAllSelected}
+                          ref={el => {
+                            if (el) el.indeterminate = isSomeSelected;
+                          }}
+                          onChange={handleSelectAllToggle}
+                          className="w-4 h-4 rounded border-outline-variant/50 text-primary focus:ring-primary focus:ring-offset-0 focus:ring-1 outline-none bg-surface-container cursor-pointer"
+                          aria-label="Select all visible items"
+                        />
+                      </label>
+                    </th>
                     <th className="px-6 py-4 font-label-caps text-on-surface-variant uppercase tracking-widest text-[12px]">Image</th>
                     <th className="px-6 py-4 font-label-caps text-on-surface-variant uppercase tracking-widest text-[12px]">Name</th>
                     <th className="px-6 py-4 font-label-caps text-on-surface-variant uppercase tracking-widest text-[12px]">Category</th>
@@ -462,53 +749,19 @@ export default function MenuManager() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredItems.map((item, idx) => (
-                    <tr key={item._id} className="border-b border-outline-variant/10 hover:bg-surface-container-highest/50 transition-colors">
-                      <td className="px-6 py-3">
-                        {item.image ? (
-                          <div className="w-12 h-12 rounded overflow-hidden border border-outline-variant/30">
-                            <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                          </div>
-                        ) : (
-                          <div className="w-12 h-12 rounded bg-surface-variant flex items-center justify-center border border-outline-variant/30">
-                            <span className="material-symbols-outlined text-on-surface-variant opacity-50 text-[20px]">image</span>
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-3">
-                        <div className="font-title-md text-on-surface">{item.name}</div>
-                        {item.chefPick && <div className="text-[10px] font-label-caps text-primary uppercase tracking-widest mt-1">Chef Pick</div>}
-                      </td>
-                      <td className="p-4 align-middle">
-                        <div className="flex flex-wrap gap-1">
-                          {(item.categories || (item.category ? [item.category] : [])).map(cat => (
-                            <span key={cat} className="bg-surface-variant text-on-surface-variant px-2 py-0.5 rounded-full text-[12px] font-label-caps uppercase tracking-widest">{cat}</span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="px-6 py-3 font-price-display text-on-surface">₹{item.price}</td>
-                      <td className="px-6 py-3">
-                        <button 
-                          onClick={() => toggleStatus(item)}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-full font-label-caps text-[11px] uppercase tracking-widest transition-all ${
-                            item.available !== false 
-                              ? 'bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20' 
-                              : 'bg-error/10 text-error border border-error/30 hover:bg-error/20'
-                          }`}
-                        >
-                          <div className={`w-2 h-2 rounded-full ${item.available !== false ? 'bg-primary' : 'bg-error'}`}></div>
-                          {item.available !== false ? 'In Stock' : '86 (Out)'}
-                        </button>
-                      </td>
-                      <td className="px-6 py-3 text-right space-x-2">
-                        <button onClick={() => handleOpenModal(item)} className="p-2 text-on-surface-variant hover:text-primary transition-colors bg-surface-container rounded hover:bg-surface-bright">
-                          <span className="material-symbols-outlined text-[18px]">edit</span>
-                        </button>
-                        <button onClick={() => handleDelete(item._id)} className="p-2 text-on-surface-variant hover:text-error transition-colors bg-surface-container rounded hover:bg-error/10">
-                          <span className="material-symbols-outlined text-[18px]">delete</span>
-                        </button>
-                      </td>
-                    </tr>
+                  {items.map((item) => (
+                    <MenuItemRow
+                      key={item._id}
+                      item={item}
+                      isSelected={selectedItems.has(item._id)}
+                      onSelectToggle={() => handleSelectToggle(item._id)}
+                      onToggleStatus={() => toggleStatus(item)}
+                      isStatusPending={updatingItems.has(item._id)}
+                      isStatusDisabled={isBulkProcessing}
+                      onEdit={() => handleOpenModal(item)}
+                      onDuplicate={() => handleDuplicateItem(item)}
+                      onDelete={() => handleDelete(item._id)}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -517,66 +770,24 @@ export default function MenuManager() {
 
           {/* Mobile Card List View */}
           <div className="grid grid-cols-1 gap-4 md:hidden animate-[fadeUp_0.8s_ease-out_forwards]">
-            {filteredItems.map((item) => (
-              <div key={item._id} className="bg-surface-container-low border border-outline-variant/20 rounded-xl p-4 flex flex-col gap-4 shadow-sm">
-                <div className="flex gap-4">
-                  {/* Image */}
-                  {item.image ? (
-                    <div className="w-16 h-16 rounded-lg overflow-hidden border border-outline-variant/20 shrink-0">
-                      <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                    </div>
-                  ) : (
-                    <div className="w-16 h-16 rounded-lg bg-surface-variant flex items-center justify-center border border-outline-variant/20 shrink-0">
-                      <span className="material-symbols-outlined text-on-surface-variant opacity-50 text-[24px]">image</span>
-                    </div>
-                  )}
-                  
-                  {/* Details */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start gap-2">
-                      <h4 className="font-title-md text-on-surface text-base truncate">{item.name}</h4>
-                      <span className="font-price-display text-on-surface text-sm shrink-0">₹{item.price}</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {(item.categories || (item.category ? [item.category] : [])).map(cat => (
-                        <span key={cat} className="bg-surface-variant text-on-surface-variant px-2 py-0.5 rounded-full text-[10px] font-label-caps uppercase tracking-widest">{cat}</span>
-                      ))}
-                    </div>
-                    {item.chefPick && <div className="text-[9px] font-label-caps text-primary uppercase tracking-widest mt-1">Chef Pick</div>}
-                  </div>
-                </div>
-
-                {/* Status and Action Buttons */}
-                <div className="flex items-center justify-between border-t border-outline-variant/10 pt-3">
-                  {/* Status Toggle */}
-                  <button 
-                    onClick={() => toggleStatus(item)}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-label-caps text-[10px] uppercase tracking-widest transition-all ${
-                      item.available !== false 
-                        ? 'bg-primary/10 text-primary border border-primary/30 hover:bg-primary/20' 
-                        : 'bg-error/10 text-error border border-error/30 hover:bg-error/20'
-                    }`}
-                  >
-                    <div className={`w-1.5 h-1.5 rounded-full ${item.available !== false ? 'bg-primary' : 'bg-error'}`}></div>
-                    {item.available !== false ? 'In Stock' : '86 (Out)'}
-                  </button>
-
-                  {/* Edit & Delete Actions */}
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => handleOpenModal(item)} className="p-2 text-on-surface-variant hover:text-primary transition-colors bg-surface-container rounded-lg hover:bg-surface-bright flex items-center justify-center">
-                      <span className="material-symbols-outlined text-[18px]">edit</span>
-                    </button>
-                    <button onClick={() => handleDelete(item._id)} className="p-2 text-on-surface-variant hover:text-error transition-colors bg-surface-container rounded-lg hover:bg-error/10 flex items-center justify-center">
-                      <span className="material-symbols-outlined text-[18px]">delete</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
+            {items.map((item) => (
+              <MenuItemCard
+                key={item._id}
+                item={item}
+                isSelected={selectedItems.has(item._id)}
+                onSelectToggle={() => handleSelectToggle(item._id)}
+                onToggleStatus={() => toggleStatus(item)}
+                isStatusPending={updatingItems.has(item._id)}
+                isStatusDisabled={isBulkProcessing}
+                onEdit={() => handleOpenModal(item)}
+                onDuplicate={() => handleDuplicateItem(item)}
+                onDelete={() => handleDelete(item._id)}
+              />
             ))}
           </div>
 
-          {/* Infinite Scroll Loader Target */}
-          {hasMore && (
+          {/* Infinite Scroll Loader Target & Load-More Error controls */}
+          {hasMore && !errorState && (
             <div ref={observerTarget} className="flex justify-center items-center py-8">
               {loadingMore ? (
                 <span className="material-symbols-outlined text-primary text-3xl animate-spin">progress_activity</span>
@@ -586,9 +797,22 @@ export default function MenuManager() {
             </div>
           )}
 
-          {!hasMore && items.length > 0 && (
+          {errorState && items.length > 0 && (
+            <div className="flex flex-col items-center justify-center py-6 border-t border-outline-variant/10 mt-6 animate-[fadeUp_0.4s_ease-out_forwards]">
+              <p className="text-xs text-error font-medium mb-2">{errorState}</p>
+              <button
+                onClick={() => fetchMenu(false)}
+                className="bg-surface-container text-on-surface hover:text-primary border border-outline-variant/30 text-xs font-semibold px-4 py-2 rounded-xl transition-all flex items-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-[16px]">refresh</span>
+                <span>Retry Loading More</span>
+              </button>
+            </div>
+          )}
+
+          {!hasMore && items.length > 0 && !errorState && (
             <div className="text-center py-8 text-[11px] text-on-surface-variant/40 font-mono tracking-widest uppercase border-t border-outline-variant/10 mt-6">
-              All menu items loaded ({items.length} total)
+              All menu items loaded ({totalItems} total)
             </div>
           )}
         </>
@@ -743,6 +967,13 @@ export default function MenuManager() {
                         </div>
                       </div>
                     </div>
+                    {/* Cloudinary safety message for duplicate pre-fill image clearance */}
+                    {!formData.image && !imageFile && (
+                      <p className="mt-2 text-xs text-[#d4af37] font-medium flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[14px]">warning</span>
+                        <span>Select a new image. Duplicated items must have a new image to maintain asset ownership safety.</span>
+                      </p>
+                    )}
                     <p className="mt-2 text-xs text-on-surface-variant">
                       Uploaded on save only. The server recompresses the image before sending it to Cloudinary.
                     </p>
@@ -828,6 +1059,17 @@ export default function MenuManager() {
             </motion.div>
           </motion.div>
         )}
+      </AnimatePresence>
+
+      {/* Bulk Action Toolbar */}
+      <AnimatePresence>
+        <BulkActionBar
+          selectedCount={selectedItems.size}
+          onMarkAvailable={() => handleBulkAvailability(true)}
+          onMarkUnavailable={() => handleBulkAvailability(false)}
+          onClear={() => setSelectedItems(new Set())}
+          disabled={isBulkProcessing}
+        />
       </AnimatePresence>
 
       {/* Global Notification Toast */}
