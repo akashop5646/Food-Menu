@@ -42,6 +42,7 @@ export async function connectDB() {
     await db.collection('orders').createIndex({ 'splitSettlement.recipients.transferId': 1 }, { sparse: true });
     await db.collection('employee_activity_events').createIndex({ 'actor.userId': 1, createdAt: -1, _id: -1 });
     await db.collection('employee_activity_events').createIndex({ createdAt: -1, _id: -1 });
+    await db.collection('employee_audit_failures').createIndex({ occurredAt: -1 });
     console.log('✅ MongoDB Indexes verified/created successfully.');
   } catch (err) {
     console.warn('⚠️ Non-blocking index creation error:', err.message);

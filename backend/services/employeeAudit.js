@@ -1,4 +1,5 @@
 import { getDB } from '../db.js';
+import crypto from 'node:crypto';
 
 export class ValidationError extends Error {
   constructor(message) {
@@ -204,7 +205,168 @@ export function normalizeContext(action, context) {
   return normalized;
 }
 
+// --- Phase 3 Integrity Core ---
+
+let hasWarnedIntegrity = false;
+
+export function getIntegritySecret() {
+  const secret = process.env.EMPLOYEE_AUDIT_INTEGRITY_SECRET;
+  if (!secret || secret.length < 32) {
+    if (!hasWarnedIntegrity) {
+      hasWarnedIntegrity = true;
+      console.warn('AUDIT_INTEGRITY_WARNING: Integrity signing is unavailable (secret is missing or holds insufficient entropy).');
+    }
+    return null;
+  }
+  return secret;
+}
+
+export function canonicalSerialize(obj) {
+  if (obj === null) return 'null';
+  if (obj === undefined) {
+    throw new TypeError('Unsupported value type: undefined');
+  }
+  if (typeof obj === 'function' || typeof obj === 'symbol') {
+    throw new TypeError(`Unsupported value type: ${typeof obj}`);
+  }
+  if (Array.isArray(obj)) {
+    return '[' + obj.map(item => canonicalSerialize(item)).join(',') + ']';
+  }
+  if (obj instanceof Date) {
+    return `"${obj.toISOString()}"`;
+  }
+  if (typeof obj === 'object') {
+    const keys = Object.keys(obj).sort();
+    const parts = keys.map(k => {
+      const val = obj[k];
+      if (val === undefined) {
+        throw new TypeError('Unsupported value type: undefined');
+      }
+      return `"${k}":${canonicalSerialize(val)}`;
+    });
+    return '{' + parts.join(',') + '}';
+  }
+  if (typeof obj === 'string') {
+    return `"${obj}"`;
+  }
+  return String(obj);
+}
+
+export function generateIntegrityPayload({ action, entity, actor, context, createdAt }) {
+  const dateStr = createdAt instanceof Date ? createdAt.toISOString() : new Date(createdAt).toISOString();
+
+  // Explicitly map exactly the Phase 2 schema properties
+  const payloadObj = {
+    version: 1,
+    action,
+    entity: {
+      type: entity.type,
+      id: entity.id,
+      displayLabel: entity.displayLabel
+    },
+    actor: {
+      userId: actor.userId,
+      role: actor.role
+    },
+    context: context || {},
+    createdAt: dateStr
+  };
+
+  return canonicalSerialize(payloadObj);
+}
+
+export function verifyIntegrity(event) {
+  if (!event.integrity) {
+    return 'UNVERIFIED_LEGACY';
+  }
+
+  const { version, algorithm, digest } = event.integrity;
+
+  // Unknown future version
+  if (version !== 0 && version !== 1) {
+    return 'UNAVAILABLE';
+  }
+
+  // Version 0 metadata -> UNAVAILABLE
+  if (version === 0) {
+    if (algorithm === 'NONE' && digest === null) {
+      return 'UNAVAILABLE';
+    }
+    return 'INVALID'; // Malformed version 0
+  }
+
+  // Version 1 metadata checks
+  if (version === 1) {
+    if (algorithm !== 'HMAC-SHA256' || typeof digest !== 'string') {
+      return 'INVALID'; // Malformed version 1
+    }
+
+    const secret = getIntegritySecret();
+    if (!secret) {
+      return 'UNAVAILABLE';
+    }
+
+    try {
+      const payload = generateIntegrityPayload({
+        action: event.action,
+        entity: event.entity,
+        actor: event.actor,
+        context: event.context,
+        createdAt: event.createdAt
+      });
+
+      const expectedDigest = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+
+      const bufExpected = Buffer.from(expectedDigest, 'hex');
+      let bufActual;
+      try {
+        bufActual = Buffer.from(digest, 'hex');
+      } catch (e) {
+        return 'INVALID'; // Non-hex digest
+      }
+
+      if (bufExpected.length !== bufActual.length) {
+        return 'INVALID';
+      }
+
+      const isValid = crypto.timingSafeEqual(bufExpected, bufActual);
+      return isValid ? 'VERIFIED' : 'INVALID';
+    } catch (err) {
+      return 'INVALID';
+    }
+  }
+
+  return 'INVALID';
+}
+
+// Outage-safe failures logger
+async function logAuditFailure({ action, actor, entityType, category, message }) {
+  try {
+    const db = await getDB();
+    const failureDoc = {
+      failureId: crypto.randomUUID(),
+      action: action || 'UNKNOWN',
+      actor: {
+        userId: actor?.userId || 'UNKNOWN',
+        role: actor?.role || 'UNKNOWN'
+      },
+      entityType: entityType || 'UNKNOWN',
+      failureCategory: category || 'UNKNOWN_INTERNAL_FAILURE',
+      sanitizedMessage: message || 'An unexpected internal error occurred.',
+      occurredAt: new Date(),
+      resolvedAt: null
+    };
+    await db.collection('employee_audit_failures').insertOne(failureDoc);
+  } catch (failErr) {
+    console.error(
+      'AUDIT_FAILURE_LOG_ERROR: Failed to save audit failure record. Same-database failure diagnostics are unavailable during storage outages.',
+      failErr.message || failErr
+    );
+  }
+}
+
 export async function recordEmployeeActivity(actor, action, entity, context) {
+  const createdAt = new Date();
   try {
     // 1. Normalize
     const normalizedContext = normalizeContext(action, context);
@@ -212,7 +374,47 @@ export async function recordEmployeeActivity(actor, action, entity, context) {
     // 2. Validate
     validateAuditEvent(actor, action, entity, normalizedContext);
 
-    // 3. Save
+    // 3. Integrity Sign
+    const secret = getIntegritySecret();
+    let integrity;
+    if (secret) {
+      try {
+        const payload = generateIntegrityPayload({
+          action,
+          entity,
+          actor,
+          context: normalizedContext,
+          createdAt
+        });
+        const digest = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+        integrity = {
+          version: 1,
+          algorithm: 'HMAC-SHA256',
+          digest
+        };
+      } catch (signErr) {
+        integrity = {
+          version: 0,
+          algorithm: 'NONE',
+          digest: null
+        };
+        await logAuditFailure({
+          action,
+          actor,
+          entityType: entity?.type,
+          category: 'INTEGRITY_SIGNING_UNAVAILABLE',
+          message: 'Integrity signature could not be generated.'
+        });
+      }
+    } else {
+      integrity = {
+        version: 0,
+        algorithm: 'NONE',
+        digest: null
+      };
+    }
+
+    // 4. Save
     const db = await getDB();
     const eventDoc = {
       actor: {
@@ -228,13 +430,25 @@ export async function recordEmployeeActivity(actor, action, entity, context) {
         displayLabel: entity.displayLabel,
       },
       context: normalizedContext,
-      createdAt: new Date(),
+      createdAt,
+      integrity
     };
 
     await db.collection('employee_activity_events').insertOne(eventDoc);
     return true;
   } catch (err) {
     console.error('AUDIT_LOG_ERROR:', err.message || err);
+    const category = err.name === 'ValidationError' ? 'VALIDATION_FAILED' : 'DATABASE_WRITE_FAILED';
+    const message = err.name === 'ValidationError' ? 'Audit event validation failed.' : 'Audit event could not be persisted.';
+
+    await logAuditFailure({
+      action,
+      actor,
+      entityType: entity?.type,
+      category,
+      message
+    });
+
     return false;
   }
 }

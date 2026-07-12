@@ -709,7 +709,7 @@ export default function AdminDashboard() {
           {activeTab === 'payments' && <Payments refreshKey={refreshKey} />}
           {activeTab === 'analytics' && <Analytics />}
           {activeTab === 'settlements' && user?.role === 'MASTER_ADMIN' && <SettlementMonitor />}
-          {activeTab === 'employees' && (user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN') && <Employees />}
+          {activeTab === 'employees' && (user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN') && <Employees user={user} />}
 
           {activeTab !== 'dashboard' && activeTab !== 'tables' && activeTab !== 'menu' && activeTab !== 'settings' && activeTab !== 'scanner' && activeTab !== 'payments' && activeTab !== 'analytics' && activeTab !== 'settlements' && activeTab !== 'employees' && (
              <motion.div

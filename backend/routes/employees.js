@@ -1,13 +1,67 @@
 import { Router } from 'express';
 import { ObjectId } from 'mongodb';
 import { getDB } from '../db.js';
-import { requireAdmin } from '../middleware/auth.js';
+import { requireAdmin, requireMasterAdmin } from '../middleware/auth.js';
 import { normalizeProfileImage } from '../utils/profileImage.js';
+import { verifyIntegrity } from '../services/employeeAudit.js';
 
 const router = Router();
 
 const ALLOWED_ROLES = ['MASTER_ADMIN', 'ADMIN', 'STAFF'];
 const ALLOWED_SORTS = ['newest', 'oldest', 'name_asc', 'name_desc'];
+
+let hasWarnedRetention = false;
+
+export function parseRetentionDays() {
+  const val = process.env.EMPLOYEE_AUDIT_RETENTION_DAYS;
+  if (val === undefined) {
+    return 365;
+  }
+  const parsed = parseInt(val, 10);
+  if (isNaN(parsed) || parsed < 90 || parsed > 2555) {
+    if (!hasWarnedRetention) {
+      hasWarnedRetention = true;
+      console.warn('AUDIT_RETENTION_WARNING: Configuration value is invalid. Falling back to default retention of 365 days.');
+    }
+    return 365;
+  }
+  return parsed;
+}
+
+function parseDateRange(fromStr, toStr) {
+  let fromDate = null;
+  let toDate = null;
+
+  if (fromStr) {
+    const matchesDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(fromStr);
+    const isoStr = matchesDateOnly ? `${fromStr}T00:00:00.000Z` : fromStr;
+    fromDate = new Date(isoStr);
+    if (isNaN(fromDate.getTime())) {
+      throw new Error('Invalid from date format.');
+    }
+  }
+
+  if (toStr) {
+    const matchesDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(toStr);
+    const isoStr = matchesDateOnly ? `${toStr}T23:59:59.999Z` : toStr;
+    toDate = new Date(isoStr);
+    if (isNaN(toDate.getTime())) {
+      throw new Error('Invalid to date format.');
+    }
+  }
+
+  return { fromDate, toDate };
+}
+
+function sanitizeCSVCell(val) {
+  if (val === null || val === undefined) return '';
+  let str = String(val);
+  const trimmed = str.trim();
+  if (/^[=\+\-@]/.test(trimmed)) {
+    str = "'" + str;
+  }
+  return `"${str.replace(/"/g, '""')}"`;
+}
 
 // 1. GET /summary
 router.get('/summary', requireAdmin, async (req, res) => {
@@ -118,7 +172,335 @@ router.get('/activity/summary', requireAdmin, async (req, res) => {
   }
 });
 
-// 3. GET /activity (list with dropdown filters and date range)
+// 3. GET /activity/health
+router.get('/activity/health', requireMasterAdmin, async (req, res) => {
+  const retentionDays = parseRetentionDays();
+  try {
+    const db = await getDB();
+    const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const [totalEvents, eventsLast24Hours, latestEventArr, failedWritesLast24Hours, unresolvedFailures, oldestRetainedEventArr] = await Promise.all([
+      db.collection('employee_activity_events').countDocuments({}),
+      db.collection('employee_activity_events').countDocuments({ createdAt: { $gte: last24h } }),
+      db.collection('employee_activity_events').find({}).sort({ createdAt: -1, _id: -1 }).limit(1).toArray(),
+      db.collection('employee_audit_failures').countDocuments({ occurredAt: { $gte: last24h } }),
+      db.collection('employee_audit_failures').countDocuments({ resolvedAt: null }),
+      db.collection('employee_activity_events').find({}).sort({ createdAt: 1, _id: 1 }).limit(1).toArray()
+    ]);
+
+    const latestEventAt = latestEventArr.length > 0 ? latestEventArr[0].createdAt : null;
+    const oldestRetainedEventAt = oldestRetainedEventArr.length > 0 ? oldestRetainedEventArr[0].createdAt : null;
+
+    let status = 'HEALTHY';
+    if (unresolvedFailures > 0 || failedWritesLast24Hours > 0) {
+      status = 'DEGRADED';
+    } else if (eventsLast24Hours === 0) {
+      status = 'NO_RECENT_ACTIVITY';
+    }
+
+    res.json({
+      health: {
+        status,
+        totalEvents,
+        eventsLast24Hours,
+        latestEventAt,
+        failedWritesLast24Hours,
+        unresolvedFailures,
+        retentionDays,
+        oldestRetainedEventAt
+      }
+    });
+  } catch (err) {
+    console.error('Health endpoint query failed:', err.message || err);
+    res.status(503).json({
+      health: {
+        status: 'UNAVAILABLE',
+        totalEvents: 0,
+        eventsLast24Hours: 0,
+        latestEventAt: null,
+        failedWritesLast24Hours: 0,
+        unresolvedFailures: 0,
+        retentionDays,
+        oldestRetainedEventAt: null
+      }
+    });
+  }
+});
+
+// 4. GET /activity/failures
+router.get('/activity/failures', requireMasterAdmin, async (req, res) => {
+  try {
+    const { page: pageStr, limit: limitStr, status, from, to } = req.query || {};
+
+    let page = 1;
+    let limit = 20;
+
+    if (pageStr !== undefined) {
+      page = Number(pageStr);
+      if (isNaN(page) || page <= 0 || !Number.isInteger(page)) {
+        return res.status(400).json({ error: 'Invalid page parameter.' });
+      }
+    }
+
+    if (limitStr !== undefined) {
+      limit = Number(limitStr);
+      if (isNaN(limit) || limit <= 0 || limit > 100 || !Number.isInteger(limit)) {
+        return res.status(400).json({ error: 'Invalid limit parameter.' });
+      }
+    }
+
+    const query = {};
+
+    if (status === 'UNRESOLVED') {
+      query.resolvedAt = null;
+    } else if (status === 'RESOLVED') {
+      query.resolvedAt = { $ne: null };
+    }
+
+    let parsedDates;
+    try {
+      parsedDates = parseDateRange(from, to);
+    } catch (dateErr) {
+      return res.status(400).json({ error: dateErr.message });
+    }
+
+    const { fromDate, toDate } = parsedDates;
+    if (fromDate || toDate) {
+      query.occurredAt = {};
+      if (fromDate) query.occurredAt.$gte = fromDate;
+      if (toDate) query.occurredAt.$lte = toDate;
+    }
+
+    const db = await getDB();
+    const total = await db.collection('employee_audit_failures').countDocuments(query);
+    const pages = Math.ceil(total / limit) || 1;
+    const skip = (page - 1) * limit;
+
+    const failures = await db.collection('employee_audit_failures')
+      .find(query)
+      .sort({ occurredAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .project({
+        _id: 1,
+        failureId: 1,
+        action: 1,
+        actor: 1,
+        entityType: 1,
+        failureCategory: 1,
+        sanitizedMessage: 1,
+        occurredAt: 1,
+        resolvedAt: 1
+      })
+      .toArray();
+
+    res.json({
+      failures,
+      pagination: {
+        total,
+        pages,
+        page,
+        limit
+      }
+    });
+  } catch (err) {
+    console.error('List audit failures error:', err);
+    res.status(500).json({ error: 'Failed to fetch failure list.' });
+  }
+});
+
+// 5. GET /activity/export
+router.get('/activity/export', requireMasterAdmin, async (req, res) => {
+  try {
+    const { employeeId, action, entityType, from, to } = req.query || {};
+
+    if (!from || !to) {
+      return res.status(400).json({ error: 'Both from and to dates are required for CSV export.' });
+    }
+
+    // Validate max range 90 days before end-of-day expansion
+    const startCal = new Date(from);
+    const endCal = new Date(to);
+    if (isNaN(startCal.getTime()) || isNaN(endCal.getTime())) {
+      return res.status(400).json({ error: 'Invalid date range parameters.' });
+    }
+    const dayDiff = (endCal.getTime() - startCal.getTime()) / (1000 * 60 * 60 * 24);
+    if (dayDiff < 0 || dayDiff > 90) {
+      return res.status(400).json({ error: 'Export date range cannot exceed 90 days.' });
+    }
+
+    let parsedDates;
+    try {
+      parsedDates = parseDateRange(from, to);
+    } catch (dateErr) {
+      return res.status(400).json({ error: dateErr.message });
+    }
+
+    const { fromDate, toDate } = parsedDates;
+    const query = {};
+
+    if (employeeId) {
+      if (!ObjectId.isValid(employeeId) || employeeId.length !== 24) {
+        return res.status(400).json({ error: 'Invalid employee ID format.' });
+      }
+      query['actor.userId'] = employeeId;
+    }
+
+    if (action) {
+      query.action = action;
+    }
+
+    if (entityType) {
+      query['entity.type'] = entityType;
+    }
+
+    if (fromDate || toDate) {
+      query.createdAt = {};
+      if (fromDate) query.createdAt.$gte = fromDate;
+      if (toDate) query.createdAt.$lte = toDate;
+    }
+
+    const db = await getDB();
+    const count = await db.collection('employee_activity_events').countDocuments(query);
+    if (count > 10000) {
+      return res.status(400).json({
+        error: 'Export size exceeds the limit of 10,000 events. Please narrow your date range or filters.'
+      });
+    }
+
+    const events = await db.collection('employee_activity_events')
+      .find(query)
+      .sort({ createdAt: -1, _id: -1 })
+      .toArray();
+
+    const headers = [
+      'Timestamp',
+      'Employee Name',
+      'Employee Email',
+      'Employee Role',
+      'Action',
+      'Category',
+      'Entity Type',
+      'Entity Label',
+      'Context Summary',
+      'Integrity Status'
+    ];
+
+    const csvRows = [headers.join(',')];
+
+    for (const event of events) {
+      const contextSummary = Object.entries(event.context || {})
+        .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+        .join(' | ');
+
+      const integrityStatus = verifyIntegrity(event);
+
+      const row = [
+        event.createdAt instanceof Date ? event.createdAt.toISOString() : new Date(event.createdAt).toISOString(),
+        event.actor?.name || '',
+        event.actor?.email || '',
+        event.actor?.role || '',
+        event.action || '',
+        event.entity?.type || '',
+        event.entity?.type || '',
+        event.entity?.displayLabel || '',
+        contextSummary,
+        integrityStatus
+      ];
+
+      csvRows.push(row.map(val => sanitizeCSVCell(val)).join(','));
+    }
+
+    const csvString = csvRows.join('\r\n');
+    const filename = `aurum-employee-audit-${new Date().toISOString().split('T')[0]}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csvString);
+  } catch (err) {
+    console.error('Export CSV error:', err);
+    res.status(500).json({ error: 'Failed to export CSV.' });
+  }
+});
+
+// 6. POST /activity/retention/preview
+router.post('/activity/retention/preview', requireMasterAdmin, async (req, res) => {
+  const retentionDays = parseRetentionDays();
+  try {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+
+    const db = await getDB();
+    const eligibleEventCount = await db.collection('employee_activity_events').countDocuments({
+      createdAt: { $lt: cutoffDate }
+    });
+
+    res.json({
+      preview: {
+        retentionDays,
+        cutoff: cutoffDate.toISOString(),
+        eligibleEventCount
+      }
+    });
+  } catch (err) {
+    console.error('Retention preview calculation failed:', err);
+    res.status(500).json({ error: 'Failed to calculate retention preview.' });
+  }
+});
+
+// 7. GET /activity/events/:eventId
+router.get('/activity/events/:eventId', requireAdmin, async (req, res) => {
+  try {
+    const callerRole = req.user.role;
+    const { eventId } = req.params;
+
+    if (!eventId || !ObjectId.isValid(eventId) || eventId.length !== 24) {
+      return res.status(400).json({ error: 'Invalid event ID format.' });
+    }
+
+    const db = await getDB();
+    const event = await db.collection('employee_activity_events').findOne({
+      _id: new ObjectId(eventId)
+    });
+
+    if (!event) {
+      return res.status(404).json({ error: 'Event not found.' });
+    }
+
+    // Visibility scoping
+    if (callerRole === 'ADMIN' && event.actor?.role === 'MASTER_ADMIN') {
+      return res.status(403).json({ error: 'Forbidden: Admin cannot view Master Admin activity details.' });
+    }
+
+    const integrityStatus = verifyIntegrity(event);
+
+    const sanitizedEvent = {
+      id: event._id.toString(),
+      action: event.action,
+      category: event.entity?.type || '',
+      actor: {
+        userId: event.actor?.userId || '',
+        name: event.actor?.name || '',
+        role: event.actor?.role || ''
+      },
+      entity: {
+        type: event.entity?.type || '',
+        id: event.entity?.id || null,
+        displayLabel: event.entity?.displayLabel || ''
+      },
+      context: event.context || {},
+      createdAt: event.createdAt instanceof Date ? event.createdAt.toISOString() : new Date(event.createdAt).toISOString(),
+      integrityStatus
+    };
+
+    res.json({ event: sanitizedEvent });
+  } catch (err) {
+    console.error('Get event details error:', err);
+    res.status(500).json({ error: 'Failed to fetch event details.' });
+  }
+});
+
+// 8. GET /activity (list with dropdown filters and date range)
 router.get('/activity', requireAdmin, async (req, res) => {
   try {
     const callerRole = req.user.role;
@@ -187,23 +569,18 @@ router.get('/activity', requireAdmin, async (req, res) => {
       query['entity.type'] = entityType;
     }
 
-    // Filter by date range (from / to)
-    if (from || to) {
+    let parsedDates;
+    try {
+      parsedDates = parseDateRange(from, to);
+    } catch (dateErr) {
+      return res.status(400).json({ error: dateErr.message });
+    }
+
+    const { fromDate, toDate } = parsedDates;
+    if (fromDate || toDate) {
       query.createdAt = {};
-      if (from) {
-        const fromDate = new Date(from);
-        if (isNaN(fromDate.getTime())) {
-          return res.status(400).json({ error: 'Invalid from date format.' });
-        }
-        query.createdAt.$gte = fromDate;
-      }
-      if (to) {
-        const toDate = new Date(to);
-        if (isNaN(toDate.getTime())) {
-          return res.status(400).json({ error: 'Invalid to date format.' });
-        }
-        query.createdAt.$lte = toDate;
-      }
+      if (fromDate) query.createdAt.$gte = fromDate;
+      if (toDate) query.createdAt.$lte = toDate;
     }
 
     const total = await db.collection('employee_activity_events').countDocuments(query);
@@ -218,7 +595,15 @@ router.get('/activity', requireAdmin, async (req, res) => {
       .toArray();
 
     res.json({
-      events,
+      events: events.map(event => ({
+        id: event._id.toString(),
+        actor: event.actor,
+        action: event.action,
+        entity: event.entity,
+        context: event.context,
+        createdAt: event.createdAt,
+        integrityStatus: verifyIntegrity(event)
+      })),
       pagination: {
         total,
         pages,
@@ -232,7 +617,7 @@ router.get('/activity', requireAdmin, async (req, res) => {
   }
 });
 
-// 4. GET / (list, search, sorting, pagination)
+// 9. GET / (list, search, sorting, pagination)
 router.get('/', requireAdmin, async (req, res) => {
   try {
     const callerRole = req.user.role;
@@ -347,7 +732,7 @@ router.get('/', requireAdmin, async (req, res) => {
   }
 });
 
-// 5. GET /:employeeId/activity (shortcut for specific employee history)
+// 10. GET /:employeeId/activity (shortcut for specific employee history)
 router.get('/:employeeId/activity', requireAdmin, async (req, res) => {
   try {
     const callerRole = req.user.role;
@@ -405,7 +790,15 @@ router.get('/:employeeId/activity', requireAdmin, async (req, res) => {
       .toArray();
 
     res.json({
-      events,
+      events: events.map(event => ({
+        id: event._id.toString(),
+        actor: event.actor,
+        action: event.action,
+        entity: event.entity,
+        context: event.context,
+        createdAt: event.createdAt,
+        integrityStatus: verifyIntegrity(event)
+      })),
       pagination: {
         total,
         pages,
@@ -419,7 +812,7 @@ router.get('/:employeeId/activity', requireAdmin, async (req, res) => {
   }
 });
 
-// 6. GET /:employeeId
+// 11. GET /:employeeId
 router.get('/:employeeId', requireAdmin, async (req, res) => {
   try {
     const callerRole = req.user.role;
