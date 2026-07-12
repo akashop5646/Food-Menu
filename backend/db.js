@@ -10,8 +10,14 @@ try {
 
 let client;
 let db;
+let mockDb = null;
+
+export function setMockDB(mock) {
+  mockDb = mock;
+}
 
 export async function connectDB() {
+  if (mockDb) return mockDb;
   if (db) return db;
   const uri = process.env.MONGODB_URI;
   const dbName = process.env.MONGODB_DB;
@@ -33,6 +39,7 @@ export async function connectDB() {
     await db.collection('menu_items').createIndex({ categories: 1 });
     await db.collection('menu_items').createIndex({ name: 1 });
     await db.collection('orders').createIndex({ 'splitSettlement.status': 1, 'splitSettlement.processingLeaseUntil': 1 });
+    await db.collection('orders').createIndex({ 'splitSettlement.recipients.transferId': 1 }, { sparse: true });
     console.log('✅ MongoDB Indexes verified/created successfully.');
   } catch (err) {
     console.warn('⚠️ Non-blocking index creation error:', err.message);
@@ -42,6 +49,7 @@ export async function connectDB() {
 }
 
 export async function getDB() {
+  if (mockDb) return mockDb;
   if (!db) await connectDB();
   return db;
 }

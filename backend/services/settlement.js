@@ -74,7 +74,7 @@ function isEligibleOrder(order) {
   return order?.paymentStatus === 'PAID' && order.paymentType === 'RAZORPAY' && Boolean(order.razorpayPaymentId) && Number.isFinite(Number(order.total)) && Number(order.total) > 0;
 }
 
-function deriveOverallStatus(recipients) {
+export function deriveOverallStatus(recipients) {
   const actionable = recipients.filter((recipient) => !['SKIPPED_ZERO_AMOUNT', 'SKIPPED_MINIMUM_AMOUNT'].includes(recipient.status));
   const hasSkippedExternalAmount = actionable.length !== recipients.length;
   if (actionable.length === 0) return 'SKIPPED';
@@ -162,13 +162,14 @@ export async function initializeAndProcessSettlementForPaidOrder(orderId) {
     order = result || await db.collection('orders').findOne({ _id: order._id });
   }
 
-  if (process.env.RAZORPAY_ROUTE_TRANSFERS_ENABLED !== 'true' || order.splitSettlement.status !== 'PENDING') return { initialized: true, processed: false, order };
+  const eligibleStatuses = ['PENDING', 'PROCESSING', 'RETRY_PENDING', 'RECONCILIATION_REQUIRED'];
+  if (process.env.RAZORPAY_ROUTE_TRANSFERS_ENABLED !== 'true' || !eligibleStatuses.includes(order.splitSettlement.status)) return { initialized: true, processed: false, order };
 
   const now = new Date();
   const claimToken = randomUUID();
   const claimed = await db.collection('orders').findOneAndUpdate(
     { _id: order._id, $or: [
-      { 'splitSettlement.status': { $in: ['PENDING', 'RETRY_PENDING'] }, $or: [{ 'splitSettlement.processingLeaseUntil': null }, { 'splitSettlement.processingLeaseUntil': { $lte: now } }] },
+      { 'splitSettlement.status': { $in: ['PENDING', 'RETRY_PENDING', 'RECONCILIATION_REQUIRED'] }, $or: [{ 'splitSettlement.processingLeaseUntil': null }, { 'splitSettlement.processingLeaseUntil': { $lte: now } }] },
       { 'splitSettlement.status': 'PROCESSING', 'splitSettlement.processingLeaseUntil': { $lte: now } },
     ] },
     { $set: { 'splitSettlement.status': 'PROCESSING', 'splitSettlement.processingStartedAt': now, 'splitSettlement.processingLeaseUntil': new Date(now.getTime() + CLAIM_LEASE_MS), 'splitSettlement.processingClaimToken': claimToken, 'splitSettlement.updatedAt': now } },
@@ -180,13 +181,45 @@ export async function initializeAndProcessSettlementForPaidOrder(orderId) {
   try {
     const remoteTransfers = await fetchPaymentTransfers(settlement.razorpayPaymentId);
     for (const recipient of settlement.recipients) {
-      if (!['PENDING', 'RETRY_PENDING', 'PROCESSING'].includes(recipient.status) || recipient.transferId) continue;
-      const existing = remoteTransfers.find((transfer) => transfer.recipient === recipient.linkedAccountId && transfer.amount === recipient.amountPaise && transfer.notes?.settlement_order_id === String(order._id) && transfer.notes?.settlement_recipient_id === recipient.recipientId);
+      // 1. Skip terminal states immediately
+      if (['PROCESSED', 'FAILED', 'SKIPPED_ZERO_AMOUNT', 'SKIPPED_MINIMUM_AMOUNT'].includes(recipient.status)) {
+        continue;
+      }
+
+      // 2. If transferId is present, we reconcile by searching remoteTransfers
+      if (recipient.transferId) {
+        const existing = remoteTransfers.find((transfer) => transfer.id === recipient.transferId);
+        if (existing) {
+          applyRemoteTransfer(recipient, existing);
+          await persistClaimedSettlement(db, order._id, claimToken, settlement);
+        }
+        continue;
+      }
+
+      // 3. If transferId is absent, check if a remote transfer matches to prevent duplicate creation
+      const existing = remoteTransfers.find((transfer) =>
+        transfer.recipient === recipient.linkedAccountId &&
+        transfer.amount === recipient.amountPaise &&
+        transfer.notes?.settlement_order_id === String(order._id) &&
+        transfer.notes?.settlement_recipient_id === recipient.recipientId
+      );
       if (existing) {
         applyRemoteTransfer(recipient, existing);
         await persistClaimedSettlement(db, order._id, claimToken, settlement);
         continue;
       }
+
+      // 4. Only execute new transfer creation if all criteria are satisfied
+      // Must be PENDING or RETRY_PENDING to initiate transfer creation
+      if (!['PENDING', 'RETRY_PENDING'].includes(recipient.status)) {
+        continue;
+      }
+
+      // Check feature flag
+      if (process.env.RAZORPAY_ROUTE_TRANSFERS_ENABLED !== 'true') {
+        continue;
+      }
+
       recipient.attemptCount += 1;
       recipient.lastAttemptAt = new Date();
       recipient.status = 'PROCESSING';
@@ -196,8 +229,18 @@ export async function initializeAndProcessSettlementForPaidOrder(orderId) {
         applyRemoteTransfer(recipient, result.transfer);
         await persistClaimedSettlement(db, order._id, claimToken, settlement);
       }
-      else if (result.ok) { recipient.status = 'RECONCILIATION_REQUIRED'; recipient.failureCode = 'MISSING_TRANSFER_RESPONSE'; recipient.failureDescription = 'Route response did not contain a transfer record.'; await persistClaimedSettlement(db, order._id, claimToken, settlement); }
-      else { recipient.status = result.retryable ? 'RETRY_PENDING' : 'FAILED'; recipient.failureCode = result.code; recipient.failureDescription = result.description; await persistClaimedSettlement(db, order._id, claimToken, settlement); }
+      else if (result.ok) {
+        recipient.status = 'RECONCILIATION_REQUIRED';
+        recipient.failureCode = 'MISSING_TRANSFER_RESPONSE';
+        recipient.failureDescription = 'Route response did not contain a transfer record.';
+        await persistClaimedSettlement(db, order._id, claimToken, settlement);
+      }
+      else {
+        recipient.status = result.retryable ? 'RETRY_PENDING' : 'FAILED';
+        recipient.failureCode = result.code;
+        recipient.failureDescription = result.description;
+        await persistClaimedSettlement(db, order._id, claimToken, settlement);
+      }
     }
   } catch {
     settlement.recipients.forEach((recipient) => {
@@ -216,4 +259,140 @@ export async function initializeAndProcessSettlementForPaidOrder(orderId) {
   if (settlement.status === 'PROCESSED') settlement.processedAt = new Date();
   await persistClaimedSettlement(db, order._id, claimToken, settlement);
   return { initialized: true, processed: true, status: settlement.status };
+}
+
+export async function syncRouteTransferStatus({
+  transferId,
+  recipientAccountId,
+  amount,
+  currency,
+  sourcePaymentId,
+  orderNote,
+  recipientNote,
+  status,
+  error
+}) {
+  const db = await getDB();
+  const maxRetries = 3;
+  let attempt = 0;
+
+  while (attempt < maxRetries) {
+    attempt++;
+    const order = await db.collection('orders').findOne({ 'splitSettlement.recipients.transferId': transferId });
+    if (!order) {
+      return { success: false, retryable: false, reason: 'TRANSFER_NOT_FOUND' };
+    }
+
+    const settlement = order.splitSettlement;
+    if (!settlement || !Array.isArray(settlement.recipients)) {
+      return { success: false, retryable: false, reason: 'MALFORMED_SETTLEMENT_RECORD' };
+    }
+
+    const recipientIndex = settlement.recipients.findIndex((r) => r.transferId === transferId);
+    if (recipientIndex === -1) {
+      return { success: false, retryable: false, reason: 'RECIPIENT_NOT_FOUND' };
+    }
+    const recipient = settlement.recipients[recipientIndex];
+
+    // Secondary validations
+    if (recipient.linkedAccountId !== recipientAccountId) {
+      return { success: false, retryable: false, reason: 'ACCOUNT_MISMATCH' };
+    }
+    if (Number(recipient.amountPaise) !== Number(amount)) {
+      return { success: false, retryable: false, reason: 'AMOUNT_MISMATCH' };
+    }
+    if (String(currency).toUpperCase() !== 'INR') {
+      return { success: false, retryable: false, reason: 'CURRENCY_MISMATCH' };
+    }
+    if (sourcePaymentId && settlement.razorpayPaymentId && sourcePaymentId !== settlement.razorpayPaymentId) {
+      return { success: false, retryable: false, reason: 'SOURCE_PAYMENT_MISMATCH' };
+    }
+    if (orderNote && String(orderNote) !== String(order._id)) {
+      return { success: false, retryable: false, reason: 'ORDER_NOTE_MISMATCH' };
+    }
+    if (recipientNote && String(recipientNote) !== String(recipient.recipientId)) {
+      return { success: false, retryable: false, reason: 'RECIPIENT_NOTE_MISMATCH' };
+    }
+
+    const now = new Date();
+    let changed = false;
+
+    // Idempotency & Out-of-order handling
+    if (recipient.status === 'PROCESSED') {
+      if (status === 'processed') {
+        return { success: true, changed: false, status: 'PROCESSED' };
+      }
+      // Contradictory event: transition recipient to RECONCILIATION_REQUIRED
+      recipient.status = 'RECONCILIATION_REQUIRED';
+      recipient.failureCode = 'CONTRADICTORY_STATUS';
+      recipient.failureDescription = 'Received failure status update for a transfer marked PROCESSED';
+      recipient.lastAttemptAt = now;
+      changed = true;
+    } else if (recipient.status === 'FAILED') {
+      if (status === 'failed') {
+        return { success: true, changed: false, status: 'FAILED' };
+      }
+      // Upgrade from FAILED to PROCESSED
+      recipient.status = 'PROCESSED';
+      recipient.transferStatus = 'processed';
+      recipient.processedAt = now;
+      recipient.failureCode = null;
+      recipient.failureDescription = null;
+      recipient.lastAttemptAt = now;
+      changed = true;
+    } else {
+      // Normal update
+      if (status === 'processed') {
+        recipient.status = 'PROCESSED';
+        recipient.transferStatus = 'processed';
+        recipient.processedAt = now;
+        recipient.failureCode = null;
+        recipient.failureDescription = null;
+        recipient.lastAttemptAt = now;
+        changed = true;
+      } else {
+        recipient.status = 'FAILED';
+        recipient.transferStatus = 'failed';
+        recipient.processedAt = null;
+        recipient.failureCode = error?.code ? String(error.code).slice(0, 50) : 'RAZORPAY_TRANSFER_FAILED';
+        recipient.failureDescription = error?.description ? String(error.description).slice(0, 200) : 'Razorpay Route transfer failed';
+        recipient.lastAttemptAt = now;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      settlement.status = deriveOverallStatus(settlement.recipients);
+      if (settlement.status === 'PROCESSED') {
+        settlement.processedAt = now;
+      }
+      settlement.updatedAt = now;
+
+      // Smallest reliable optimistic concurrency guard
+      const result = await db.collection('orders').updateOne(
+        {
+          _id: order._id,
+          'splitSettlement.updatedAt': order.splitSettlement.updatedAt
+        },
+        {
+          $set: {
+            splitSettlement: settlement
+          }
+        }
+      );
+
+      if (result.modifiedCount !== 1) {
+        // CAS conflict. Loop and retry if attempts remain.
+        if (attempt < maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, 50 + Math.random() * 100));
+          continue;
+        }
+        return { success: false, retryable: true, reason: 'CONCURRENT_UPDATE_CONFLICT' };
+      }
+    }
+
+    return { success: true, changed, status: recipient.status };
+  }
+
+  return { success: false, retryable: true, reason: 'MAX_RETRIES_EXCEEDED' };
 }

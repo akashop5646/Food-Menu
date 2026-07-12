@@ -1,6 +1,132 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { allocateExternalAmounts, buildSettlementSnapshot } from './settlement.js';
+import crypto from 'crypto';
+import { setMockDB } from '../db.js';
+
+// Setup Mock DB
+class MockCollection {
+  constructor() {
+    this.docs = [];
+  }
+  async findOne(query) {
+    const doc = this.docs.find(d => this._match(d, query));
+    return doc ? structuredClone(doc) : null;
+  }
+  find(query) {
+    const matched = this.docs.filter(d => this._match(d, query));
+    const cursor = {
+      matched: matched.map(d => structuredClone(d)),
+      limit: (n) => {
+        cursor.matched = cursor.matched.slice(0, n);
+        return cursor;
+      },
+      toArray: async () => cursor.matched
+    };
+    return cursor;
+  }
+  async insertOne(doc) {
+    this.docs.push(structuredClone(doc));
+    return { insertedId: doc._id };
+  }
+  async updateOne(query, update) {
+    const doc = this.docs.find(d => this._match(d, query));
+    if (!doc) return { modifiedCount: 0 };
+    if (update.$set) {
+      for (const [k, v] of Object.entries(update.$set)) {
+        this._setNested(doc, k, v);
+      }
+    }
+    return { modifiedCount: 1 };
+  }
+  async findOneAndUpdate(query, update, options) {
+    const doc = this.docs.find(d => this._match(d, query));
+    if (!doc) return null;
+    if (update.$set) {
+      for (const [k, v] of Object.entries(update.$set)) {
+        this._setNested(doc, k, v);
+      }
+    }
+    return structuredClone(doc);
+  }
+  async dropIndex() {
+    return {};
+  }
+  _match(doc, query) {
+    for (const [k, v] of Object.entries(query)) {
+      if (k === '_id') {
+        if (String(doc._id) !== String(v)) return false;
+      } else if (k === 'splitSettlement.recipients.transferId') {
+        const found = doc.splitSettlement?.recipients?.some(r => r.transferId === v);
+        if (!found) return false;
+      } else if (k === 'splitSettlement.status') {
+        if (v && v.$in) {
+          if (!v.$in.includes(doc.splitSettlement?.status)) return false;
+        } else if (doc.splitSettlement?.status !== v) {
+          return false;
+        }
+      } else if (k === 'paymentStatus') {
+        if (doc.paymentStatus !== v) return false;
+      } else if (k === 'splitSettlement.processingClaimToken') {
+        if (doc.splitSettlement?.processingClaimToken !== v) return false;
+      }
+    }
+    return true;
+  }
+  _setNested(obj, path, val) {
+    const parts = path.split('.');
+    let current = obj;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!current[parts[i]]) current[parts[i]] = {};
+      current = current[parts[i]];
+    }
+    current[parts[parts.length - 1]] = structuredClone(val);
+  }
+}
+
+const mockOrders = new MockCollection();
+const mockConfigs = new MockCollection();
+const mockDb = {
+  collection: (name) => {
+    if (name === 'orders') return mockOrders;
+    if (name === 'settlement_configs') return mockConfigs;
+    if (name === 'checkout_codes') return new MockCollection();
+    return new MockCollection();
+  }
+};
+
+// Set mock database immediately before importing any router modules to prevent real DB connection attempts
+setMockDB(mockDb);
+
+// Dynamically import routes and controllers
+const { allocateExternalAmounts, buildSettlementSnapshot, deriveOverallStatus, syncRouteTransferStatus, initializeAndProcessSettlementForPaidOrder } = await import('./settlement.js');
+const paymentsRouter = (await import('../routes/payments.js')).default;
+const internalRouter = (await import('../routes/internal.js')).default;
+
+// Mock fetch for Razorpay APIs
+let mockFetchResponses = {};
+globalThis.fetch = async (url, options) => {
+  const method = options?.method || 'GET';
+  const key = `${method}:${url}`;
+  if (mockFetchResponses[key]) {
+    return mockFetchResponses[key]();
+  }
+  if (url.endsWith('/transfers') && method === 'GET') {
+    return { ok: true, json: async () => ({ items: [] }) };
+  }
+  return { ok: true, json: async () => ({}) };
+};
+
+// Helper to generate mock req and res
+function mockResponse() {
+  const res = {
+    status: (code) => { res.statusCode = code; return res; },
+    send: (body) => { res.body = body; return res; },
+    json: (json) => { res.body = json; return res; },
+    statusCode: 200,
+    body: null
+  };
+  return res;
+}
 
 const recipients = (allocations) => allocations.map(([id, allocationBasisPoints]) => ({
   id,
@@ -10,6 +136,27 @@ const recipients = (allocations) => allocations.map(([id, allocationBasisPoints]
   enabled: true,
 }));
 
+const getFreshOrder = () => ({
+  _id: 'order123',
+  paymentStatus: 'PAID',
+  paymentType: 'RAZORPAY',
+  razorpayPaymentId: 'pay_123',
+  total: '10',
+  splitSettlement: {
+    razorpayPaymentId: 'pay_123',
+    status: 'PROCESSING',
+    updatedAt: new Date(1000),
+    recipients: [{
+      recipientId: 'rec_1',
+      linkedAccountId: 'acc_1',
+      amountPaise: 500,
+      status: 'PROCESSING',
+      transferId: 'trf_123'
+    }]
+  }
+});
+
+// Original Phase 1 Allocation Tests (Tests 1-4)
 test('allocates external Route amounts deterministically and retains the remainder', () => {
   const allocation = allocateExternalAmounts(100100, recipients([['restaurant', 9500], ['partner', 200]]));
   assert.equal(allocation.targetExternalAmountPaise, 97097);
@@ -43,4 +190,481 @@ test('keeps the active configuration recipient data immutable after snapshot cre
   assert.equal(snapshot.configurationVersion, 4);
   assert.equal(snapshot.recipients[0].label, 'restaurant');
   assert.equal(snapshot.recipients[0].linkedAccountId, 'acc_restaurantxyz');
+});
+
+// Parent status derivation tests (Tests 5-11)
+test('Parent PROCESSED derivation', () => {
+  assert.equal(deriveOverallStatus([{ status: 'PROCESSED' }]), 'PROCESSED');
+});
+
+test('Parent PARTIALLY_PROCESSED derivation for processed + skipped', () => {
+  assert.equal(deriveOverallStatus([{ status: 'PROCESSED' }, { status: 'SKIPPED_ZERO_AMOUNT' }]), 'PARTIALLY_PROCESSED');
+});
+
+test('Parent PARTIALLY_PROCESSED derivation for processed + failed', () => {
+  assert.equal(deriveOverallStatus([{ status: 'PROCESSED' }, { status: 'FAILED' }]), 'PARTIALLY_PROCESSED');
+});
+
+test('Parent SKIPPED derivation', () => {
+  assert.equal(deriveOverallStatus([{ status: 'SKIPPED_ZERO_AMOUNT' }]), 'SKIPPED');
+});
+
+test('Parent RECONCILIATION_REQUIRED precedence', () => {
+  assert.equal(deriveOverallStatus([{ status: 'PROCESSED' }, { status: 'RECONCILIATION_REQUIRED' }]), 'RECONCILIATION_REQUIRED');
+});
+
+test('Parent PROCESSING precedence', () => {
+  assert.equal(deriveOverallStatus([{ status: 'PENDING' }]), 'PROCESSING');
+  assert.equal(deriveOverallStatus([{ status: 'PROCESSING' }]), 'PROCESSING');
+});
+
+test('Parent RETRY_PENDING behavior', () => {
+  assert.equal(deriveOverallStatus([{ status: 'RETRY_PENDING' }]), 'RETRY_PENDING');
+});
+
+// Webhook Sync Tests (Tests 12-25)
+test('Valid transfer.processed updates the exact recipient', async () => {
+  mockOrders.docs = [getFreshOrder()];
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    recipientAccountId: 'acc_1',
+    amount: 500,
+    currency: 'INR',
+    sourcePaymentId: 'pay_123',
+    orderNote: 'order123',
+    recipientNote: 'rec_1',
+    status: 'processed'
+  });
+  assert.equal(res.success, true);
+  assert.equal(res.status, 'PROCESSED');
+  assert.equal(mockOrders.docs[0].splitSettlement.recipients[0].status, 'PROCESSED');
+});
+
+test('Valid transfer.failed updates the exact recipient safely', async () => {
+  mockOrders.docs = [getFreshOrder()];
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    recipientAccountId: 'acc_1',
+    amount: 500,
+    currency: 'INR',
+    sourcePaymentId: 'pay_123',
+    orderNote: 'order123',
+    recipientNote: 'rec_1',
+    status: 'failed',
+    error: { code: 'FAIL_CODE', description: 'Some failure' }
+  });
+  assert.equal(res.success, true);
+  assert.equal(res.status, 'FAILED');
+  assert.equal(mockOrders.docs[0].splitSettlement.recipients[0].status, 'FAILED');
+  assert.equal(mockOrders.docs[0].splitSettlement.recipients[0].failureCode, 'FAIL_CODE');
+  assert.equal(mockOrders.docs[0].splitSettlement.recipients[0].failureDescription, 'Some failure');
+});
+
+test('Duplicate processed event is idempotent', async () => {
+  mockOrders.docs = [getFreshOrder()];
+  mockOrders.docs[0].splitSettlement.recipients[0].status = 'PROCESSED';
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    recipientAccountId: 'acc_1',
+    amount: 500,
+    currency: 'INR',
+    sourcePaymentId: 'pay_123',
+    orderNote: 'order123',
+    recipientNote: 'rec_1',
+    status: 'processed'
+  });
+  assert.equal(res.success, true);
+  assert.equal(res.changed, false);
+});
+
+test('Duplicate failed event is idempotent', async () => {
+  mockOrders.docs = [getFreshOrder()];
+  mockOrders.docs[0].splitSettlement.recipients[0].status = 'FAILED';
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    recipientAccountId: 'acc_1',
+    amount: 500,
+    currency: 'INR',
+    sourcePaymentId: 'pay_123',
+    orderNote: 'order123',
+    recipientNote: 'rec_1',
+    status: 'failed'
+  });
+  assert.equal(res.success, true);
+  assert.equal(res.changed, false);
+});
+
+test('Unknown transfer ID returns false without mutation', async () => {
+  mockOrders.docs = [getFreshOrder()];
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_wrong',
+    recipientAccountId: 'acc_1',
+    amount: 500,
+    currency: 'INR',
+    sourcePaymentId: 'pay_123',
+    orderNote: 'order123',
+    recipientNote: 'rec_1',
+    status: 'processed'
+  });
+  assert.equal(res.success, false);
+  assert.equal(res.reason, 'TRANSFER_NOT_FOUND');
+});
+
+test('Matching transfer ID with incorrect amount causes no update', async () => {
+  mockOrders.docs = [getFreshOrder()];
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    recipientAccountId: 'acc_1',
+    amount: 999,
+    currency: 'INR',
+    sourcePaymentId: 'pay_123',
+    orderNote: 'order123',
+    recipientNote: 'rec_1',
+    status: 'processed'
+  });
+  assert.equal(res.success, false);
+  assert.equal(res.reason, 'AMOUNT_MISMATCH');
+});
+
+test('Matching transfer ID with incorrect account causes no update', async () => {
+  mockOrders.docs = [getFreshOrder()];
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    recipientAccountId: 'acc_wrong',
+    amount: 500,
+    currency: 'INR',
+    sourcePaymentId: 'pay_123',
+    orderNote: 'order123',
+    recipientNote: 'rec_1',
+    status: 'processed'
+  });
+  assert.equal(res.success, false);
+  assert.equal(res.reason, 'ACCOUNT_MISMATCH');
+});
+
+test('Matching transfer ID with incorrect currency causes no update', async () => {
+  mockOrders.docs = [getFreshOrder()];
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    recipientAccountId: 'acc_1',
+    amount: 500,
+    currency: 'USD',
+    sourcePaymentId: 'pay_123',
+    orderNote: 'order123',
+    recipientNote: 'rec_1',
+    status: 'processed'
+  });
+  assert.equal(res.success, false);
+  assert.equal(res.reason, 'CURRENCY_MISMATCH');
+});
+
+test('Incorrect order correlation note causes no update', async () => {
+  mockOrders.docs = [getFreshOrder()];
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    recipientAccountId: 'acc_1',
+    amount: 500,
+    currency: 'INR',
+    sourcePaymentId: 'pay_123',
+    orderNote: 'order_wrong',
+    recipientNote: 'rec_1',
+    status: 'processed'
+  });
+  assert.equal(res.success, false);
+  assert.equal(res.reason, 'ORDER_NOTE_MISMATCH');
+});
+
+test('Incorrect recipient correlation note causes no update', async () => {
+  mockOrders.docs = [getFreshOrder()];
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    recipientAccountId: 'acc_1',
+    amount: 500,
+    currency: 'INR',
+    sourcePaymentId: 'pay_123',
+    orderNote: 'order123',
+    recipientNote: 'rec_wrong',
+    status: 'processed'
+  });
+  assert.equal(res.success, false);
+  assert.equal(res.reason, 'RECIPIENT_NOTE_MISMATCH');
+});
+
+test('Incorrect source payment causes no update', async () => {
+  mockOrders.docs = [getFreshOrder()];
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    recipientAccountId: 'acc_1',
+    amount: 500,
+    currency: 'INR',
+    sourcePaymentId: 'pay_wrong',
+    orderNote: 'order123',
+    recipientNote: 'rec_1',
+    status: 'processed'
+  });
+  assert.equal(res.success, false);
+  assert.equal(res.reason, 'SOURCE_PAYMENT_MISMATCH');
+});
+
+test('PROCESSED followed by transfer.failed shifts status to RECONCILIATION_REQUIRED', async () => {
+  mockOrders.docs = [getFreshOrder()];
+  mockOrders.docs[0].splitSettlement.recipients[0].status = 'PROCESSED';
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    recipientAccountId: 'acc_1',
+    amount: 500,
+    currency: 'INR',
+    sourcePaymentId: 'pay_123',
+    orderNote: 'order123',
+    recipientNote: 'rec_1',
+    status: 'failed',
+    error: { code: 'STALE_FAIL', description: 'Stale webhook delivery' }
+  });
+  assert.equal(res.success, true);
+  assert.equal(res.status, 'RECONCILIATION_REQUIRED');
+  assert.equal(mockOrders.docs[0].splitSettlement.recipients[0].status, 'RECONCILIATION_REQUIRED');
+});
+
+test('FAILED followed by transfer.processed upgrades to PROCESSED', async () => {
+  mockOrders.docs = [getFreshOrder()];
+  mockOrders.docs[0].splitSettlement.recipients[0].status = 'FAILED';
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    recipientAccountId: 'acc_1',
+    amount: 500,
+    currency: 'INR',
+    sourcePaymentId: 'pay_123',
+    orderNote: 'order123',
+    recipientNote: 'rec_1',
+    status: 'processed'
+  });
+  assert.equal(res.success, true);
+  assert.equal(res.status, 'PROCESSED');
+  assert.equal(mockOrders.docs[0].splitSettlement.recipients[0].status, 'PROCESSED');
+});
+
+test('Webhook updates preserve claims, leases, and snapshot values', async () => {
+  mockOrders.docs = [getFreshOrder()];
+  mockOrders.docs[0].splitSettlement.processingClaimToken = 'worker_token';
+  mockOrders.docs[0].splitSettlement.processingLeaseUntil = new Date(5000);
+  mockOrders.docs[0].splitSettlement.configurationVersion = 99;
+  mockOrders.docs[0].splitSettlement.sourceAmountPaise = 1000;
+
+  await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    recipientAccountId: 'acc_1',
+    amount: 500,
+    currency: 'INR',
+    sourcePaymentId: 'pay_123',
+    orderNote: 'order123',
+    recipientNote: 'rec_1',
+    status: 'processed'
+  });
+
+  const ss = mockOrders.docs[0].splitSettlement;
+  assert.equal(ss.processingClaimToken, 'worker_token');
+  assert.equal(new Date(ss.processingLeaseUntil).getTime(), 5000);
+  assert.equal(ss.configurationVersion, 99);
+  assert.equal(ss.sourceAmountPaise, 1000);
+});
+
+// Route-Level Webhook Tests (Tests 26-30)
+test('Webhook raw buffer and signature validation', async () => {
+  process.env.RAZORPAY_WEBHOOK_SECRET = 'webhook_secret';
+  const paymentsHandler = paymentsRouter.stack.find(layer => layer.route && layer.route.path === '/razorpay/webhook').route.stack[1].handle;
+
+  // 1. Missing signature header
+  const req1 = { headers: {}, body: Buffer.from('{}') };
+  const res1 = mockResponse();
+  await paymentsHandler(req1, res1);
+  assert.equal(res1.statusCode, 400);
+
+  // 2. Invalid signature header
+  const req2 = { headers: { 'x-razorpay-signature': 'invalid' }, body: Buffer.from('{}') };
+  const res2 = mockResponse();
+  await paymentsHandler(req2, res2);
+  assert.equal(res2.statusCode, 401);
+});
+
+test('Webhook handles unsupported event type gracefully', async () => {
+  process.env.RAZORPAY_WEBHOOK_SECRET = 'webhook_secret';
+  const paymentsHandler = paymentsRouter.stack.find(layer => layer.route && layer.route.path === '/razorpay/webhook').route.stack[1].handle;
+
+  const payload = { event: 'payment.disputed' };
+  const rawBody = Buffer.from(JSON.stringify(payload));
+  const signature = crypto.createHmac('sha256', 'webhook_secret').update(rawBody).digest('hex');
+
+  const req = { headers: { 'x-razorpay-signature': signature }, body: rawBody };
+  const res = mockResponse();
+  await paymentsHandler(req, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body, 'OK');
+});
+
+test('Webhook handles malformed body gracefully', async () => {
+  process.env.RAZORPAY_WEBHOOK_SECRET = 'webhook_secret';
+  const paymentsHandler = paymentsRouter.stack.find(layer => layer.route && layer.route.path === '/razorpay/webhook').route.stack[1].handle;
+
+  const rawBody = Buffer.from('malformed json here');
+  const signature = crypto.createHmac('sha256', 'webhook_secret').update(rawBody).digest('hex');
+
+  const req = { headers: { 'x-razorpay-signature': signature }, body: rawBody };
+  const res = mockResponse();
+  await paymentsHandler(req, res);
+  assert.equal(res.statusCode, 400);
+});
+
+// Recovery worker / Router Tests (Tests 31-41)
+test('Recovery endpoint missing configuration fails-closed', async () => {
+  delete process.env.SETTLEMENT_RECOVERY_SECRET;
+  const internalHandler = internalRouter.stack.find(layer => layer.route && layer.route.path === '/settlements/recover').route.stack[0].handle;
+
+  const req = { headers: { authorization: 'Bearer ' } };
+  const res = mockResponse();
+  await internalHandler(req, res);
+  assert.equal(res.statusCode, 401);
+});
+
+test('Recovery endpoint rejects empty Bearer token', async () => {
+  process.env.SETTLEMENT_RECOVERY_SECRET = 'valid_secret';
+  const internalHandler = internalRouter.stack.find(layer => layer.route && layer.route.path === '/settlements/recover').route.stack[0].handle;
+
+  const req = { headers: { authorization: 'Bearer ' } };
+  const res = mockResponse();
+  await internalHandler(req, res);
+  assert.equal(res.statusCode, 401);
+});
+
+test('Recovery endpoint rejects invalid Bearer token', async () => {
+  process.env.SETTLEMENT_RECOVERY_SECRET = 'valid_secret';
+  const internalHandler = internalRouter.stack.find(layer => layer.route && layer.route.path === '/settlements/recover').route.stack[0].handle;
+
+  const req = { headers: { authorization: 'Bearer wrong_secret' } };
+  const res = mockResponse();
+  await internalHandler(req, res);
+  assert.equal(res.statusCode, 401);
+});
+
+test('Recovery endpoint accepts valid Bearer token and returns aggregate count metadata only', async () => {
+  process.env.SETTLEMENT_RECOVERY_SECRET = 'valid_secret';
+  const internalHandler = internalRouter.stack.find(layer => layer.route && layer.route.path === '/settlements/recover').route.stack[0].handle;
+
+  mockOrders.docs = [];
+
+  const req = { headers: { authorization: 'Bearer valid_secret' } };
+  const res = mockResponse();
+  await internalHandler(req, res);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, { matched: 0, processed: 0, deferred: 0, failed: 0 });
+});
+
+test('Recovery reconciles existing PROCESSING recipient and prevents double execution', async () => {
+  process.env.RAZORPAY_ROUTE_TRANSFERS_ENABLED = 'true';
+  process.env.RAZORPAY_KEY_ID = 'key_id';
+  process.env.RAZORPAY_KEY_SECRET = 'key_secret';
+
+  mockOrders.docs = [{
+    _id: 'order_rec_99',
+    paymentStatus: 'PAID',
+    paymentType: 'RAZORPAY',
+    razorpayPaymentId: 'pay_99',
+    total: '10',
+    splitSettlement: {
+      razorpayPaymentId: 'pay_99',
+      status: 'PROCESSING',
+      processingLeaseUntil: new Date(Date.now() - 1000), // expired
+      recipients: [{
+        recipientId: 'rec_1',
+        linkedAccountId: 'acc_1',
+        amountPaise: 500,
+        status: 'PROCESSING',
+        transferId: 'trf_99'
+      }]
+    }
+  }];
+
+  mockFetchResponses['GET:https://api.razorpay.com/v1/payments/pay_99/transfers'] = () => ({
+    ok: true,
+    json: async () => ({
+      items: [{
+        id: 'trf_99',
+        recipient: 'acc_1',
+        amount: 500,
+        status: 'processed',
+        transfer_status: 'processed'
+      }]
+    })
+  });
+
+  const res = await initializeAndProcessSettlementForPaidOrder('order_rec_99');
+  assert.equal(res.processed, true);
+  assert.equal(res.status, 'PROCESSED');
+  assert.equal(mockOrders.docs[0].splitSettlement.recipients[0].status, 'PROCESSED');
+});
+
+test('Recovery does not recreate transfer if transferId is present', async () => {
+  process.env.RAZORPAY_ROUTE_TRANSFERS_ENABLED = 'true';
+  mockOrders.docs = [{
+    _id: 'order_rec_98',
+    paymentStatus: 'PAID',
+    paymentType: 'RAZORPAY',
+    razorpayPaymentId: 'pay_98',
+    total: '10',
+    splitSettlement: {
+      razorpayPaymentId: 'pay_98',
+      status: 'PROCESSING',
+      processingLeaseUntil: new Date(Date.now() - 1000),
+      recipients: [{
+        recipientId: 'rec_1',
+        linkedAccountId: 'acc_1',
+        amountPaise: 500,
+        status: 'PROCESSING',
+        transferId: 'trf_98'
+      }]
+    }
+  }];
+
+  // Remote transfers returns empty list (representing remote lookup failure or ambiguous state)
+  mockFetchResponses['GET:https://api.razorpay.com/v1/payments/pay_98/transfers'] = () => ({
+    ok: true,
+    json: async () => ({ items: [] })
+  });
+
+  // Reconcile must skip creating new transfers since transferId is present
+  await initializeAndProcessSettlementForPaidOrder('order_rec_98');
+  assert.equal(mockOrders.docs[0].splitSettlement.recipients[0].transferId, 'trf_98'); // preserved
+  assert.equal(mockOrders.docs[0].splitSettlement.recipients[0].status, 'PROCESSING'); // not re-created or changed to RETRY_PENDING
+});
+
+test('Payment status remains PAID after synchronization or recovery execution', async () => {
+  mockOrders.docs = [{
+    _id: 'order_pay_paid',
+    paymentStatus: 'PAID',
+    paymentType: 'RAZORPAY',
+    razorpayPaymentId: 'pay_paid',
+    total: '10',
+    splitSettlement: {
+      status: 'PENDING',
+      recipients: [{
+        recipientId: 'rec_1',
+        linkedAccountId: 'acc_1',
+        amountPaise: 500,
+        status: 'PENDING'
+      }]
+    }
+  }];
+
+  // Force remote fetch failure
+  mockFetchResponses['GET:https://api.razorpay.com/v1/payments/pay_paid/transfers'] = () => ({
+    ok: false,
+    status: 500
+  });
+
+  try {
+    await initializeAndProcessSettlementForPaidOrder('order_pay_paid');
+  } catch (err) {
+    // Ignore error
+  }
+
+  assert.equal(mockOrders.docs[0].paymentStatus, 'PAID'); // remains PAID
 });

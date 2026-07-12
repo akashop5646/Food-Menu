@@ -1,6 +1,7 @@
 import express, { Router } from 'express';
 import crypto from 'crypto';
 import { reconcileSuccessfulRazorpayPayment } from './orders.js';
+import { syncRouteTransferStatus } from '../services/settlement.js';
 
 const router = Router();
 
@@ -102,6 +103,48 @@ router.post(
         } else {
           console.log(`ℹ️ Razorpay webhook ignored duplicate payment confirmation: razorpayOrderId=${razorpayOrderId}`);
         }
+      } else if (event === 'transfer.processed' || event === 'transfer.failed') {
+        const transfer = payload.payload?.transfer?.entity;
+        if (!transfer) {
+          console.warn(`⚠️ Razorpay webhook received: Missing transfer entity in ${event} payload`);
+          return res.status(400).send('Bad Request: Missing transfer entity');
+        }
+
+        const transferId = transfer.id;
+        if (!transferId) {
+          console.warn(`⚠️ Razorpay webhook received: Missing transfer ID in ${event} payload`);
+          return res.status(400).send('Bad Request: Missing transfer ID');
+        }
+
+        const recipientAccountId = transfer.account;
+        const amount = transfer.amount;
+        const currency = transfer.currency;
+        const sourcePaymentId = transfer.source;
+        const orderNote = transfer.notes?.settlement_order_id;
+        const recipientNote = transfer.notes?.settlement_recipient_id;
+
+        const syncResult = await syncRouteTransferStatus({
+          transferId,
+          recipientAccountId,
+          amount,
+          currency,
+          sourcePaymentId,
+          orderNote,
+          recipientNote,
+          status: event === 'transfer.processed' ? 'processed' : 'failed',
+          error: transfer.error
+        });
+
+        if (!syncResult.success) {
+          if (syncResult.retryable) {
+            console.warn(`⚠️ Webhook transfer sync retryable error: ${syncResult.reason}. Responding with 503.`);
+            return res.status(503).send('Service Unavailable: Temporary synchronization error');
+          }
+          console.warn(`⚠️ Webhook transfer sync ignored/failed: ${syncResult.reason}`);
+          return res.status(200).send(`OK: ${syncResult.reason}`);
+        }
+
+        console.log(`✅ Webhook transfer status synced successfully: transferId=${transferId}, status=${syncResult.status}`);
       }
 
       return res.status(200).send('OK');
