@@ -15,6 +15,7 @@ const percentageToBasisPoints = (value) => {
 };
 
 export default function Settings({ user }) {
+  const canModifyConvenienceFee = user?.role === 'MASTER_ADMIN';
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -252,6 +253,9 @@ export default function Settings({ user }) {
 
   const handleFeeSubmit = async (e) => {
     e.preventDefault();
+    if (!canModifyConvenienceFee) {
+      return;
+    }
     setIsSavingFee(true);
     setFeeError('');
     setFeeSuccess(false);
@@ -873,9 +877,13 @@ export default function Settings({ user }) {
             </div>
             <button
               type="button"
+              disabled={!canModifyConvenienceFee}
               onClick={() => setConvenienceFeeEnabled(prev => !prev)}
-              className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 outline-none ${
+              aria-disabled={!canModifyConvenienceFee}
+              className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors duration-300 outline-none ${
                 convenienceFeeEnabled ? 'bg-primary' : 'bg-outline-variant/50'
+              } ${
+                canModifyConvenienceFee ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'
               }`}
             >
               <div
@@ -896,7 +904,7 @@ export default function Settings({ user }) {
               min={0}
               max={20}
               step={1}
-              disabled={!convenienceFeeEnabled}
+              disabled={!canModifyConvenienceFee || !convenienceFeeEnabled}
               value={convenienceFeeAmount}
               onChange={e => setConvenienceFeeAmount(e.target.value === '' ? '' : Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
               className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
@@ -931,14 +939,20 @@ export default function Settings({ user }) {
 
           {/* Action button */}
           <div className="flex justify-end pt-4 border-t border-outline-variant/10">
-            <button 
-              type="submit" 
-              disabled={isSavingFee}
-              className="bg-primary text-on-primary px-6 py-2.5 rounded-lg font-label-caps text-[12px] uppercase tracking-widest gold-glow disabled:opacity-50 flex items-center gap-2"
-            >
-              {isSavingFee ? <span className="material-symbols-outlined animate-spin text-[16px]">progress_activity</span> : null}
-              Save Payment Settings
-            </button>
+            {canModifyConvenienceFee ? (
+              <button
+                type="submit"
+                disabled={isSavingFee}
+                className="bg-primary text-on-primary px-6 py-2.5 rounded-lg font-label-caps text-[12px] uppercase tracking-widest gold-glow disabled:opacity-50 flex items-center gap-2"
+              >
+                {isSavingFee ? <span className="material-symbols-outlined animate-spin text-[16px]">progress_activity</span> : null}
+                Save Payment Settings
+              </button>
+            ) : (
+              <p className="text-xs text-on-surface-variant italic font-medium">
+                Only Master Admins can modify convenience fee settings.
+              </p>
+            )}
           </div>
         </form>
       </div>

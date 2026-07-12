@@ -521,8 +521,8 @@ router.get('/convenience-fee', async (req, res) => {
   }
 });
 
-// Update Convenience Fee Configuration (Admin only)
-router.post('/convenience-fee', requireAdmin, async (req, res) => {
+// Update Convenience Fee Configuration (Master Admin only)
+router.post('/convenience-fee', requireMasterAdmin, async (req, res) => {
   try {
     const { enabled, amount } = req.body;
 
