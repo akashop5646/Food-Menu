@@ -43,12 +43,14 @@ router.post('/settlements/recover', async (req, res) => {
       'splitSettlement.status': { $in: ['PENDING', 'PROCESSING', 'RETRY_PENDING', 'RECONCILIATION_REQUIRED'] },
       $or: [
         { 'splitSettlement.processingLeaseUntil': null },
+        { 'splitSettlement.processingLeaseUntil': { $exists: false } },
         { 'splitSettlement.processingLeaseUntil': { $lte: now } }
       ]
     };
 
     const orders = await db.collection('orders')
       .find(unresolvedQuery)
+      .sort({ _id: 1 })
       .limit(20)
       .toArray();
 

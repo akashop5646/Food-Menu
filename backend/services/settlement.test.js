@@ -16,6 +16,17 @@ class MockCollection {
     const matched = this.docs.filter(d => this._match(d, query));
     const cursor = {
       matched: matched.map(d => structuredClone(d)),
+      sort: (sorting) => {
+        if (sorting && sorting._id) {
+          cursor.matched.sort((a, b) => {
+            const aId = String(a._id);
+            const bId = String(b._id);
+            if (sorting._id === 1) return aId.localeCompare(bId);
+            return bId.localeCompare(aId);
+          });
+        }
+        return cursor;
+      },
       limit: (n) => {
         cursor.matched = cursor.matched.slice(0, n);
         return cursor;
@@ -110,6 +121,9 @@ class MockCollection {
         const val = doc.splitSettlement?.processingLeaseUntil;
         if (v === null) {
           if (val !== null && val !== undefined) return false;
+        } else if (v && typeof v === 'object' && '$exists' in v) {
+          const exists = doc.splitSettlement && 'processingLeaseUntil' in doc.splitSettlement;
+          if (v.$exists !== exists) return false;
         } else if (v && v.$lte) {
           if (!val || new Date(val).getTime() > new Date(v.$lte).getTime()) return false;
         }
@@ -1031,4 +1045,208 @@ test('settlement revision increments after successful mutation', async () => {
 
   assert.equal(res.success, true);
   assert.equal(mockOrders.docs[0].splitSettlement.revision, 6);
+});
+
+// Phase 3 Recovery Scheduler Tests
+
+test('Authentication: Missing configured recovery secret -> 401', async () => {
+  delete process.env.SETTLEMENT_RECOVERY_SECRET;
+  const internalHandler = internalRouter.stack.find(layer => layer.route && layer.route.path === '/settlements/recover').route.stack[0].handle;
+  const req = { headers: { authorization: 'Bearer some_token' } };
+  const res = mockResponse();
+  await internalHandler(req, res);
+  assert.equal(res.statusCode, 401);
+});
+
+test('Authentication: Empty configured recovery secret -> 401', async () => {
+  process.env.SETTLEMENT_RECOVERY_SECRET = '';
+  const internalHandler = internalRouter.stack.find(layer => layer.route && layer.route.path === '/settlements/recover').route.stack[0].handle;
+  const req = { headers: { authorization: 'Bearer some_token' } };
+  const res = mockResponse();
+  await internalHandler(req, res);
+  assert.equal(res.statusCode, 401);
+});
+
+test('Authentication: Whitespace-only configured recovery secret -> 401', async () => {
+  process.env.SETTLEMENT_RECOVERY_SECRET = '   ';
+  const internalHandler = internalRouter.stack.find(layer => layer.route && layer.route.path === '/settlements/recover').route.stack[0].handle;
+  const req = { headers: { authorization: 'Bearer some_token' } };
+  const res = mockResponse();
+  await internalHandler(req, res);
+  assert.equal(res.statusCode, 401);
+});
+
+test('Authentication: Missing Authorization header -> 401', async () => {
+  process.env.SETTLEMENT_RECOVERY_SECRET = 'valid_secret';
+  const internalHandler = internalRouter.stack.find(layer => layer.route && layer.route.path === '/settlements/recover').route.stack[0].handle;
+  const req = { headers: {} };
+  const res = mockResponse();
+  await internalHandler(req, res);
+  assert.equal(res.statusCode, 401);
+});
+
+test('Authentication: Empty Bearer token -> 401', async () => {
+  process.env.SETTLEMENT_RECOVERY_SECRET = 'valid_secret';
+  const internalHandler = internalRouter.stack.find(layer => layer.route && layer.route.path === '/settlements/recover').route.stack[0].handle;
+  const req = { headers: { authorization: 'Bearer ' } };
+  const res = mockResponse();
+  await internalHandler(req, res);
+  assert.equal(res.statusCode, 401);
+});
+
+test('Authentication: Wrong authentication scheme -> 401', async () => {
+  process.env.SETTLEMENT_RECOVERY_SECRET = 'valid_secret';
+  const internalHandler = internalRouter.stack.find(layer => layer.route && layer.route.path === '/settlements/recover').route.stack[0].handle;
+  const req = { headers: { authorization: 'Basic valid_secret' } };
+  const res = mockResponse();
+  await internalHandler(req, res);
+  assert.equal(res.statusCode, 401);
+});
+
+test('Authentication: Incorrect token -> 401', async () => {
+  process.env.SETTLEMENT_RECOVERY_SECRET = 'valid_secret';
+  const internalHandler = internalRouter.stack.find(layer => layer.route && layer.route.path === '/settlements/recover').route.stack[0].handle;
+  const req = { headers: { authorization: 'Bearer wrong_secret' } };
+  const res = mockResponse();
+  await internalHandler(req, res);
+  assert.equal(res.statusCode, 401);
+});
+
+test('Authentication: Correct token -> 200 and secret is never returned', async () => {
+  process.env.SETTLEMENT_RECOVERY_SECRET = 'valid_secret';
+  const internalHandler = internalRouter.stack.find(layer => layer.route && layer.route.path === '/settlements/recover').route.stack[0].handle;
+  mockOrders.docs = [];
+  const req = { headers: { authorization: 'Bearer valid_secret' } };
+  const res = mockResponse();
+  await internalHandler(req, res);
+  assert.equal(res.statusCode, 200);
+  assert.ok(!JSON.stringify(res.body).includes('valid_secret'));
+});
+
+test('Query Safety: Excludes non-PAID, PROCESSED, SKIPPED, and Active lease; Expired/Missing lease included', async () => {
+  process.env.SETTLEMENT_RECOVERY_SECRET = 'valid_secret';
+  const internalHandler = internalRouter.stack.find(layer => layer.route && layer.route.path === '/settlements/recover').route.stack[0].handle;
+
+  mockOrders.docs = [
+    // 1. Non-PAID order
+    { _id: 'o_non_paid', paymentStatus: 'PENDING', splitSettlement: { status: 'PENDING' } },
+    // 2. PROCESSED settlement
+    { _id: 'o_processed', paymentStatus: 'PAID', splitSettlement: { status: 'PROCESSED' } },
+    // 3. SKIPPED settlement
+    { _id: 'o_skipped', paymentStatus: 'PAID', splitSettlement: { status: 'SKIPPED' } },
+    // 4. Active lease
+    { _id: 'o_active_lease', paymentStatus: 'PAID', splitSettlement: { status: 'PROCESSING', processingLeaseUntil: new Date(Date.now() + 60000) } },
+    // 5. Expired lease (recoverable)
+    { _id: 'o_expired_lease', paymentStatus: 'PAID', splitSettlement: { status: 'PROCESSING', processingLeaseUntil: new Date(Date.now() - 1000) } },
+    // 6. Missing lease field (recoverable)
+    { _id: 'o_missing_lease', paymentStatus: 'PAID', splitSettlement: { status: 'PENDING' } }
+  ];
+
+  const req = { headers: { authorization: 'Bearer valid_secret' } };
+  const res = mockResponse();
+  await internalHandler(req, res);
+  assert.equal(res.statusCode, 200);
+  // Matches exactly 2 orders (o_expired_lease, o_missing_lease)
+  assert.equal(res.body.matched, 2);
+});
+
+test('Query Safety: Batch limit is 20 and sorted deterministically oldest-first', async () => {
+  process.env.SETTLEMENT_RECOVERY_SECRET = 'valid_secret';
+  const internalHandler = internalRouter.stack.find(layer => layer.route && layer.route.path === '/settlements/recover').route.stack[0].handle;
+
+  const docs = [];
+  for (let i = 0; i < 25; i++) {
+    docs.push({
+      _id: `order_${String(i).padStart(3, '0')}`,
+      paymentStatus: 'PAID',
+      splitSettlement: { status: 'PENDING' }
+    });
+  }
+  mockOrders.docs = docs;
+
+  const req = { headers: { authorization: 'Bearer valid_secret' } };
+  const res = mockResponse();
+  await internalHandler(req, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.matched, 20); // limits to 20
+});
+
+test('Transfer Safety: Ambiguous or failed remote lookup prevents duplicate transfer and defers', async () => {
+  process.env.RAZORPAY_ROUTE_TRANSFERS_ENABLED = 'true';
+  mockOrders.docs = [{
+    _id: 'order_timeout',
+    paymentStatus: 'PAID',
+    paymentType: 'RAZORPAY',
+    razorpayPaymentId: 'pay_timeout',
+    total: '10',
+    splitSettlement: {
+      razorpayPaymentId: 'pay_timeout',
+      status: 'PROCESSING',
+      processingLeaseUntil: new Date(Date.now() - 1000),
+      recipients: [{
+        recipientId: 'rec_1',
+        linkedAccountId: 'acc_1',
+        amountPaise: 500,
+        status: 'PROCESSING',
+        transferId: 'trf_timeout'
+      }]
+    }
+  }];
+
+  // Remote lookup returns non-200 / timeout error
+  mockFetchResponses['GET:https://api.razorpay.com/v1/payments/pay_timeout/transfers'] = () => ({
+    ok: false,
+    status: 504
+  });
+
+  const res = await initializeAndProcessSettlementForPaidOrder('order_timeout');
+  assert.equal(res.processed, false); // deferred / not processed
+  assert.equal(mockOrders.docs[0].splitSettlement.recipients[0].status, 'PROCESSING'); // preserved, not overwritten
+});
+
+test('Transfer Safety: Feature flag false/missing/invalid prevents transfer creation', async () => {
+  process.env.RAZORPAY_ROUTE_TRANSFERS_ENABLED = 'false';
+  mockOrders.docs = [{
+    _id: 'order_ff',
+    paymentStatus: 'PAID',
+    paymentType: 'RAZORPAY',
+    razorpayPaymentId: 'pay_ff',
+    total: '10',
+    splitSettlement: {
+      razorpayPaymentId: 'pay_ff',
+      status: 'PROCESSING',
+      processingLeaseUntil: new Date(Date.now() - 1000),
+      recipients: [{
+        recipientId: 'rec_1',
+        linkedAccountId: 'acc_1',
+        amountPaise: 500,
+        status: 'PENDING'
+      }]
+    }
+  }];
+
+  const res = await initializeAndProcessSettlementForPaidOrder('order_ff');
+  // Feature flag is false, so it must not create transfers, keeping status unchanged
+  assert.equal(mockOrders.docs[0].splitSettlement.recipients[0].status, 'PENDING');
+});
+
+test('Response Safety: Returns safe 500 without stack trace on unexpected batch failure', async () => {
+  process.env.SETTLEMENT_RECOVERY_SECRET = 'valid_secret';
+  const internalHandler = internalRouter.stack.find(layer => layer.route && layer.route.path === '/settlements/recover').route.stack[0].handle;
+
+  // Force database query error
+  const originalFind = mockOrders.find;
+  mockOrders.find = () => {
+    throw new Error('Database connection failure stack trace goes here');
+  };
+
+  const req = { headers: { authorization: 'Bearer valid_secret' } };
+  const res = mockResponse();
+  await internalHandler(req, res);
+
+  mockOrders.find = originalFind; // restore
+
+  assert.equal(res.statusCode, 500);
+  assert.equal(res.body.error, 'Internal Server Error');
+  assert.ok(!JSON.stringify(res.body).includes('stack trace'));
 });

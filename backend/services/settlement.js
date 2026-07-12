@@ -255,7 +255,7 @@ export async function initializeAndProcessSettlementForPaidOrder(orderId) {
         await persistClaimedSettlement(db, order._id, claimToken, settlement);
       }
     }
-  } catch {
+  } catch (err) {
     settlement.recipients.forEach((recipient) => {
       if (['PENDING', 'RETRY_PENDING', 'PROCESSING'].includes(recipient.status) && !recipient.transferId) {
         recipient.status = 'RECONCILIATION_REQUIRED';
@@ -264,6 +264,11 @@ export async function initializeAndProcessSettlementForPaidOrder(orderId) {
       }
     });
     settlement.lastErrorAt = new Date();
+    settlement.processingLeaseUntil = null;
+    settlement.processingClaimToken = null;
+    settlement.updatedAt = new Date();
+    await persistClaimedSettlement(db, order._id, claimToken, settlement);
+    return { initialized: true, processed: false, reason: 'RECONCILIATION_FAILED', error: err.message };
   }
   settlement.status = deriveOverallStatus(settlement.recipients);
   settlement.processingLeaseUntil = null;
