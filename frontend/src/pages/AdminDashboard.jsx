@@ -9,6 +9,7 @@ import OrderScanner from './OrderScanner';
 import Analytics from './Analytics';
 import LiveKDS from './LiveKDS';
 import Payments from './Payments';
+import SettlementMonitor from './SettlementMonitor';
 
 const SIDEBAR_ITEMS = [
   { id: 'dashboard', icon: 'monitor_heart', label: 'Live KDS', fill: true },
@@ -17,6 +18,7 @@ const SIDEBAR_ITEMS = [
   { id: 'payments', icon: 'payments', label: 'Payments' },
   { id: 'tables', icon: 'grid_view', label: 'Tables & QR' },
   { id: 'analytics', icon: 'analytics', label: 'Analytics' },
+  { id: 'settlements', icon: 'account_balance_wallet', label: 'Settlements', masterAdminOnly: true },
   { id: 'settings', icon: 'settings', label: 'Settings', adminOnly: true },
 ];
 
@@ -457,6 +459,7 @@ export default function AdminDashboard() {
             {SIDEBAR_ITEMS.map((item) => {
               const isAdminLevel = user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN';
               if (item.adminOnly && !isAdminLevel) return null;
+              if (item.masterAdminOnly && user?.role !== 'MASTER_ADMIN') return null;
               const isActive = activeTab === item.id;
               return (
                 <li key={item.id}>
@@ -674,8 +677,9 @@ export default function AdminDashboard() {
           {activeTab === 'settings' && <Settings user={user} />}
           {activeTab === 'payments' && <Payments refreshKey={refreshKey} />}
           {activeTab === 'analytics' && <Analytics />}
+          {activeTab === 'settlements' && user?.role === 'MASTER_ADMIN' && <SettlementMonitor />}
 
-          {activeTab !== 'dashboard' && activeTab !== 'tables' && activeTab !== 'menu' && activeTab !== 'settings' && activeTab !== 'scanner' && activeTab !== 'payments' && activeTab !== 'analytics' && (
+          {activeTab !== 'dashboard' && activeTab !== 'tables' && activeTab !== 'menu' && activeTab !== 'settings' && activeTab !== 'scanner' && activeTab !== 'payments' && activeTab !== 'analytics' && activeTab !== 'settlements' && (
              <motion.div
                initial={{ opacity: 0, y: 20 }}
                animate={{ opacity: 1, y: 0 }}
@@ -724,6 +728,7 @@ export default function AdminDashboard() {
                 {SIDEBAR_ITEMS.map((item) => {
                   const isAdminLevel = user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN';
                   if (item.adminOnly && !isAdminLevel) return null;
+                  if (item.masterAdminOnly && user?.role !== 'MASTER_ADMIN') return null;
                   const isActive = activeTab === item.id;
                   return (
                     <li key={item.id}>

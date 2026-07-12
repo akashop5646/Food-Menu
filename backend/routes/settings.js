@@ -493,6 +493,250 @@ router.post('/convenience-fee', requireAdmin, async (req, res) => {
   }
 });
 
+// Helper to mask sensitive identifiers server-side
+function maskId(id) {
+  if (!id || typeof id !== 'string') return null;
+  const parts = id.split('_');
+  const prefix = parts.length > 1 ? `${parts[0]}_` : '';
+  const actualId = parts.length > 1 ? parts.slice(1).join('_') : id;
+  if (actualId.length <= 4) return id;
+  const suffixLen = prefix === 'acc_' ? 4 : 3;
+  const suffix = actualId.substring(actualId.length - suffixLen);
+  return `${prefix}••••••••${suffix}`;
+}
+
+// Helper to escape regex metacharacters
+function escapeRegExp(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// 1. Summary Monitoring Endpoint (All-time operational summary)
+router.get('/split-settlement/monitoring/summary', requireMasterAdmin, async (req, res) => {
+  try {
+    const db = await getDB();
+    const pipeline = [
+      { $match: { paymentStatus: 'PAID', 'splitSettlement.status': { $exists: true } } },
+      { $group: { _id: '$splitSettlement.status', count: { $sum: 1 } } }
+    ];
+    const results = await db.collection('orders').aggregate(pipeline).toArray();
+
+    const summary = {
+      total: 0,
+      processed: 0,
+      processing: 0,
+      pending: 0,
+      partiallyProcessed: 0,
+      retryPending: 0,
+      reconciliationRequired: 0,
+      failed: 0,
+      skipped: 0,
+      needsAttention: 0
+    };
+
+    let totalCount = 0;
+    for (const r of results) {
+      const status = r._id;
+      const count = r.count;
+      totalCount += count;
+      if (status === 'PROCESSED') summary.processed = count;
+      else if (status === 'PROCESSING') summary.processing = count;
+      else if (status === 'PENDING') summary.pending = count;
+      else if (status === 'PARTIALLY_PROCESSED') summary.partiallyProcessed = count;
+      else if (status === 'RETRY_PENDING') summary.retryPending = count;
+      else if (status === 'RECONCILIATION_REQUIRED') summary.reconciliationRequired = count;
+      else if (status === 'FAILED') summary.failed = count;
+      else if (status === 'SKIPPED') summary.skipped = count;
+    }
+
+    summary.total = totalCount;
+    summary.needsAttention = (
+      summary.reconciliationRequired +
+      summary.failed +
+      summary.retryPending +
+      summary.partiallyProcessed
+    );
+
+    res.json({ summary });
+  } catch (error) {
+    console.error('Failed to get split settlement monitoring summary:', error);
+    res.status(500).json({ error: 'Failed to fetch monitoring summary.' });
+  }
+});
+
+// 2. History Monitoring Endpoint (Paginated, filterable, searchable)
+router.get('/split-settlement/monitoring/history', requireMasterAdmin, async (req, res) => {
+  try {
+    let page = parseInt(req.query.page) || 1;
+    if (page < 1) page = 1;
+    let limit = parseInt(req.query.limit) || 20;
+    if (limit < 1) limit = 20;
+    if (limit > 100) limit = 100;
+
+    const ALLOWED_STATUSES = ['PENDING', 'PROCESSING', 'RETRY_PENDING', 'RECONCILIATION_REQUIRED', 'PROCESSED', 'PARTIALLY_PROCESSED', 'FAILED', 'SKIPPED', 'NEEDS_ATTENTION'];
+    const status = req.query.status;
+    if (status && !ALLOWED_STATUSES.includes(status)) {
+      return res.status(400).json({ error: 'Invalid settlement status filter.' });
+    }
+
+    let fromDate = null;
+    let toDate = null;
+    if (req.query.from) {
+      fromDate = new Date(req.query.from);
+      if (isNaN(fromDate.getTime())) {
+        return res.status(400).json({ error: 'Invalid from date parameter.' });
+      }
+    }
+    if (req.query.to) {
+      toDate = new Date(req.query.to);
+      if (isNaN(toDate.getTime())) {
+        return res.status(400).json({ error: 'Invalid to date parameter.' });
+      }
+    }
+    if (fromDate && toDate && fromDate > toDate) {
+      return res.status(400).json({ error: 'Start date cannot be after end date.' });
+    }
+
+    const query = {
+      paymentStatus: 'PAID',
+      'splitSettlement.status': { $exists: true }
+    };
+    if (status) {
+      if (status === 'NEEDS_ATTENTION') {
+        query['splitSettlement.status'] = { $in: ['RECONCILIATION_REQUIRED', 'FAILED', 'RETRY_PENDING', 'PARTIALLY_PROCESSED'] };
+      } else {
+        query['splitSettlement.status'] = status;
+      }
+    }
+    if (fromDate || toDate) {
+      query['splitSettlement.createdAt'] = {};
+      if (fromDate) query['splitSettlement.createdAt'].$gte = fromDate;
+      if (toDate) query['splitSettlement.createdAt'].$lte = toDate;
+    }
+
+    let search = req.query.search;
+    if (search && typeof search === 'string') {
+      search = search.trim().substring(0, 50);
+      if (search.length > 0) {
+        const orConditions = [];
+        const escaped = escapeRegExp(search);
+        const searchRegex = new RegExp(escaped, 'i');
+        orConditions.push({ table: searchRegex });
+        orConditions.push({ location: searchRegex });
+
+        if (/^[0-9a-fA-F]{24}$/.test(search)) {
+          orConditions.push({ _id: new ObjectId(search) });
+        }
+        query.$or = orConditions;
+      }
+    }
+
+    const db = await getDB();
+    const total = await db.collection('orders').countDocuments(query);
+    const skip = (page - 1) * limit;
+
+    const ordersList = await db.collection('orders')
+      .find(query)
+      .sort({ 'splitSettlement.createdAt': -1, _id: -1 })
+      .skip(skip)
+      .limit(limit)
+      .toArray();
+
+    const mappedOrders = ordersList.map(order => {
+      const recipients = order.splitSettlement?.recipients || [];
+      const processedRecipientCount = recipients.filter(r =>
+        ['PROCESSED', 'SKIPPED_ZERO_AMOUNT', 'SKIPPED_MINIMUM_AMOUNT'].includes(r.status)
+      ).length;
+
+      return {
+        orderId: order._id.toString(),
+        displayOrderId: order._id.toString().substring(18),
+        table: order.table,
+        location: order.location || null,
+        foodSubtotalPaise: Math.round(Number(order.total) * 100),
+        externalTransferAmountPaise: order.splitSettlement?.externalTransferAmountPaise || 0,
+        platformRetainedAmountPaise: order.splitSettlement?.platformRetainedAmountPaise || 0,
+        status: order.splitSettlement?.status || 'PENDING',
+        recipientCount: recipients.length,
+        processedRecipientCount,
+        createdAt: order.splitSettlement?.createdAt || order.createdAt || null,
+        processedAt: order.splitSettlement?.processedAt || null
+      };
+    });
+
+    res.json({
+      orders: mappedOrders,
+      pagination: {
+        total,
+        pages: Math.ceil(total / limit) || 1,
+        page,
+        limit
+      }
+    });
+  } catch (error) {
+    console.error('Failed to get split settlement monitoring history:', error);
+    res.status(500).json({ error: 'Failed to fetch monitoring history.' });
+  }
+});
+
+// 3. Details Monitoring Endpoint (Read-only single settlement details)
+router.get('/split-settlement/monitoring/orders/:orderId', requireMasterAdmin, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    if (!orderId || !ObjectId.isValid(orderId)) {
+      return res.status(400).json({ error: 'Valid order ID is required.' });
+    }
+
+    const db = await getDB();
+    const order = await db.collection('orders').findOne({ _id: new ObjectId(orderId) });
+    if (!order || !order.splitSettlement) {
+      return res.status(404).json({ error: 'Settlement details not found for this order.' });
+    }
+
+    const mapped = {
+      order: {
+        id: order._id.toString(),
+        table: order.table,
+        location: order.location || null,
+        foodSubtotalPaise: Math.round(Number(order.total) * 100),
+        paymentStatus: order.paymentStatus,
+        paidAt: order.paidAt || null
+      },
+      settlement: {
+        provider: order.splitSettlement.provider || 'RAZORPAY_ROUTE',
+        splitBase: order.splitSettlement.splitBase || 'FOOD_SUBTOTAL',
+        configurationVersion: order.splitSettlement.configurationVersion || 0,
+        externalAllocationBasisPoints: order.splitSettlement.externalAllocationBasisPoints || 0,
+        platformRetainedBasisPoints: order.splitSettlement.platformRetainedBasisPoints || 0,
+        externalTransferAmountPaise: order.splitSettlement.externalTransferAmountPaise || 0,
+        platformRetainedAmountPaise: order.splitSettlement.platformRetainedAmountPaise || 0,
+        status: order.splitSettlement.status || 'PENDING',
+        createdAt: order.splitSettlement.createdAt || order.createdAt || null,
+        processedAt: order.splitSettlement.processedAt || null,
+        razorpayPaymentId: maskId(order.splitSettlement.razorpayPaymentId),
+        recipients: (order.splitSettlement.recipients || []).map(r => ({
+          label: r.label,
+          allocationBasisPoints: r.allocationBasisPoints || 0,
+          amountPaise: r.amountPaise || 0,
+          status: r.status || 'PENDING',
+          transferStatus: r.transferStatus || null,
+          attemptCount: r.attemptCount || 0,
+          lastAttemptAt: r.lastAttemptAt || null,
+          processedAt: r.processedAt || null,
+          failureCode: r.failureCode || null,
+          failureDescription: r.failureDescription || null,
+          linkedAccountId: maskId(r.linkedAccountId),
+          transferId: maskId(r.transferId)
+        }))
+      }
+    };
+
+    res.json(mapped);
+  } catch (error) {
+    console.error('Failed to get split settlement order monitoring details:', error);
+    res.status(500).json({ error: 'Failed to fetch monitoring details.' });
+  }
+});
+
 // Split settlement configuration is intentionally isolated from public and normal-admin settings.
 // It stores Route configuration only; it never creates or manages Razorpay transfers.
 router.get('/split-settlement', requireMasterAdmin, async (req, res) => {
