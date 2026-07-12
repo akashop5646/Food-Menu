@@ -19,7 +19,12 @@ class MockAdminsCollection {
       }
       return false;
     });
-    return doc ? structuredClone(doc) : null;
+    if (!doc) return null;
+    const cloned = structuredClone(doc);
+    if (doc._id) {
+      cloned._id = doc._id;
+    }
+    return cloned;
   }
 
   find(query) {
@@ -593,4 +598,156 @@ test('Employees Activity: summary, listing filters, scoping and date ranges', as
     params: { employeeId: '111111111111111111111111' }
   });
   assert.equal(resDetailMaster.statusCode, 403);
+});
+
+// --- Regression Tests for Route Precedence and Shadowing ---
+
+async function simulateRouterPrecedence(url, method, reqData = {}) {
+  const req = {
+    method,
+    url,
+    path: url,
+    cookies: reqData.cookies || {},
+    query: reqData.query || {},
+    params: reqData.params || {},
+    body: reqData.body || {},
+    user: reqData.user || null
+  };
+
+  return new Promise((resolve) => {
+    const res = {
+      statusCode: 200,
+      body: null,
+      status: (code) => {
+        res.statusCode = code;
+        return res;
+      },
+      json: (json) => {
+        res.body = json;
+        resolve(res);
+        return res;
+      },
+      send: (body) => {
+        res.body = body;
+        resolve(res);
+        return res;
+      }
+    };
+
+    employeesRouter(req, res, (err) => {
+      if (err) {
+        res.statusCode = 500;
+        res.body = { error: err.message || err };
+      } else {
+        res.statusCode = 404;
+        res.body = { error: 'Not Found' };
+      }
+      resolve(res);
+    });
+  });
+}
+
+test('Employees Precedence: GET /activity is NOT shadowed by GET /:employeeId', async () => {
+  mockAdmins.docs = [
+    { _id: new ObjectId('111111111111111111111111'), name: 'Master User', role: 'MASTER_ADMIN' },
+    { _id: new ObjectId('222222222222222222222222'), name: 'Admin User', role: 'ADMIN' }
+  ];
+  mockActivity.docs = [];
+  const token = jwt.sign({ id: '111111111111111111111111', role: 'MASTER_ADMIN' }, 'test_secret_for_employees_test');
+
+  const res = await simulateRouterPrecedence('/activity', 'GET', {
+    cookies: { token }
+  });
+
+  assert.equal(res.statusCode, 200);
+  assert.ok(Array.isArray(res.body.events));
+});
+
+test('Employees Precedence: GET /activity/summary is NOT shadowed by GET /:employeeId', async () => {
+  mockAdmins.docs = [
+    { _id: new ObjectId('111111111111111111111111'), name: 'Master User', role: 'MASTER_ADMIN' },
+    { _id: new ObjectId('222222222222222222222222'), name: 'Admin User', role: 'ADMIN' }
+  ];
+  mockActivity.docs = [];
+  const token = jwt.sign({ id: '111111111111111111111111', role: 'MASTER_ADMIN' }, 'test_secret_for_employees_test');
+
+  const res = await simulateRouterPrecedence('/activity/summary', 'GET', {
+    cookies: { token }
+  });
+
+  assert.equal(res.statusCode, 200);
+  assert.ok(res.body.summary);
+  assert.equal(typeof res.body.summary.totalEvents, 'number');
+});
+
+test('Employees Precedence: GET /summary is NOT shadowed by GET /:employeeId', async () => {
+  mockAdmins.docs = [
+    { _id: new ObjectId('111111111111111111111111'), name: 'Master User', role: 'MASTER_ADMIN' },
+    { _id: new ObjectId('222222222222222222222222'), name: 'Admin User', role: 'ADMIN' }
+  ];
+  const token = jwt.sign({ id: '111111111111111111111111', role: 'MASTER_ADMIN' }, 'test_secret_for_employees_test');
+
+  const res = await simulateRouterPrecedence('/summary', 'GET', {
+    cookies: { token }
+  });
+
+  assert.equal(res.statusCode, 200);
+  assert.ok(res.body.summary);
+  assert.equal(typeof res.body.summary.total, 'number');
+});
+
+test('Employees Precedence: GET /:employeeId/activity matches the specific employee activity handler', async () => {
+  const validId = '222222222222222222222222';
+  mockAdmins.docs = [
+    { _id: new ObjectId('111111111111111111111111'), name: 'Master User', role: 'MASTER_ADMIN' },
+    { _id: new ObjectId(validId), name: 'Admin User', role: 'ADMIN' }
+  ];
+  mockActivity.docs = [];
+  const token = jwt.sign({ id: '111111111111111111111111', role: 'MASTER_ADMIN' }, 'test_secret_for_employees_test');
+
+  const res = await simulateRouterPrecedence(`/${validId}/activity`, 'GET', {
+    cookies: { token }
+  });
+
+  assert.equal(res.statusCode, 200);
+  assert.ok(Array.isArray(res.body.events));
+});
+
+test('Employees Precedence: GET /:employeeId matches the employee details handler', async () => {
+  const validId = '222222222222222222222222';
+  mockAdmins.docs = [
+    { _id: new ObjectId('111111111111111111111111'), name: 'Master User', role: 'MASTER_ADMIN' },
+    { _id: new ObjectId(validId), name: 'Admin User', role: 'ADMIN', email: 'admin@test.com' }
+  ];
+  const token = jwt.sign({ id: '111111111111111111111111', role: 'MASTER_ADMIN' }, 'test_secret_for_employees_test');
+
+  const res = await simulateRouterPrecedence(`/${validId}`, 'GET', {
+    cookies: { token }
+  });
+
+  assert.equal(res.statusCode, 200);
+  assert.ok(res.body.employee);
+  assert.equal(res.body.employee.id, validId);
+});
+
+test('Employees Precedence: Invalid ObjectId in GET /:employeeId returns 400', async () => {
+  const token = jwt.sign({ id: '111111111111111111111111', role: 'MASTER_ADMIN' }, 'test_secret_for_employees_test');
+
+  const res = await simulateRouterPrecedence('/invalid-employee-id', 'GET', {
+    cookies: { token }
+  });
+
+  assert.equal(res.statusCode, 400);
+  assert.equal(res.body.error, 'Invalid employee ID format.');
+});
+
+test('Employees Precedence: Invalid ObjectId in GET /:employeeId/activity returns 400', async () => {
+  const token = jwt.sign({ id: '111111111111111111111111', role: 'MASTER_ADMIN' }, 'test_secret_for_employees_test');
+
+  const res = await simulateRouterPrecedence('/invalid-employee-id/activity', 'GET', {
+    cookies: { token }
+  });
+
+  assert.equal(res.statusCode, 400);
+  assert.equal(res.body.error, 'Invalid employee ID format.');
 });
