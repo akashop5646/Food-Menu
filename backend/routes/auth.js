@@ -37,7 +37,7 @@ function getSecret() {
 
 function signToken(user) {
   return jwt.sign(
-    { id: user._id.toString(), email: user.email, name: user.name, role: user.role || 'ADMIN' },
+    { id: user._id.toString(), email: user.email, name: user.name, role: user.role || 'ADMIN', picture: user.picture },
     getSecret(),
     { expiresIn: '24h' } // M4 fix: reduced from 7d to 24h
   );
@@ -146,7 +146,7 @@ router.get('/me', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, getSecret());
-    res.json({ user: { id: decoded.id, name: decoded.name, email: decoded.email, role: decoded.role || 'ADMIN' } });
+    res.json({ user: { id: decoded.id, name: decoded.name, email: decoded.email, role: decoded.role || 'ADMIN', picture: decoded.picture } });
   } catch (err) {
     res.status(401).json({ error: 'Invalid or expired token.' });
   }

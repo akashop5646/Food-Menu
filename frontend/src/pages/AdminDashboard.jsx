@@ -482,9 +482,18 @@ export default function AdminDashboard() {
           <div className="mt-auto px-6">
             <div className="flex items-center justify-between p-3 bg-[#f4f7f6] dark:bg-surface-container-high/40 border border-[#e3ebe8] dark:border-outline-variant/10 rounded-2xl">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#e2edea] dark:bg-teal-950/40 text-[#1b7c83] dark:text-teal-400 flex items-center justify-center font-display-md text-title-md font-bold">
-                  {user?.name?.charAt(0) || 'N'}
-                </div>
+                {user?.picture ? (
+                  <img 
+                    src={user.picture} 
+                    alt={user.name} 
+                    referrerPolicy="no-referrer"
+                    className="w-10 h-10 rounded-full object-cover border border-[#e3ebe8]/50 dark:border-outline-variant/10" 
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-[#e2edea] dark:bg-teal-950/40 text-[#1b7c83] dark:text-teal-400 flex items-center justify-center font-display-md text-title-md font-bold">
+                    {user?.name?.charAt(0) || 'N'}
+                  </div>
+                )}
                 <div className="flex flex-col">
                   <span className="font-title-sm text-[#121317] dark:text-on-surface font-semibold text-sm leading-tight">
                     {user?.name || 'NupurStaff'}
@@ -756,9 +765,18 @@ export default function AdminDashboard() {
               <div className="mt-auto px-6">
                 <div className="flex items-center justify-between p-3 bg-[#f4f7f6] dark:bg-surface-container-high/40 border border-[#e3ebe8] dark:border-outline-variant/10 rounded-2xl">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-[#e2edea] dark:bg-teal-950/40 text-[#1b7c83] dark:text-teal-400 flex items-center justify-center font-display-md text-title-md font-bold">
-                      {user?.name?.charAt(0) || 'N'}
-                    </div>
+                    {user?.picture ? (
+                      <img 
+                        src={user.picture} 
+                        alt={user.name} 
+                        referrerPolicy="no-referrer"
+                        className="w-10 h-10 rounded-full object-cover border border-[#e3ebe8]/50 dark:border-outline-variant/10" 
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-[#e2edea] dark:bg-teal-950/40 text-[#1b7c83] dark:text-teal-400 flex items-center justify-center font-display-md text-title-md font-bold">
+                        {user?.name?.charAt(0) || 'N'}
+                      </div>
+                    )}
                     <div className="flex flex-col">
                       <span className="font-title-sm text-[#121317] dark:text-on-surface font-semibold text-sm leading-tight">
                         {user?.name || 'NupurStaff'}
