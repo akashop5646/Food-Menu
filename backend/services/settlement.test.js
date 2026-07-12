@@ -28,15 +28,37 @@ class MockCollection {
     this.docs.push(structuredClone(doc));
     return { insertedId: doc._id };
   }
+  _getNested(obj, path) {
+    const parts = path.split('.');
+    let current = obj;
+    for (const part of parts) {
+      if (current === null || current === undefined) return undefined;
+      current = current[part];
+    }
+    return current;
+  }
   async updateOne(query, update) {
     const doc = this.docs.find(d => this._match(d, query));
-    if (!doc) return { modifiedCount: 0 };
+    if (!doc) return { matchedCount: 0, modifiedCount: 0 };
+
+    let modified = false;
     if (update.$set) {
       for (const [k, v] of Object.entries(update.$set)) {
-        this._setNested(doc, k, v);
+        const oldVal = this._getNested(doc, k);
+        if (JSON.stringify(oldVal) !== JSON.stringify(v)) {
+          this._setNested(doc, k, v);
+          modified = true;
+        }
       }
     }
-    return { modifiedCount: 1 };
+    if (update.$inc) {
+      for (const [k, v] of Object.entries(update.$inc)) {
+        const oldVal = this._getNested(doc, k) || 0;
+        this._setNested(doc, k, oldVal + v);
+        modified = true;
+      }
+    }
+    return { matchedCount: 1, modifiedCount: modified ? 1 : 0 };
   }
   async findOneAndUpdate(query, update, options) {
     const doc = this.docs.find(d => this._match(d, query));
@@ -44,6 +66,12 @@ class MockCollection {
     if (update.$set) {
       for (const [k, v] of Object.entries(update.$set)) {
         this._setNested(doc, k, v);
+      }
+    }
+    if (update.$inc) {
+      for (const [k, v] of Object.entries(update.$inc)) {
+        const oldVal = this._getNested(doc, k) || 0;
+        this._setNested(doc, k, oldVal + v);
       }
     }
     return structuredClone(doc);
@@ -68,6 +96,23 @@ class MockCollection {
         if (doc.paymentStatus !== v) return false;
       } else if (k === 'splitSettlement.processingClaimToken') {
         if (doc.splitSettlement?.processingClaimToken !== v) return false;
+      } else if (k === 'splitSettlement.revision') {
+        if (v && typeof v === 'object' && '$exists' in v) {
+          const exists = doc.splitSettlement && 'revision' in doc.splitSettlement;
+          if (v.$exists !== exists) return false;
+        } else {
+          if (doc.splitSettlement?.revision !== v) return false;
+        }
+      } else if (k === '$or') {
+        const matchedOr = v.some(subQuery => this._match(doc, subQuery));
+        if (!matchedOr) return false;
+      } else if (k === 'splitSettlement.processingLeaseUntil') {
+        const val = doc.splitSettlement?.processingLeaseUntil;
+        if (v === null) {
+          if (val !== null && val !== undefined) return false;
+        } else if (v && v.$lte) {
+          if (!val || new Date(val).getTime() > new Date(v.$lte).getTime()) return false;
+        }
       }
     }
     return true;
@@ -824,4 +869,166 @@ test('Express trust proxy configuration is set correctly', async () => {
   const serverModule = await import('../server.js');
   const app = serverModule.default;
   assert.ok(app.get('trust proxy'));
+});
+
+// CAS & Revision Regression Tests
+test('matchedCount: 1, modifiedCount: 1 -> success on normal update', async () => {
+  mockOrders.docs = [getFreshOrder()];
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    transfer: {
+      id: 'trf_123',
+      recipient: 'acc_1',
+      amount: 500,
+      currency: 'INR',
+      source: 'pay_123',
+      notes: {
+        settlement_order_id: 'order123',
+        settlement_recipient_id: 'rec_1'
+      }
+    },
+    status: 'processed'
+  });
+  assert.equal(res.success, true);
+  assert.equal(res.changed, true);
+});
+
+test('matchedCount: 1, modifiedCount: 0 with intended final state already present -> idempotent success', async () => {
+  mockOrders.docs = [getFreshOrder()];
+  mockOrders.docs[0].splitSettlement.recipients[0].status = 'PROCESSED';
+
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    transfer: {
+      id: 'trf_123',
+      recipient: 'acc_1',
+      amount: 500,
+      currency: 'INR',
+      source: 'pay_123',
+      notes: {
+        settlement_order_id: 'order123',
+        settlement_recipient_id: 'rec_1'
+      }
+    },
+    status: 'processed'
+  });
+  assert.equal(res.success, true);
+  assert.equal(res.changed, false);
+});
+
+test('first CAS fails (matchedCount: 0), second succeeds', async () => {
+  mockOrders.docs = [getFreshOrder()];
+
+  let callCount = 0;
+  const originalUpdateOne = mockOrders.updateOne;
+  mockOrders.updateOne = async function (query, update) {
+    callCount++;
+    if (callCount === 1) {
+      return { matchedCount: 0, modifiedCount: 0 };
+    }
+    return originalUpdateOne.call(this, query, update);
+  };
+
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    transfer: {
+      id: 'trf_123',
+      recipient: 'acc_1',
+      amount: 500,
+      currency: 'INR',
+      source: 'pay_123',
+      notes: {
+        settlement_order_id: 'order123',
+        settlement_recipient_id: 'rec_1'
+      }
+    },
+    status: 'processed'
+  });
+
+  mockOrders.updateOne = originalUpdateOne;
+
+  assert.equal(res.success, true);
+  assert.equal(res.changed, true);
+  assert.equal(callCount, 2);
+});
+
+test('three genuine CAS misses (matchedCount: 0) -> retryable CONCURRENT_UPDATE_CONFLICT', async () => {
+  mockOrders.docs = [getFreshOrder()];
+
+  const originalUpdateOne = mockOrders.updateOne;
+  mockOrders.updateOne = async function () {
+    return { matchedCount: 0, modifiedCount: 0 };
+  };
+
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    transfer: {
+      id: 'trf_123',
+      recipient: 'acc_1',
+      amount: 500,
+      currency: 'INR',
+      source: 'pay_123',
+      notes: {
+        settlement_order_id: 'order123',
+        settlement_recipient_id: 'rec_1'
+      }
+    },
+    status: 'processed'
+  });
+
+  mockOrders.updateOne = originalUpdateOne;
+
+  assert.equal(res.success, false);
+  assert.equal(res.retryable, true);
+  assert.equal(res.reason, 'CONCURRENT_UPDATE_CONFLICT');
+});
+
+test('existing settlement without revision field can update and initializes revision to 1', async () => {
+  const fresh = getFreshOrder();
+  delete fresh.splitSettlement.revision;
+  mockOrders.docs = [fresh];
+
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    transfer: {
+      id: 'trf_123',
+      recipient: 'acc_1',
+      amount: 500,
+      currency: 'INR',
+      source: 'pay_123',
+      notes: {
+        settlement_order_id: 'order123',
+        settlement_recipient_id: 'rec_1'
+      }
+    },
+    status: 'processed'
+  });
+
+  assert.equal(res.success, true);
+  assert.equal(mockOrders.docs[0].splitSettlement.revision, 1);
+});
+
+test('settlement revision increments after successful mutation', async () => {
+  const fresh = getFreshOrder();
+  fresh.splitSettlement.revision = 5;
+  mockOrders.docs = [fresh];
+
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    transfer: {
+      id: 'trf_123',
+      recipient: 'acc_1',
+      amount: 500,
+      currency: 'INR',
+      source: 'pay_123',
+      notes: {
+        settlement_order_id: 'order123',
+        settlement_recipient_id: 'rec_1'
+      }
+    },
+    status: 'processed'
+  });
+
+  assert.equal(res.success, true);
+  assert.equal(mockOrders.docs[0].splitSettlement.revision, 6);
 });

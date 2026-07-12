@@ -65,6 +65,7 @@ export function buildSettlementSnapshot(order, activeConfiguration) {
     processingLeaseUntil: null,
     processedAt: null,
     lastErrorAt: null,
+    revision: 0,
     createdAt: now,
     updatedAt: now,
   };
@@ -136,11 +137,12 @@ function applyRemoteTransfer(recipient, transfer) {
 
 async function persistClaimedSettlement(db, orderId, claimToken, settlement) {
   settlement.updatedAt = new Date();
+  settlement.revision = (settlement.revision || 0) + 1;
   const result = await db.collection('orders').updateOne(
     { _id: orderId, 'splitSettlement.status': 'PROCESSING', 'splitSettlement.processingClaimToken': claimToken },
     { $set: { splitSettlement: settlement } }
   );
-  if (result.modifiedCount !== 1) throw new Error('Settlement claim was lost');
+  if (result.matchedCount !== 1) throw new Error('Settlement claim was lost');
 }
 
 export async function initializeAndProcessSettlementForPaidOrder(orderId) {
@@ -153,7 +155,7 @@ export async function initializeAndProcessSettlementForPaidOrder(orderId) {
     const active = config?.activeStatus === 'ACTIVE' ? config.active : null;
     const snapshot = active?.recipients?.some((recipient) => recipient.enabled)
       ? buildSettlementSnapshot(order, active)
-      : { status: 'SKIPPED', reason: active ? 'NO_ENABLED_EXTERNAL_RECIPIENTS' : config?.activeStatus === 'DISABLED' ? 'CONFIGURATION_DISABLED' : 'NO_ACTIVE_CONFIGURATION', createdAt: new Date(), updatedAt: new Date() };
+      : { status: 'SKIPPED', reason: active ? 'NO_ENABLED_EXTERNAL_RECIPIENTS' : config?.activeStatus === 'DISABLED' ? 'CONFIGURATION_DISABLED' : 'NO_ACTIVE_CONFIGURATION', revision: 0, createdAt: new Date(), updatedAt: new Date() };
     const result = await db.collection('orders').findOneAndUpdate(
       { _id: order._id, splitSettlement: { $exists: false } },
       { $set: { splitSettlement: snapshot } },
@@ -172,7 +174,18 @@ export async function initializeAndProcessSettlementForPaidOrder(orderId) {
       { 'splitSettlement.status': { $in: ['PENDING', 'RETRY_PENDING', 'RECONCILIATION_REQUIRED'] }, $or: [{ 'splitSettlement.processingLeaseUntil': null }, { 'splitSettlement.processingLeaseUntil': { $lte: now } }] },
       { 'splitSettlement.status': 'PROCESSING', 'splitSettlement.processingLeaseUntil': { $lte: now } },
     ] },
-    { $set: { 'splitSettlement.status': 'PROCESSING', 'splitSettlement.processingStartedAt': now, 'splitSettlement.processingLeaseUntil': new Date(now.getTime() + CLAIM_LEASE_MS), 'splitSettlement.processingClaimToken': claimToken, 'splitSettlement.updatedAt': now } },
+    {
+      $set: {
+        'splitSettlement.status': 'PROCESSING',
+        'splitSettlement.processingStartedAt': now,
+        'splitSettlement.processingLeaseUntil': new Date(now.getTime() + CLAIM_LEASE_MS),
+        'splitSettlement.processingClaimToken': claimToken,
+        'splitSettlement.updatedAt': now
+      },
+      $inc: {
+        'splitSettlement.revision': 1
+      }
+    },
     { returnDocument: 'after' }
   );
   if (!claimed) return { initialized: true, processed: false, reason: 'CLAIM_NOT_ACQUIRED' };
@@ -412,11 +425,22 @@ export async function syncRouteTransferStatus({
       settlement.updatedAt = now;
 
       // Smallest reliable optimistic concurrency guard
+      const expectedRevision = settlement.revision || 0;
+      settlement.revision = expectedRevision + 1;
+
+      const query = { _id: order._id };
+      if (expectedRevision === 0) {
+        query.$or = [
+          { 'splitSettlement.revision': 0 },
+          { 'splitSettlement.revision': { $exists: false } }
+        ];
+      } else {
+        query['splitSettlement.revision'] = expectedRevision;
+      }
+
+      // Smallest reliable optimistic concurrency guard
       const result = await db.collection('orders').updateOne(
-        {
-          _id: order._id,
-          'splitSettlement.updatedAt': order.splitSettlement.updatedAt
-        },
+        query,
         {
           $set: {
             splitSettlement: settlement
@@ -424,7 +448,9 @@ export async function syncRouteTransferStatus({
         }
       );
 
-      if (result.modifiedCount !== 1) {
+      console.log(`settlement webhook CAS: attempt=${attempt} matched=${result.matchedCount} modified=${result.modifiedCount}`);
+
+      if (result.matchedCount !== 1) {
         // CAS conflict. Loop and retry if attempts remain.
         if (attempt < maxRetries) {
           await new Promise((resolve) => setTimeout(resolve, 50 + Math.random() * 100));
