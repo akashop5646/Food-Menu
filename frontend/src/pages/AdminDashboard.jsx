@@ -64,6 +64,25 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
+
+  const profileImage =
+    typeof user?.picture === 'string' && user.picture.trim()
+      ? user.picture.trim()
+      : null;
+
+  useEffect(() => {
+    setAvatarLoadFailed(false);
+  }, [profileImage]);
+
+  const initials = String(user?.name || user?.email || 'U')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part.charAt(0).toUpperCase())
+    .join('') || 'U';
+
   // Notification center
   const [notifications, setNotifications] = useState(() => {
     try {
@@ -482,16 +501,17 @@ export default function AdminDashboard() {
           <div className="mt-auto px-6">
             <div className="flex items-center justify-between p-3 bg-[#f4f7f6] dark:bg-surface-container-high/40 border border-[#e3ebe8] dark:border-outline-variant/10 rounded-2xl">
               <div className="flex items-center gap-3">
-                {user?.picture ? (
-                  <img 
-                    src={user.picture} 
-                    alt={user.name} 
+                {profileImage && !avatarLoadFailed ? (
+                  <img
+                    src={profileImage}
+                    alt={`${user?.name || 'User'} profile`}
                     referrerPolicy="no-referrer"
-                    className="w-10 h-10 rounded-full object-cover border border-[#e3ebe8]/50 dark:border-outline-variant/10" 
+                    onError={() => setAvatarLoadFailed(true)}
+                    className="w-10 h-10 rounded-full object-cover border border-[#e3ebe8]/50 dark:border-outline-variant/10"
                   />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-[#e2edea] dark:bg-teal-950/40 text-[#1b7c83] dark:text-teal-400 flex items-center justify-center font-display-md text-title-md font-bold">
-                    {user?.name?.charAt(0) || 'N'}
+                    {initials}
                   </div>
                 )}
                 <div className="flex flex-col">
@@ -765,16 +785,17 @@ export default function AdminDashboard() {
               <div className="mt-auto px-6">
                 <div className="flex items-center justify-between p-3 bg-[#f4f7f6] dark:bg-surface-container-high/40 border border-[#e3ebe8] dark:border-outline-variant/10 rounded-2xl">
                   <div className="flex items-center gap-3">
-                    {user?.picture ? (
-                      <img 
-                        src={user.picture} 
-                        alt={user.name} 
+                    {profileImage && !avatarLoadFailed ? (
+                      <img
+                        src={profileImage}
+                        alt={`${user?.name || 'User'} profile`}
                         referrerPolicy="no-referrer"
-                        className="w-10 h-10 rounded-full object-cover border border-[#e3ebe8]/50 dark:border-outline-variant/10" 
+                        onError={() => setAvatarLoadFailed(true)}
+                        className="w-10 h-10 rounded-full object-cover border border-[#e3ebe8]/50 dark:border-outline-variant/10"
                       />
                     ) : (
                       <div className="w-10 h-10 rounded-full bg-[#e2edea] dark:bg-teal-950/40 text-[#1b7c83] dark:text-teal-400 flex items-center justify-center font-display-md text-title-md font-bold">
-                        {user?.name?.charAt(0) || 'N'}
+                        {initials}
                       </div>
                     )}
                     <div className="flex flex-col">

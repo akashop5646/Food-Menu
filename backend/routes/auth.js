@@ -31,13 +31,28 @@ const googleLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+export function normalizeProfileImage(value) {
+  if (typeof value !== 'string') return null;
+  const imageUrl = value.trim();
+  if (!imageUrl) return null;
+  try {
+    const parsed = new URL(imageUrl);
+    if (parsed.protocol !== 'https:') {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 function getSecret() {
   return process.env.JWT_SECRET;
 }
 
 function signToken(user) {
   return jwt.sign(
-    { id: user._id.toString(), email: user.email, name: user.name, role: user.role || 'ADMIN', picture: user.picture },
+    { id: user._id.toString(), email: user.email, name: user.name, role: user.role || 'ADMIN', picture: normalizeProfileImage(user.picture) },
     getSecret(),
     { expiresIn: '24h' } // M4 fix: reduced from 7d to 24h
   );
@@ -79,7 +94,7 @@ router.post('/login', loginLimiter, async (req, res) => {
 
     const token = signToken(user);
     res.cookie('token', token, COOKIE_OPTIONS);
-    res.json({ user: { id: user._id, name: user.name, email: user.email, role: user.role || 'ADMIN' } });
+    res.json({ user: { id: user._id, name: user.name, email: user.email, picture: normalizeProfileImage(user.picture), role: user.role || 'ADMIN' } });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Server error during login.' });
@@ -114,12 +129,16 @@ router.post('/google', googleLimiter, async (req, res) => {
     }
 
     // Update their info
+    const incomingPicture = normalizeProfileImage(payload.picture);
+    const existingPicture = normalizeProfileImage(existingUser?.picture);
+    const pictureToStore = incomingPicture || existingPicture || null;
+
     const result = await admins.findOneAndUpdate(
       { email: payload.email.toLowerCase() },
       {
         $set: {
           name: payload.name,
-          picture: payload.picture,
+          picture: pictureToStore,
           provider: 'google',
           lastLogin: new Date(),
         }
@@ -130,7 +149,7 @@ router.post('/google', googleLimiter, async (req, res) => {
     const user = result;
     const token = signToken(user);
     res.cookie('token', token, COOKIE_OPTIONS);
-    res.json({ user: { id: user._id, name: user.name, email: user.email, picture: user.picture, role: user.role || 'ADMIN' } });
+    res.json({ user: { id: user._id, name: user.name, email: user.email, picture: normalizeProfileImage(user.picture), role: user.role || 'ADMIN' } });
   } catch (err) {
     console.error('Google auth error:', err);
     res.status(401).json({ error: 'Invalid Google credential.' });
@@ -146,7 +165,7 @@ router.get('/me', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, getSecret());
-    res.json({ user: { id: decoded.id, name: decoded.name, email: decoded.email, role: decoded.role || 'ADMIN', picture: decoded.picture } });
+    res.json({ user: { id: decoded.id, name: decoded.name, email: decoded.email, role: decoded.role || 'ADMIN', picture: normalizeProfileImage(decoded.picture) } });
   } catch (err) {
     res.status(401).json({ error: 'Invalid or expired token.' });
   }
