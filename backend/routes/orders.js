@@ -5,6 +5,7 @@ import { getDB } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { broadcast } from '../websocket.js';
 import { initializeAndProcessSettlementForPaidOrder } from '../services/settlement.js';
+import { recordEmployeeActivity } from '../services/employeeAudit.js';
 
 const router = Router();
 
@@ -284,6 +285,26 @@ router.post('/', requireAuth, async (req, res) => {
     broadcast('ORDER_CREATED', newOrder);
 
     res.status(201).json(newOrder);
+
+    // Record employee activity post-response/mutation
+    await recordEmployeeActivity(
+      {
+        userId: req.user.id,
+        name: req.user.name,
+        email: req.user.email,
+        role: req.user.role || 'ADMIN'
+      },
+      'ORDER_CREATED',
+      {
+        type: 'ORDER',
+        id: result.insertedId.toString(),
+        displayLabel: `Order created for Table ${newOrder.table}`
+      },
+      {
+        total: newOrder.total,
+        itemsCount: newOrder.items.length
+      }
+    );
   } catch (error) {
     console.error('Failed to create order:', error);
     res.status(500).json({ error: 'Failed to confirm order.' });
@@ -340,6 +361,23 @@ router.patch('/:id/status', requireAuth, async (req, res) => {
     broadcast('ORDER_STATUS_CHANGED', { id, status });
 
     res.json({ success: true, id, status });
+
+    // Record employee activity
+    await recordEmployeeActivity(
+      {
+        userId: req.user.id,
+        name: req.user.name,
+        email: req.user.email,
+        role: req.user.role || 'ADMIN'
+      },
+      'ORDER_STATUS_CHANGED',
+      {
+        type: 'ORDER',
+        id: id,
+        displayLabel: `Order status advanced to ${status}`
+      },
+      { toStatus: status }
+    );
   } catch (error) {
     console.error('Failed to update KDS status:', error);
     res.status(500).json({ error: 'Failed to update order status.' });
@@ -389,6 +427,22 @@ router.patch('/:id/payment', requireAuth, async (req, res) => {
         paymentStatus: 'PAID',
         table: order.table
       });
+      // Record employee activity
+      await recordEmployeeActivity(
+        {
+          userId: req.user.id,
+          name: req.user.name,
+          email: req.user.email,
+          role: req.user.role || 'ADMIN'
+        },
+        'ORDER_PAYMENT_VERIFIED',
+        {
+          type: 'ORDER',
+          id: id,
+          displayLabel: `Order payment manually verified for Table ${order.table}`
+        },
+        { paymentStatus: 'PAID' }
+      );
     }
 
     res.json({ success: true, id, paymentStatus: 'PAID' });

@@ -4,6 +4,7 @@ import { ObjectId } from 'mongodb';
 import { randomUUID } from 'crypto';
 import { getDB } from '../db.js';
 import { requireAdmin, requireMasterAdmin } from '../middleware/auth.js';
+import { recordEmployeeActivity } from '../services/employeeAudit.js';
 
 const router = Router();
 
@@ -243,6 +244,26 @@ router.post('/staff', requireAdmin, async (req, res) => {
     delete newStaff.password;
     
     res.status(201).json(newStaff);
+
+    // Record employee activity
+    await recordEmployeeActivity(
+      {
+        userId: req.user.id,
+        name: req.user.name,
+        email: req.user.email,
+        role: req.user.role || 'ADMIN'
+      },
+      'STAFF_ACCOUNT_CREATED',
+      {
+        type: 'STAFF',
+        id: result.insertedId.toString(),
+        displayLabel: `Staff account created for ${newStaff.name}`
+      },
+      {
+        name: newStaff.name,
+        provider: password ? 'EMAIL' : 'GOOGLE'
+      }
+    );
   } catch (error) {
     res.status(500).json({ error: 'Failed to add staff member' });
   }
@@ -285,6 +306,26 @@ router.patch('/staff/:id/role', requireAdmin, async (req, res) => {
     );
 
     res.json({ success: true, role });
+
+    // Record employee activity
+    await recordEmployeeActivity(
+      {
+        userId: req.user.id,
+        name: req.user.name,
+        email: req.user.email,
+        role: req.user.role || 'ADMIN'
+      },
+      'STAFF_ROLE_CHANGED',
+      {
+        type: 'STAFF',
+        id: id,
+        displayLabel: `Role of staff member ${targetUser.name} changed to ${role}`
+      },
+      {
+        fromRole: targetUser.role,
+        toRole: role
+      }
+    );
   } catch (error) {
     res.status(500).json({ error: 'Failed to update staff member role' });
   }
@@ -319,6 +360,25 @@ router.delete('/staff/:id', requireAdmin, async (req, res) => {
 
     await db.collection('admins').deleteOne({ _id: new ObjectId(id) });
     res.json({ success: true });
+
+    // Record employee activity
+    await recordEmployeeActivity(
+      {
+        userId: req.user.id,
+        name: req.user.name,
+        email: req.user.email,
+        role: req.user.role || 'ADMIN'
+      },
+      'STAFF_ACCOUNT_DELETED',
+      {
+        type: 'STAFF',
+        id: id,
+        displayLabel: `Staff account for ${targetUser.name} deleted`
+      },
+      {
+        name: targetUser.name
+      }
+    );
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete staff member' });
   }
@@ -488,6 +548,26 @@ router.post('/convenience-fee', requireAdmin, async (req, res) => {
     );
 
     res.json({ success: true, enabled, amount: numAmount });
+
+    // Record employee activity
+    await recordEmployeeActivity(
+      {
+        userId: req.user.id,
+        name: req.user.name,
+        email: req.user.email,
+        role: req.user.role || 'ADMIN'
+      },
+      'CONVENIENCE_FEE_UPDATED',
+      {
+        type: 'CONFIGURATION',
+        id: 'convenience_fee',
+        displayLabel: `Convenience fee updated: ${enabled ? 'enabled' : 'disabled'}, amount: ${numAmount}`
+      },
+      {
+        enabled: enabled,
+        amount: numAmount
+      }
+    );
   } catch (error) {
     res.status(500).json({ error: 'Failed to update convenience fee configuration' });
   }
@@ -781,6 +861,27 @@ router.put('/split-settlement/draft', requireMasterAdmin, async (req, res) => {
     }
 
     res.json(presentSettlementConfig(config));
+
+    // Record employee activity
+    await recordEmployeeActivity(
+      {
+        userId: req.user.id,
+        name: req.user.name,
+        email: req.user.email,
+        role: req.user.role || 'ADMIN'
+      },
+      'SETTLEMENT_CONFIGURATION_UPDATED',
+      {
+        type: 'SETTLEMENT_CONFIG',
+        id: SETTLEMENT_CONFIG_ID,
+        displayLabel: `Settlement draft saved (version: ${config.version || 0}, revision: ${config.revision || 0})`
+      },
+      {
+        action: 'DRAFT_SAVED',
+        version: config.version || 0,
+        totalBasisPoints: totalBasisPoints
+      }
+    );
   } catch (error) {
     if (error instanceof SettlementValidationError) {
       return res.status(400).json({ error: error.message });
@@ -835,6 +936,27 @@ router.post('/split-settlement/activate', requireMasterAdmin, async (req, res) =
     }
 
     res.json(presentSettlementConfig(config));
+
+    // Record employee activity
+    await recordEmployeeActivity(
+      {
+        userId: req.user.id,
+        name: req.user.name,
+        email: req.user.email,
+        role: req.user.role || 'ADMIN'
+      },
+      'SETTLEMENT_CONFIGURATION_UPDATED',
+      {
+        type: 'SETTLEMENT_CONFIG',
+        id: SETTLEMENT_CONFIG_ID,
+        displayLabel: `Settlement configuration activated (version: ${nextVersion})`
+      },
+      {
+        action: 'ACTIVATED',
+        version: nextVersion,
+        totalBasisPoints: totalBasisPoints
+      }
+    );
   } catch (error) {
     if (error instanceof SettlementValidationError) {
       return res.status(400).json({ error: error.message });
@@ -873,6 +995,27 @@ router.post('/split-settlement/disable', requireMasterAdmin, async (req, res) =>
     }
 
     res.json(presentSettlementConfig(config));
+
+    // Record employee activity
+    await recordEmployeeActivity(
+      {
+        userId: req.user.id,
+        name: req.user.name,
+        email: req.user.email,
+        role: req.user.role || 'ADMIN'
+      },
+      'SETTLEMENT_CONFIGURATION_UPDATED',
+      {
+        type: 'SETTLEMENT_CONFIG',
+        id: SETTLEMENT_CONFIG_ID,
+        displayLabel: `Settlement configuration disabled (version: ${config.version || 0})`
+      },
+      {
+        action: 'DISABLED',
+        version: config.version || 0,
+        totalBasisPoints: config.active?.totalBasisPoints || 0
+      }
+    );
   } catch (error) {
     if (error instanceof SettlementValidationError) {
       return res.status(400).json({ error: error.message });

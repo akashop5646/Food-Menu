@@ -132,11 +132,74 @@ class MockAdminsCollection {
   }
 }
 
+class MockActivityCollection {
+  constructor() {
+    this.docs = [];
+  }
+
+  find(query) {
+    let matched = this.docs.filter(d => {
+      // Scoping
+      if (query['actor.role'] && query['actor.role'].$in) {
+        if (!query['actor.role'].$in.includes(d.actor.role)) return false;
+      }
+      if (query['actor.userId'] && d.actor.userId !== query['actor.userId']) return false;
+      
+      if (query.action) {
+        if (query.action.$in) {
+          if (!query.action.$in.includes(d.action)) return false;
+        } else if (d.action !== query.action) {
+          return false;
+        }
+      }
+
+      if (query['entity.type']) {
+        if (query['entity.type'].$in) {
+          if (!query['entity.type'].$in.includes(d.entity.type)) return false;
+        } else if (d.entity.type !== query['entity.type']) {
+          return false;
+        }
+      }
+      
+      // Date range
+      if (query.createdAt) {
+        if (query.createdAt.$gte && d.createdAt < query.createdAt.$gte) return false;
+        if (query.createdAt.$lte && d.createdAt > query.createdAt.$lte) return false;
+      }
+      return true;
+    });
+
+    const cursor = {
+      matched: matched.map(d => ({ ...d })),
+      sort: () => cursor,
+      skip: (n) => {
+        cursor.matched = cursor.matched.slice(n);
+        return cursor;
+      },
+      limit: (n) => {
+        if (n > 0) {
+          cursor.matched = cursor.matched.slice(0, n);
+        }
+        return cursor;
+      },
+      toArray: async () => cursor.matched
+    };
+    return cursor;
+  }
+
+  async countDocuments(query) {
+    const arr = await this.find(query).toArray();
+    return arr.length;
+  }
+}
+
 const mockAdmins = new MockAdminsCollection();
+const mockActivity = new MockActivityCollection();
 
 setMockDB({
   collection: (name) => {
     if (name === 'admins') return mockAdmins;
+    if (name === 'employee_activity_events') return mockActivity;
     return null;
   }
 });
@@ -443,4 +506,91 @@ test('Employees Detail: handles invalid ID, 404, and null dates safely', async (
     params: { employeeId: '60c72b2f9b1d8e23f0c3d9a9' }
   });
   assert.equal(resNotFound.statusCode, 404);
+});
+
+test('Employees Activity: summary, listing filters, scoping and date ranges', async () => {
+  const tokenMaster = jwt.sign({ id: '1', role: 'MASTER_ADMIN' }, 'test_secret_for_employees_test');
+  const tokenAdmin = jwt.sign({ id: '2', role: 'ADMIN' }, 'test_secret_for_employees_test');
+
+  const eventMaster = {
+    _id: new ObjectId(),
+    actor: { userId: '1', name: 'Master Admin User', email: 'master@test.com', role: 'MASTER_ADMIN' },
+    action: 'SETTLEMENT_CONFIGURATION_UPDATED',
+    entity: { type: 'SETTLEMENT_CONFIG', id: 'config', displayLabel: 'Config changed' },
+    context: { action: 'ACTIVATED' },
+    createdAt: new Date()
+  };
+
+  const eventAdmin = {
+    _id: new ObjectId(),
+    actor: { userId: '2', name: 'Admin User', email: 'admin@test.com', role: 'ADMIN' },
+    action: 'MENU_ITEM_CREATED',
+    entity: { type: 'MENU_ITEM', id: 'item1', displayLabel: 'Item created' },
+    context: { price: 10, categories: ['Food'] },
+    createdAt: new Date()
+  };
+
+  const eventStaff = {
+    _id: new ObjectId(),
+    actor: { userId: '3', name: 'Staff User', email: 'staff@test.com', role: 'STAFF' },
+    action: 'ORDER_CREATED',
+    entity: { type: 'ORDER', id: 'order1', displayLabel: 'Order placed' },
+    context: { total: 200, itemsCount: 3 },
+    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000) // yesterday
+  };
+
+  mockActivity.docs = [eventMaster, eventAdmin, eventStaff];
+  mockAdmins.docs = [
+    { _id: new ObjectId('111111111111111111111111'), name: 'Master User', role: 'MASTER_ADMIN' },
+    { _id: new ObjectId('222222222222222222222222'), name: 'Admin User', role: 'ADMIN' }
+  ];
+
+  // 1. GET /activity/summary - MASTER_ADMIN sees all
+  const resSumMaster = await simulateEmployeesRequest('/activity/summary', 'GET', {
+    cookies: { token: tokenMaster }
+  });
+  assert.equal(resSumMaster.statusCode, 200);
+  assert.equal(resSumMaster.body.summary.totalEvents, 3);
+  assert.equal(resSumMaster.body.summary.orders, 1);
+  assert.equal(resSumMaster.body.summary.menu, 1);
+  assert.equal(resSumMaster.body.summary.settings, 1);
+
+  // 2. GET /activity/summary - ADMIN does not see MASTER_ADMIN events
+  const resSumAdmin = await simulateEmployeesRequest('/activity/summary', 'GET', {
+    cookies: { token: tokenAdmin }
+  });
+  assert.equal(resSumAdmin.statusCode, 200);
+  assert.equal(resSumAdmin.body.summary.totalEvents, 2); // Excludes eventMaster
+  assert.equal(resSumAdmin.body.summary.orders, 1);
+  assert.equal(resSumAdmin.body.summary.menu, 1);
+  assert.equal(resSumAdmin.body.summary.settings, 0); // settlement was MASTER_ADMIN
+
+  // 3. GET /activity - ADMIN cannot filter by Master Admin employeeId
+  const resFilterMaster = await simulateEmployeesRequest('/activity', 'GET', {
+    cookies: { token: tokenAdmin },
+    query: { employeeId: '111111111111111111111111' }
+  });
+  assert.equal(resFilterMaster.statusCode, 403);
+
+  // 4. GET /activity - pagination parameter check
+  const resInvalidPage = await simulateEmployeesRequest('/activity', 'GET', {
+    cookies: { token: tokenAdmin },
+    query: { page: '-1' }
+  });
+  assert.equal(resInvalidPage.statusCode, 400);
+
+  // 5. GET /activity - valid list query
+  const resList = await simulateEmployeesRequest('/activity', 'GET', {
+    cookies: { token: tokenAdmin },
+    query: { limit: '10' }
+  });
+  assert.equal(resList.statusCode, 200);
+  assert.equal(resList.body.events.length, 2);
+
+  // 6. GET /:employeeId/activity - ADMIN query MASTER_ADMIN activity returns 403
+  const resDetailMaster = await simulateEmployeesRequest('/:employeeId/activity', 'GET', {
+    cookies: { token: tokenAdmin },
+    params: { employeeId: '111111111111111111111111' }
+  });
+  assert.equal(resDetailMaster.statusCode, 403);
 });

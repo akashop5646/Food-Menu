@@ -236,4 +236,241 @@ router.get('/:employeeId', requireAdmin, async (req, res) => {
   }
 });
 
+// 4. GET /activity/summary
+router.get('/activity/summary', requireAdmin, async (req, res) => {
+  try {
+    const callerRole = req.user.role;
+    const db = await getDB();
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const baseQuery = {};
+    if (callerRole === 'ADMIN') {
+      baseQuery['actor.role'] = { $in: ['ADMIN', 'STAFF'] };
+    }
+
+    const [totalEvents, todayCount, ordersCount, menuCount, staffCount, settingsCount] = await Promise.all([
+      db.collection('employee_activity_events').countDocuments(baseQuery),
+      db.collection('employee_activity_events').countDocuments({ ...baseQuery, createdAt: { $gte: startOfToday } }),
+      db.collection('employee_activity_events').countDocuments({
+        ...baseQuery,
+        action: { $in: ['ORDER_CREATED', 'ORDER_STATUS_CHANGED', 'ORDER_PAYMENT_VERIFIED'] }
+      }),
+      db.collection('employee_activity_events').countDocuments({
+        ...baseQuery,
+        action: { $in: ['MENU_ITEM_CREATED', 'MENU_ITEM_UPDATED', 'MENU_ITEM_AVAILABILITY_CHANGED', 'MENU_BULK_AVAILABILITY_CHANGED'] }
+      }),
+      db.collection('employee_activity_events').countDocuments({
+        ...baseQuery,
+        action: { $in: ['STAFF_ACCOUNT_CREATED', 'STAFF_ROLE_CHANGED', 'STAFF_ACCOUNT_DELETED'] }
+      }),
+      db.collection('employee_activity_events').countDocuments({
+        ...baseQuery,
+        action: { $in: ['SETTLEMENT_CONFIGURATION_UPDATED', 'CONVENIENCE_FEE_UPDATED'] }
+      })
+    ]);
+
+    res.json({
+      summary: {
+        totalEvents,
+        today: todayCount,
+        orders: ordersCount,
+        menu: menuCount,
+        staff: staffCount,
+        settings: settingsCount
+      }
+    });
+  } catch (error) {
+    console.error('Activity summary error:', error);
+    res.status(500).json({ error: 'Failed to fetch activity summary.' });
+  }
+});
+
+// 5. GET /activity (list with dropdown filters and date range)
+router.get('/activity', requireAdmin, async (req, res) => {
+  try {
+    const callerRole = req.user.role;
+    const { page: pageStr, limit: limitStr, employeeId, action, entityType, from, to } = req.query || {};
+
+    let page = 1;
+    let limit = 20;
+
+    if (pageStr !== undefined) {
+      page = Number(pageStr);
+      if (isNaN(page) || page <= 0 || !Number.isInteger(page)) {
+        return res.status(400).json({ error: 'Invalid page parameter.' });
+      }
+    }
+
+    if (limitStr !== undefined) {
+      limit = Number(limitStr);
+      if (isNaN(limit) || limit <= 0 || limit > 100 || !Number.isInteger(limit)) {
+        return res.status(400).json({ error: 'Invalid limit parameter.' });
+      }
+    }
+
+    const db = await getDB();
+    const query = {};
+
+    // Scoping for ADMIN
+    if (callerRole === 'ADMIN') {
+      query['actor.role'] = { $in: ['ADMIN', 'STAFF'] };
+    }
+
+    // Filter by target employeeId
+    if (employeeId) {
+      if (!ObjectId.isValid(employeeId) || employeeId.length !== 24) {
+        return res.status(400).json({ error: 'Invalid employee ID format.' });
+      }
+
+      // Role boundary check for target employee
+      const targetUser = await db.collection('admins').findOne({ _id: new ObjectId(employeeId) });
+      if (targetUser && targetUser.role === 'MASTER_ADMIN' && callerRole === 'ADMIN') {
+        return res.status(403).json({ error: 'Forbidden: Admin cannot query Master Admin activity.' });
+      }
+
+      query['actor.userId'] = employeeId;
+    }
+
+    // Filter by action
+    if (action) {
+      const allowedActions = [
+        'EMPLOYEE_LOGIN', 'ORDER_CREATED', 'ORDER_STATUS_CHANGED', 'ORDER_PAYMENT_VERIFIED',
+        'MENU_ITEM_CREATED', 'MENU_ITEM_UPDATED', 'MENU_ITEM_AVAILABILITY_CHANGED', 'MENU_BULK_AVAILABILITY_CHANGED',
+        'STAFF_ACCOUNT_CREATED', 'STAFF_ROLE_CHANGED', 'STAFF_ACCOUNT_DELETED',
+        'SETTLEMENT_CONFIGURATION_UPDATED', 'CONVENIENCE_FEE_UPDATED'
+      ];
+      if (!allowedActions.includes(action)) {
+        return res.status(400).json({ error: 'Invalid action filter.' });
+      }
+      query.action = action;
+    }
+
+    // Filter by entityType
+    if (entityType) {
+      const allowedEntities = ['AUTHENTICATION', 'ORDER', 'MENU_ITEM', 'STAFF', 'SETTLEMENT_CONFIG', 'CONFIGURATION'];
+      if (!allowedEntities.includes(entityType)) {
+        return res.status(400).json({ error: 'Invalid entity type filter.' });
+      }
+      query['entity.type'] = entityType;
+    }
+
+    // Filter by date range (from / to)
+    if (from || to) {
+      query.createdAt = {};
+      if (from) {
+        const fromDate = new Date(from);
+        if (isNaN(fromDate.getTime())) {
+          return res.status(400).json({ error: 'Invalid from date format.' });
+        }
+        query.createdAt.$gte = fromDate;
+      }
+      if (to) {
+        const toDate = new Date(to);
+        if (isNaN(toDate.getTime())) {
+          return res.status(400).json({ error: 'Invalid to date format.' });
+        }
+        query.createdAt.$lte = toDate;
+      }
+    }
+
+    const total = await db.collection('employee_activity_events').countDocuments(query);
+    const pages = Math.ceil(total / limit) || 1;
+    const skip = (page - 1) * limit;
+
+    const events = await db.collection('employee_activity_events')
+      .find(query)
+      .sort({ createdAt: -1, _id: -1 })
+      .skip(skip)
+      .limit(limit)
+      .toArray();
+
+    res.json({
+      events,
+      pagination: {
+        total,
+        pages,
+        page,
+        limit
+      }
+    });
+  } catch (error) {
+    console.error('List activity error:', error);
+    res.status(500).json({ error: 'Failed to fetch activity list.' });
+  }
+});
+
+// 6. GET /:employeeId/activity (shortcut for specific employee history)
+router.get('/:employeeId/activity', requireAdmin, async (req, res) => {
+  try {
+    const callerRole = req.user.role;
+    const { employeeId } = req.params;
+    const { page: pageStr, limit: limitStr } = req.query || {};
+
+    if (!employeeId || !ObjectId.isValid(employeeId) || employeeId.length !== 24) {
+      return res.status(400).json({ error: 'Invalid employee ID format.' });
+    }
+
+    let page = 1;
+    let limit = 20;
+
+    if (pageStr !== undefined) {
+      page = Number(pageStr);
+      if (isNaN(page) || page <= 0 || !Number.isInteger(page)) {
+        return res.status(400).json({ error: 'Invalid page parameter.' });
+      }
+    }
+
+    if (limitStr !== undefined) {
+      limit = Number(limitStr);
+      if (isNaN(limit) || limit <= 0 || limit > 100 || !Number.isInteger(limit)) {
+        return res.status(400).json({ error: 'Invalid limit parameter.' });
+      }
+    }
+
+    const db = await getDB();
+
+    // Role boundary check
+    const targetUser = await db.collection('admins').findOne({ _id: new ObjectId(employeeId) });
+    if (!targetUser) {
+      return res.status(404).json({ error: 'Employee not found.' });
+    }
+
+    if (targetUser.role === 'MASTER_ADMIN' && callerRole === 'ADMIN') {
+      return res.status(403).json({ error: 'Forbidden: Admin cannot query Master Admin activity.' });
+    }
+
+    const query = { 'actor.userId': employeeId };
+    // Scoping for ADMIN
+    if (callerRole === 'ADMIN') {
+      query['actor.role'] = { $in: ['ADMIN', 'STAFF'] };
+    }
+
+    const total = await db.collection('employee_activity_events').countDocuments(query);
+    const pages = Math.ceil(total / limit) || 1;
+    const skip = (page - 1) * limit;
+
+    const events = await db.collection('employee_activity_events')
+      .find(query)
+      .sort({ createdAt: -1, _id: -1 })
+      .skip(skip)
+      .limit(limit)
+      .toArray();
+
+    res.json({
+      events,
+      pagination: {
+        total,
+        pages,
+        page,
+        limit
+      }
+    });
+  } catch (error) {
+    console.error('Get employee activity error:', error);
+    res.status(500).json({ error: 'Failed to fetch employee activity.' });
+  }
+});
+
 export default router;

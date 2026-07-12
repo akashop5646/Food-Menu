@@ -173,12 +173,17 @@ const jwt = (await import('jsonwebtoken')).default;
 
 // Mock Response Helper
 function mockResponse() {
+  let resolveFn;
+  const donePromise = new Promise((resolve) => {
+    resolveFn = resolve;
+  });
   const res = {
     status: (code) => { res.statusCode = code; return res; },
-    send: (body) => { res.body = body; return res; },
-    json: (json) => { res.body = json; return res; },
+    send: (body) => { res.body = body; resolveFn(res); return res; },
+    json: (json) => { res.body = json; resolveFn(res); return res; },
     statusCode: 200,
-    body: null
+    body: null,
+    donePromise
   };
   return res;
 }
@@ -203,11 +208,15 @@ async function simulateMenuRequest(path, method, req) {
     }
     const nextLayer = routeLayer.route.stack[currentLayerIndex++];
     if (nextLayer) {
-      await nextLayer.handle(req, res, next);
+      try {
+        await nextLayer.handle(req, res, next);
+      } catch (handleErr) {
+        res.status(500).json({ error: handleErr.message });
+      }
     }
   };
-  await next();
-  return res;
+  next();
+  return res.donePromise;
 }
 
 // Prepare Mock Data

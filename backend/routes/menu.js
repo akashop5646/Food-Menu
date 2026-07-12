@@ -1,5 +1,6 @@
 import express from 'express';
 import { getDB } from '../db.js';
+import { recordEmployeeActivity } from '../services/employeeAudit.js';
 import { ObjectId } from 'mongodb';
 import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
@@ -242,6 +243,27 @@ router.post('/', requireAdmin, upload.single('imageFile'), async (req, res) => {
 
     const result = await db.collection('menu_items').insertOne(newItem);
     newItem._id = result.insertedId;
+
+    // Record employee activity
+    await recordEmployeeActivity(
+      {
+        userId: req.user.id,
+        name: req.user.name,
+        email: req.user.email,
+        role: req.user.role || 'ADMIN'
+      },
+      'MENU_ITEM_CREATED',
+      {
+        type: 'MENU_ITEM',
+        id: result.insertedId.toString(),
+        displayLabel: `Menu item created: ${newItem.name}`
+      },
+      {
+        price: newItem.price,
+        categories: newItem.categories
+      }
+    );
+
     res.status(201).json(newItem);
   } catch (error) {
     console.error('Error creating menu item:', error);
@@ -318,6 +340,28 @@ router.patch('/bulk-availability', requireAdmin, async (req, res) => {
       { $set: { available, updatedAt: new Date() } }
     );
 
+    // Record employee activity
+    await recordEmployeeActivity(
+      {
+        userId: req.user.id,
+        name: req.user.name,
+        email: req.user.email,
+        role: req.user.role || 'ADMIN'
+      },
+      'MENU_BULK_AVAILABILITY_CHANGED',
+      {
+        type: 'MENU_ITEM',
+        id: null,
+        displayLabel: 'Bulk availability update'
+      },
+      {
+        requestedCount: ids.length,
+        matchedCount: matchedCount,
+        modifiedCount: modifiedCount,
+        available: available
+      }
+    );
+
     res.json({
       requested: ids.length,
       unique: uniqueIds.length,
@@ -387,6 +431,48 @@ router.put('/:id', requireAdmin, upload.single('imageFile'), async (req, res) =>
     if (!result) {
       return res.status(404).json({ error: 'Menu item not found' });
     }
+
+    // Record employee activity
+    const updateKeys = Object.keys(updates);
+    const hasOnlyAvailability = updateKeys.length === 1 && updates.available !== undefined;
+
+    if (hasOnlyAvailability) {
+      await recordEmployeeActivity(
+        {
+          userId: req.user.id,
+          name: req.user.name,
+          email: req.user.email,
+          role: req.user.role || 'ADMIN'
+        },
+        'MENU_ITEM_AVAILABILITY_CHANGED',
+        {
+          type: 'MENU_ITEM',
+          id: id,
+          displayLabel: `Menu item availability set to ${updates.available ? 'available' : 'unavailable'}: ${result.name}`
+        },
+        { available: updates.available }
+      );
+    } else {
+      await recordEmployeeActivity(
+        {
+          userId: req.user.id,
+          name: req.user.name,
+          email: req.user.email,
+          role: req.user.role || 'ADMIN'
+        },
+        'MENU_ITEM_UPDATED',
+        {
+          type: 'MENU_ITEM',
+          id: id,
+          displayLabel: `Menu item updated: ${result.name}`
+        },
+        {
+          updatedFields: updateKeys,
+          availableTransition: updates.available !== undefined ? updates.available : null
+        }
+      );
+    }
+
     res.json(result);
   } catch (error) {
     console.error('Error updating menu item:', error);

@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 import { getDB } from '../db.js';
+import { recordEmployeeActivity } from '../services/employeeAudit.js';
 
 const router = Router();
 const COOKIE_OPTIONS = {
@@ -82,6 +83,21 @@ router.post('/login', loginLimiter, async (req, res) => {
 
     const token = signToken(user);
     res.cookie('token', token, COOKIE_OPTIONS);
+    await recordEmployeeActivity(
+      {
+        userId: user._id.toString(),
+        name: user.name,
+        email: user.email,
+        role: user.role || 'ADMIN'
+      },
+      'EMPLOYEE_LOGIN',
+      {
+        type: 'AUTHENTICATION',
+        id: user._id.toString(),
+        displayLabel: `Employee logged in via email: ${user.email}`
+      },
+      { provider: 'EMAIL' }
+    );
     res.json({ user: { id: user._id, name: user.name, email: user.email, picture: normalizeProfileImage(user.picture), role: user.role || 'ADMIN' } });
   } catch (err) {
     console.error('Login error:', err);
@@ -137,6 +153,21 @@ router.post('/google', googleLimiter, async (req, res) => {
     const user = result;
     const token = signToken(user);
     res.cookie('token', token, COOKIE_OPTIONS);
+    await recordEmployeeActivity(
+      {
+        userId: user._id.toString(),
+        name: user.name,
+        email: user.email,
+        role: user.role || 'ADMIN'
+      },
+      'EMPLOYEE_LOGIN',
+      {
+        type: 'AUTHENTICATION',
+        id: user._id.toString(),
+        displayLabel: `Employee logged in via Google: ${user.email}`
+      },
+      { provider: 'GOOGLE' }
+    );
     res.json({ user: { id: user._id, name: user.name, email: user.email, picture: normalizeProfileImage(user.picture), role: user.role || 'ADMIN' } });
   } catch (err) {
     console.error('Google auth error:', err);
