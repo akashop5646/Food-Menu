@@ -455,7 +455,7 @@ export default function AdminDashboard() {
             <h1 className="font-display-lg text-display-lg font-bold text-primary tracking-tight">Aurum Table</h1>
             <p className="font-body-sm text-body-sm text-on-surface-variant mt-2">Digital Concierge</p>
           </div>
-          <ul className="flex-1 space-y-2">
+          <ul className="flex-1 space-y-2 overflow-y-auto hide-scrollbar pr-1">
             {SIDEBAR_ITEMS.map((item) => {
               const isAdminLevel = user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN';
               if (item.adminOnly && !isAdminLevel) return null;
@@ -724,7 +724,7 @@ export default function AdminDashboard() {
                 </button>
               </div>
 
-              <ul className="flex-1 space-y-2">
+              <ul className="flex-1 space-y-2 overflow-y-auto hide-scrollbar pr-1">
                 {SIDEBAR_ITEMS.map((item) => {
                   const isAdminLevel = user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN';
                   if (item.adminOnly && !isAdminLevel) return null;
