@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE } from '../config';
+import { useScrollLock } from '../hooks/useScrollLock';
 
 const getInitials = (name, email) => {
   const base = name || email || 'U';
@@ -263,6 +264,8 @@ export default function Employees({ user }) {
   const activeActivityFetchRef = useRef(null);
   const activeDrawerFetchRef = useRef(null);
   const isMountedRef = useRef(true);
+
+  useScrollLock(isDrawerOpen || isEventDetailOpen);
 
   const showMasterAdminCard = summary && Object.prototype.hasOwnProperty.call(summary, 'masterAdmins');
   const isMasterAdmin = user?.role === 'MASTER_ADMIN' || showMasterAdminCard;
@@ -1717,40 +1720,37 @@ export default function Employees({ user }) {
       {/* Details Slide-out Right Drawer */}
       <AnimatePresence>
         {isDrawerOpen && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.5 }}
-              exit={{ opacity: 0 }}
-              onClick={handleCloseDrawer}
-              className="fixed inset-0 bg-black z-[100]"
-            />
-
+          <div
+            onClick={handleCloseDrawer}
+            className="app-overlay-backdrop bg-black/50 transition-opacity fixed inset-0 z-50 md:left-[280px]"
+          >
             {/* Right Drawer Panel */}
             <motion.div
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'tween', duration: 0.35, ease: 'easeOut' }}
-              className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-surface-container z-[101] shadow-2xl border-l border-outline-variant/10 flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+              className="app-drawer-panel w-full max-w-md h-full bg-surface-container shadow-2xl border-l border-outline-variant/10 flex flex-col ml-auto"
             >
               {/* Drawer Header */}
-              <div className="p-6 border-b border-outline-variant/10 flex items-center justify-between bg-surface-container-lowest">
+              <header className="app-overlay-header p-6 border-b border-outline-variant/10 flex items-center justify-between bg-surface-container-lowest shrink-0">
                 <h2 className="font-headline-sm text-lg font-bold text-primary flex items-center gap-2">
                   <span className="material-symbols-outlined">badge</span>
                   Employee Profile
                 </h2>
                 <button
+                  type="button"
                   onClick={handleCloseDrawer}
-                  className="p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded-full transition-colors"
+                  aria-label="Close profile"
+                  className="p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded-full transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-[22px]">close</span>
+                  <span className="material-symbols-outlined text-[22px]" aria-hidden="true">close</span>
                 </button>
-              </div>
+              </header>
 
               {/* Drawer Content */}
-              <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 hide-scrollbar">
+              <div className="app-overlay-scroll-body flex-1 overflow-y-auto p-6 flex flex-col gap-6 hide-scrollbar">
                 {drawerLoading ? (
                   <div className="flex flex-col items-center justify-center py-20 gap-4">
                     <span className="material-symbols-outlined text-primary text-4xl animate-spin">progress_activity</span>
@@ -1877,47 +1877,44 @@ export default function Employees({ user }) {
                 ) : null}
               </div>
             </motion.div>
-          </>
+          </div>
         )}
       </AnimatePresence>
 
       {/* Event Detail Slide-out Drawer */}
       <AnimatePresence>
         {isEventDetailOpen && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.5 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsEventDetailOpen(false)}
-              className="fixed inset-0 bg-black z-[100]"
-            />
-
+          <div
+            onClick={() => setIsEventDetailOpen(false)}
+            className="app-overlay-backdrop bg-black/50 transition-opacity fixed inset-0 z-50 md:left-[280px]"
+          >
             {/* Right Drawer Panel */}
             <motion.div
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'tween', duration: 0.35, ease: 'easeOut' }}
-              className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-surface-container z-[101] shadow-2xl border-l border-outline-variant/10 flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+              className="app-drawer-panel w-full max-w-md h-full bg-surface-container shadow-2xl border-l border-outline-variant/10 flex flex-col ml-auto"
             >
               {/* Drawer Header */}
-              <div className="p-6 border-b border-outline-variant/10 flex items-center justify-between bg-surface-container-lowest">
+              <header className="app-overlay-header p-6 border-b border-outline-variant/10 flex items-center justify-between bg-surface-container-lowest shrink-0">
                 <h2 className="font-headline-sm text-lg font-bold text-primary flex items-center gap-2">
                   <span className="material-symbols-outlined">description</span>
                   Event Details
                 </h2>
                 <button
+                  type="button"
                   onClick={() => setIsEventDetailOpen(false)}
-                  className="p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded-full transition-colors"
+                  aria-label="Close details"
+                  className="p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded-full transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-[22px]">close</span>
+                  <span className="material-symbols-outlined text-[22px]" aria-hidden="true">close</span>
                 </button>
-              </div>
+              </header>
 
               {/* Drawer Content */}
-              <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 hide-scrollbar">
+              <div className="app-overlay-scroll-body flex-1 overflow-y-auto p-6 flex flex-col gap-6 hide-scrollbar">
                 {eventDetailLoading ? (
                   <div className="flex flex-col items-center justify-center py-20 gap-4">
                     <span className="material-symbols-outlined text-primary text-4xl animate-spin">progress_activity</span>
@@ -2035,7 +2032,7 @@ export default function Employees({ user }) {
                 ) : null}
               </div>
             </motion.div>
-          </>
+          </div>
         )}
       </AnimatePresence>
     </div>

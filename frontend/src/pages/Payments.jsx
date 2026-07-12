@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE } from '../config';
+import { useScrollLock } from '../hooks/useScrollLock';
 
 // Money formatting and numeric extraction helpers
 const getFoodSubtotal = (order) => {
@@ -265,6 +266,7 @@ export default function Payments({ refreshKey }) {
   }, [selectedOrderId, paymentOrders]);
 
   // Drawer accessibility & scroll lock
+  useScrollLock(!!selectedOrderId);
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -273,11 +275,9 @@ export default function Payments({ refreshKey }) {
     };
     if (selectedOrderId) {
       window.addEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = 'hidden';
     }
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = 'unset';
     };
   }, [selectedOrderId]);
 
@@ -1020,37 +1020,36 @@ export default function Payments({ refreshKey }) {
       {/* Right-Side Sliding Payment Details Drawer */}
       <AnimatePresence>
         {selectedOrder && (
-          <>
-            {/* Backdrop */}
-            <div 
-              onClick={() => setSelectedOrderId(null)}
-              className="fixed inset-0 bg-black/50 z-50 transition-opacity"
-            />
-
+          <div 
+            onClick={() => setSelectedOrderId(null)}
+            className="app-overlay-backdrop bg-black/50 transition-opacity fixed inset-0 z-50 md:left-[280px]"
+          >
             {/* Drawer Dialog Container */}
-            <div 
+            <aside 
               role="dialog"
               aria-modal="true"
               aria-label="Payment Details"
-              className="fixed top-0 right-0 h-full w-full sm:w-[460px] bg-surface-container z-[51] shadow-2xl border-l border-outline-variant/20 flex flex-col animate-slide-in text-left"
+              onClick={(e) => e.stopPropagation()}
+              className="app-drawer-panel w-full sm:w-[460px] h-full bg-surface-container shadow-2xl border-l border-outline-variant/20 flex flex-col animate-slide-in text-left ml-auto overflow-hidden"
             >
               {/* Header */}
-              <div className="p-5 md:p-6 border-b border-outline-variant/10 flex items-center justify-between bg-surface-container-low">
+              <header className="app-overlay-header p-5 md:p-6 border-b border-outline-variant/10 flex items-center justify-between bg-surface-container-low shrink-0">
                 <h3 className="font-headline-sm text-lg text-on-surface flex items-center gap-2">
                   <span className="material-symbols-outlined text-primary">receipt</span>
                   Order Details
                 </h3>
                 <button
+                  type="button"
                   onClick={() => setSelectedOrderId(null)}
                   aria-label="Close details"
-                  className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-surface-container-high transition-colors text-on-surface-variant cursor-pointer"
+                  className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-surface-container-high transition-colors text-on-surface-variant cursor-pointer focus-visible:ring-2 focus-visible:ring-primary outline-none"
                 >
-                  <span className="material-symbols-outlined">close</span>
+                  <span className="material-symbols-outlined" aria-hidden="true">close</span>
                 </button>
-              </div>
+              </header>
 
               {/* Content */}
-              <div className="flex-1 overflow-y-auto p-5 md:p-6 space-y-6">
+              <div className="app-overlay-scroll-body p-5 md:p-6 space-y-6 flex-1 overflow-y-auto">
                 {/* Order Information Section */}
                 <div className="space-y-4">
                   <h4 className="text-[11px] font-label-caps text-on-surface-variant/70 uppercase tracking-widest font-semibold border-b border-outline-variant/10 pb-1">Order Information</h4>
@@ -1198,8 +1197,8 @@ export default function Payments({ refreshKey }) {
                   )}
                 </div>
               </div>
-            </div>
-          </>
+            </aside>
+          </div>
         )}
       </AnimatePresence>
     </div>

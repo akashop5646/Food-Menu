@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE } from '../config';
+import { useScrollLock } from '../hooks/useScrollLock';
 
 // Sub-components
 import MenuItemImage from './menu/MenuItemImage';
@@ -23,6 +24,7 @@ export default function MenuManager() {
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
   const [isImageDragActive, setIsImageDragActive] = useState(false);
+  useScrollLock(isModalOpen || isCategoryModalOpen);
   const fileInputRef = useRef(null);
   
   // Search & Filter States
@@ -825,177 +827,183 @@ export default function MenuManager() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+            className="app-overlay-backdrop bg-black/60 backdrop-blur-sm fixed inset-0 z-[100] flex items-center justify-center p-4"
           >
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-surface-container-low border border-outline-variant/30 rounded-xl w-full max-w-lg p-6 shadow-2xl max-h-[90vh] overflow-y-auto"
+              className="app-modal-wrapper bg-surface-container-low border border-outline-variant/30 rounded-xl w-full max-w-lg p-6 shadow-2xl max-h-[90vh] flex flex-col"
             >
-              <div className="flex justify-between items-center mb-6">
+              <header className="app-overlay-header flex justify-between items-center mb-6">
                 <h2 className="font-headline-sm text-primary text-[24px]">
                   {editingItem ? 'Edit Menu Item' : 'Add New Item'}
                 </h2>
-                <button onClick={handleCloseModal} className="text-on-surface-variant hover:text-primary transition-colors">
-                  <span className="material-symbols-outlined">close</span>
+                <button 
+                  type="button"
+                  onClick={handleCloseModal} 
+                  aria-label="Close dialog"
+                  className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-high/40 transition-colors text-on-surface-variant cursor-pointer focus-visible:ring-2 focus-visible:ring-primary outline-none"
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">close</span>
                 </button>
-              </div>
+              </header>
 
-              <form onSubmit={handleSave} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2 sm:col-span-1">
-                    <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">Name</label>
-                    <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none" />
-                  </div>
-                  <div className="col-span-2 sm:col-span-1">
-                    <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">Price (₹)</label>
-                    <input required type="number" step="0.01" min="0" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none" />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block font-label-caps text-[12px] uppercase tracking-widest text-on-surface-variant mb-2">Categories</label>
-                    <div className="flex flex-wrap gap-2 max-h-[100px] overflow-y-auto p-2 bg-surface-container-highest border border-outline-variant/50 rounded">
-                      {categories.map(cat => {
-                        const isSelected = formData.categories.includes(cat.name);
-                        return (
-                          <label key={cat._id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full cursor-pointer transition-colors text-sm ${isSelected ? 'bg-primary/20 text-primary border border-primary/50' : 'bg-surface-container text-on-surface border border-outline-variant/30 hover:border-outline-variant'}`}>
-                            <input 
-                              type="checkbox"
-                              className="hidden"
-                              checked={isSelected}
-                              onChange={(e) => {
-                                setFormData(prev => ({
-                                  ...prev,
-                                  categories: e.target.checked 
-                                    ? [...prev.categories, cat.name]
-                                    : prev.categories.filter(c => c !== cat.name)
-                                }));
-                              }}
-                            />
-                            {cat.name}
-                          </label>
-                        );
-                      })}
-                      {categories.length === 0 && <span className="text-sm text-on-surface-variant opacity-70 italic">No categories available</span>}
+              <form onSubmit={handleSave} className="flex-1 min-h-0 flex flex-col">
+                <div className="app-overlay-scroll-body pr-2 space-y-4 mb-6 overflow-y-auto">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2 sm:col-span-1">
+                      <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">Name</label>
+                      <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none" />
                     </div>
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">Description</label>
-                    <textarea rows="3" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none resize-none"></textarea>
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">Image Upload</label>
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => fileInputRef.current?.click()}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
+                    <div className="col-span-2 sm:col-span-1">
+                      <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">Price (₹)</label>
+                      <input required type="number" step="0.01" min="0" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block font-label-caps text-[12px] uppercase tracking-widest text-on-surface-variant mb-2">Categories</label>
+                      <div className="flex flex-wrap gap-2 max-h-[100px] overflow-y-auto p-2 bg-surface-container-highest border border-outline-variant/50 rounded">
+                        {categories.map(cat => {
+                          const isSelected = formData.categories.includes(cat.name);
+                          return (
+                            <label key={cat._id} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full cursor-pointer transition-colors text-sm ${isSelected ? 'bg-primary/20 text-primary border border-primary/50' : 'bg-surface-container text-on-surface border border-outline-variant/30 hover:border-outline-variant'}`}>
+                              <input 
+                                type="checkbox"
+                                className="hidden"
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    categories: e.target.checked 
+                                      ? [...prev.categories, cat.name]
+                                      : prev.categories.filter(c => c !== cat.name)
+                                  }));
+                                }}
+                              />
+                              {cat.name}
+                            </label>
+                          );
+                        })}
+                        {categories.length === 0 && <span className="text-sm text-on-surface-variant opacity-70 italic">No categories available</span>}
+                      </div>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">Description</label>
+                      <textarea rows="3" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none resize-none"></textarea>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">Image Upload</label>
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => fileInputRef.current?.click()}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            fileInputRef.current?.click();
+                          }
+                        }}
+                        onDragEnter={(e) => {
                           e.preventDefault();
-                          fileInputRef.current?.click();
-                        }
-                      }}
-                      onDragEnter={(e) => {
-                        e.preventDefault();
-                        setIsImageDragActive(true);
-                      }}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        setIsImageDragActive(true);
-                      }}
-                      onDragLeave={() => setIsImageDragActive(false)}
-                      onDrop={handleImageDrop}
-                      className={`rounded-2xl border border-dashed p-4 transition-all cursor-pointer bg-surface-container-highest/70 ${
-                        isImageDragActive
-                          ? 'border-primary bg-primary/10 shadow-[0_0_0_1px_rgba(212,175,55,0.25)]'
-                          : 'border-outline-variant/50 hover:border-primary/60 hover:bg-surface-container-highest'
-                      }`}
-                    >
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageUpload}
-                        className="hidden"
-                      />
-                      <div className="flex items-center gap-4">
-                        <div className="w-20 h-20 shrink-0 rounded-xl overflow-hidden bg-surface-container flex items-center justify-center border border-outline-variant/30">
-                          {imagePreview ? (
-                            <img src={imagePreview} alt="Selected preview" className="w-full h-full object-cover" />
-                          ) : (
-                            <span className="material-symbols-outlined text-[28px] text-on-surface-variant/50">image</span>
-                          )}
-                        </div>
+                          setIsImageDragActive(true);
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setIsImageDragActive(true);
+                        }}
+                        onDragLeave={() => setIsImageDragActive(false)}
+                        onDrop={handleImageDrop}
+                        className={`rounded-2xl border border-dashed p-4 transition-all cursor-pointer bg-surface-container-highest/70 ${
+                          isImageDragActive
+                            ? 'border-primary bg-primary/10 shadow-[0_0_0_1px_rgba(212,175,55,0.25)]'
+                            : 'border-outline-variant/50 hover:border-primary/60 hover:bg-surface-container-highest'
+                        }`}
+                      >
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                          className="hidden"
+                        />
+                        <div className="flex items-center gap-4">
+                          <div className="w-20 h-20 shrink-0 rounded-xl overflow-hidden bg-surface-container flex items-center justify-center border border-outline-variant/30">
+                            {imagePreview ? (
+                              <img src={imagePreview} alt="Selected preview" className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="material-symbols-outlined text-[28px] text-on-surface-variant/50">image</span>
+                            )}
+                          </div>
 
-                        <div className="min-w-0 flex-1">
-                          <p className="font-title-md text-on-surface text-[15px]">
-                            {imageFile ? imageFile.name : formData.image ? 'Current image selected' : 'Drop an image here'}
-                          </p>
-                          <p className="text-sm text-on-surface-variant mt-1">
-                            Drag and drop or click to browse. The file stays local until you click {editingItem ? 'Save Changes' : 'Create Item'}.
-                          </p>
-                          {imageFile && (
-                            <p className="text-xs text-on-surface-variant mt-2">
-                              {(imageFile.size / 1024 / 1024).toFixed(2)} MB before compression
+                          <div className="min-w-0 flex-1">
+                            <p className="font-title-md text-on-surface text-[15px]">
+                              {imageFile ? imageFile.name : formData.image ? 'Current image selected' : 'Drop an image here'}
                             </p>
-                          )}
-                        </div>
+                            <p className="text-sm text-on-surface-variant mt-1">
+                              Drag and drop or click to browse. The file stays local until you click {editingItem ? 'Save Changes' : 'Create Item'}.
+                            </p>
+                            {imageFile && (
+                              <p className="text-xs text-on-surface-variant mt-2">
+                                {(imageFile.size / 1024 / 1024).toFixed(2)} MB before compression
+                              </p>
+                            )}
+                          </div>
 
-                        <div className="flex flex-col gap-2">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              fileInputRef.current?.click();
-                            }}
-                            className="px-4 py-2 rounded-lg bg-primary/10 text-primary font-label-caps text-[11px] uppercase tracking-widest hover:bg-primary/20 transition-colors"
-                          >
-                            Choose File
-                          </button>
-                          {(imageFile || formData.image) && (
+                          <div className="flex flex-col gap-2">
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                resetImageSelection(editingItem?.image || '');
+                                fileInputRef.current?.click();
                               }}
-                              className="px-4 py-2 rounded-lg bg-surface-container text-on-surface-variant font-label-caps text-[11px] uppercase tracking-widest hover:text-error transition-colors"
+                              className="px-4 py-2 rounded-lg bg-primary/10 text-primary font-label-caps text-[11px] uppercase tracking-widest hover:bg-primary/20 transition-colors"
                             >
-                              Remove
+                              Choose File
                             </button>
-                          )}
+                            {(imageFile || formData.image) && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  resetImageSelection(editingItem?.image || '');
+                                }}
+                                className="px-4 py-2 rounded-lg bg-surface-container text-on-surface-variant font-label-caps text-[11px] uppercase tracking-widest hover:text-error transition-colors"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    {/* Cloudinary safety message for duplicate pre-fill image clearance */}
-                    {!formData.image && !imageFile && (
-                      <p className="mt-2 text-xs text-[#d4af37] font-medium flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[14px]">warning</span>
-                        <span>Select a new image. Duplicated items must have a new image to maintain asset ownership safety.</span>
+                      {!formData.image && !imageFile && (
+                        <p className="mt-2 text-xs text-[#d4af37] font-medium flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[14px]">warning</span>
+                          <span>Select a new image. Duplicated items must have a new image to maintain asset ownership safety.</span>
+                        </p>
+                      )}
+                      <p className="mt-2 text-xs text-on-surface-variant">
+                        Uploaded on save only. The server recompresses the image before sending it to Cloudinary.
                       </p>
-                    )}
-                    <p className="mt-2 text-xs text-on-surface-variant">
-                      Uploaded on save only. The server recompresses the image before sending it to Cloudinary.
-                    </p>
-                  </div>
-                  <div className="col-span-2 flex items-center gap-3 mt-4">
-                    <label className="inline-flex items-center cursor-pointer group">
-                      <input type="checkbox" checked={formData.chefPick} onChange={e => setFormData({...formData, chefPick: e.target.checked})} className="sr-only peer" />
-                      <div className="relative w-11 h-6 bg-surface-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary shrink-0 transition-colors"></div>
-                      <div className="ml-3 flex flex-col group-hover:opacity-80 transition-opacity">
-                        <span className="font-body-sm text-on-surface">Highlight as Main Hero Item</span>
-                        <span className="font-body-sm text-[10px] text-on-surface-variant opacity-80 leading-tight mt-0.5">Shows this item in the large black & white section at the top of the menu</span>
-                      </div>
-                    </label>
+                    </div>
+                    <div className="col-span-2 flex items-center gap-3 mt-4">
+                      <label className="inline-flex items-center cursor-pointer group">
+                        <input type="checkbox" checked={formData.chefPick} onChange={e => setFormData({...formData, chefPick: e.target.checked})} className="sr-only peer" />
+                        <div className="relative w-11 h-6 bg-surface-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary shrink-0 transition-colors"></div>
+                        <div className="ml-3 flex flex-col group-hover:opacity-80 transition-opacity">
+                          <span className="font-body-sm text-on-surface">Highlight as Main Hero Item</span>
+                          <span className="font-body-sm text-[10px] text-on-surface-variant opacity-80 leading-tight mt-0.5">Shows this item in the large black & white section at the top of the menu</span>
+                        </div>
+                      </label>
+                    </div>
                   </div>
                 </div>
 
-                <div className="pt-6 flex justify-end gap-3 border-t border-outline-variant/20 mt-6">
-                  <button type="button" onClick={handleCloseModal} className="px-5 py-2 text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest">Cancel</button>
-                  <button type="submit" disabled={isSaving} className="bg-primary text-on-primary px-6 py-2 rounded font-label-caps text-[12px] uppercase tracking-widest gold-glow disabled:opacity-50">
+                <footer className="app-overlay-footer pt-6 flex justify-end gap-3 border-t border-outline-variant/20">
+                  <button type="button" onClick={handleCloseModal} className="px-5 py-2 text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer min-h-[44px]">Cancel</button>
+                  <button type="submit" disabled={isSaving} className="bg-primary text-on-primary px-6 py-2 rounded font-label-caps text-[12px] uppercase tracking-widest gold-glow disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer min-h-[44px]">
                     {editingItem ? 'Save Changes' : 'Create Item'}
                   </button>
-                </div>
+                </footer>
               </form>
             </motion.div>
           </motion.div>
@@ -1009,52 +1017,61 @@ export default function MenuManager() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+            className="app-overlay-backdrop bg-black/60 backdrop-blur-sm fixed inset-0 z-[100] flex items-center justify-center p-4"
           >
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-surface-container-low border border-outline-variant/30 rounded-xl w-full max-w-md p-6 shadow-2xl"
+              className="bg-surface-container-low border border-outline-variant/30 rounded-xl w-full max-w-md p-6 shadow-2xl app-modal-wrapper flex flex-col"
             >
-              <div className="flex justify-between items-center mb-6">
+              <header className="app-overlay-header flex justify-between items-center mb-6">
                 <h2 className="font-headline-sm text-primary text-[24px]">Manage Categories</h2>
-                <button onClick={() => setIsCategoryModalOpen(false)} className="text-on-surface-variant hover:text-primary transition-colors">
-                  <span className="material-symbols-outlined">close</span>
+                <button 
+                  type="button"
+                  onClick={() => setIsCategoryModalOpen(false)} 
+                  aria-label="Close dialog"
+                  className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-high/40 transition-colors text-on-surface-variant cursor-pointer focus-visible:ring-2 focus-visible:ring-primary outline-none"
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">close</span>
                 </button>
-              </div>
+              </header>
 
-              <form onSubmit={handleAddCategory} className="flex gap-2 mb-6">
-                <input 
-                  type="text" 
-                  value={newCategoryName} 
-                  onChange={e => setNewCategoryName(e.target.value)} 
-                  placeholder="New Category Name..." 
-                  className="flex-1 bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none" 
-                  required
-                />
-                <button type="submit" className="bg-primary text-on-primary px-4 py-2 rounded font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[18px]">add</span> Add
-                </button>
-              </form>
+              <div className="app-overlay-scroll-body space-y-6 overflow-y-auto">
+                <form onSubmit={handleAddCategory} className="flex gap-2 mb-2">
+                  <input 
+                    type="text" 
+                    value={newCategoryName} 
+                    onChange={e => setNewCategoryName(e.target.value)} 
+                    placeholder="New Category Name..." 
+                    className="flex-1 bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none" 
+                    required
+                  />
+                  <button type="submit" className="bg-primary text-on-primary px-4 py-2 rounded font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center gap-1 cursor-pointer">
+                    <span className="material-symbols-outlined text-[18px]">add</span> Add
+                  </button>
+                </form>
 
-              <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2">
-                {categories.length === 0 ? (
-                  <p className="text-on-surface-variant text-center py-4 font-body-sm opacity-50">No categories found. Create one above.</p>
-                ) : (
-                  categories.map(cat => (
-                    <div key={cat._id} className="flex justify-between items-center bg-surface-container-high px-4 py-3 rounded border border-outline-variant/20 hover:border-outline-variant/50 transition-colors">
-                      <span className="font-body-md text-on-surface">{cat.name}</span>
-                      <button 
-                        onClick={() => handleDeleteCategory(cat._id)} 
-                        className="text-on-surface-variant hover:text-error transition-colors p-1"
-                        title="Delete Category"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">delete</span>
-                      </button>
-                    </div>
-                  ))
-                )}
+                <div className="space-y-2 pr-2">
+                  {categories.length === 0 ? (
+                    <p className="text-on-surface-variant text-center py-4 font-body-sm opacity-50">No categories found. Create one above.</p>
+                  ) : (
+                    categories.map(cat => (
+                      <div key={cat._id} className="flex justify-between items-center bg-surface-container-high px-4 py-3 rounded border border-outline-variant/20 hover:border-outline-variant/50 transition-colors">
+                        <span className="font-body-md text-on-surface">{cat.name}</span>
+                        <button 
+                          type="button"
+                          onClick={() => handleDeleteCategory(cat._id)} 
+                          className="text-on-surface-variant hover:text-error transition-colors p-1 cursor-pointer min-h-[32px] min-w-[32px] flex items-center justify-center rounded focus-visible:ring-2 focus-visible:ring-primary outline-none"
+                          title="Delete Category"
+                          aria-label={`Delete category ${cat.name}`}
+                        >
+                          <span className="material-symbols-outlined text-[18px]" aria-hidden="true">delete</span>
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </motion.div>
           </motion.div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE } from '../config';
+import { useScrollLock } from '../hooks/useScrollLock';
 
 const MAX_SETTLEMENT_RECIPIENTS = 10;
 const TOTAL_SETTLEMENT_BASIS_POINTS = 10000;
@@ -28,6 +29,8 @@ export default function Settings({ user }) {
   const [isUpdatingRole, setIsUpdatingRole] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [actionError, setActionError] = useState('');
+
+  useScrollLock(isModalOpen || !!selectedMember);
 
   // General Config states
   const [restaurantNameInput, setRestaurantNameInput] = useState('');
@@ -497,22 +500,28 @@ export default function Settings({ user }) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            className="app-overlay-backdrop bg-black/60 backdrop-blur-sm fixed inset-0 z-50 flex items-center justify-center p-4"
           >
             <motion.div 
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="bg-surface-container rounded-2xl border border-primary/20 shadow-2xl w-full max-w-md overflow-hidden"
+              className="bg-surface-container rounded-2xl border border-primary/20 shadow-2xl w-full max-w-md overflow-hidden app-modal-wrapper flex flex-col"
             >
-              <div className="p-6 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-lowest">
+              <header className="app-overlay-header p-6 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-lowest shrink-0">
                 <h3 className="font-headline-sm text-primary">Add New Staff</h3>
-                <button onClick={() => setIsModalOpen(false)} className="text-on-surface-variant hover:text-primary transition-colors">
-                  <span className="material-symbols-outlined">close</span>
+                <button 
+                  type="button" 
+                  onClick={() => setIsModalOpen(false)} 
+                  aria-label="Close dialog"
+                  className="text-on-surface-variant hover:text-primary transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">close</span>
                 </button>
-              </div>
+              </header>
 
-              <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
+              <form onSubmit={handleSubmit} className="flex-1 min-h-0 flex flex-col">
+                <div className="app-overlay-scroll-body p-6 flex flex-col gap-4 overflow-y-auto">
                 {error && (
                   <div className="bg-error/10 text-error px-4 py-3 rounded-lg border border-error/20 text-sm font-medium">
                     {error}
@@ -556,15 +565,17 @@ export default function Settings({ user }) {
                   </p>
                 </div>
 
-                <div className="pt-4 flex justify-end gap-3 border-t border-outline-variant/10 mt-2">
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2 text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest transition-colors">
+                </div>
+
+                <footer className="app-overlay-footer p-6 pt-4 flex justify-end gap-3 border-t border-outline-variant/10 shrink-0">
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2 text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest transition-colors min-h-[44px] flex items-center rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer">
                     Cancel
                   </button>
-                  <button type="submit" disabled={isSubmitting} className="bg-primary text-on-primary px-6 py-2 rounded-lg font-label-caps text-[12px] uppercase tracking-widest gold-glow disabled:opacity-50 flex items-center gap-2">
+                  <button type="submit" disabled={isSubmitting} className="bg-primary text-on-primary px-6 py-2 rounded-lg font-label-caps text-[12px] uppercase tracking-widest gold-glow disabled:opacity-50 flex items-center gap-2 min-h-[44px] outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer">
                     {isSubmitting ? <span className="material-symbols-outlined animate-spin text-[16px]">progress_activity</span> : null}
                     Add Member
                   </button>
-                </div>
+                </footer>
               </form>
             </motion.div>
           </motion.div>
@@ -578,22 +589,27 @@ export default function Settings({ user }) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            className="app-overlay-backdrop bg-black/60 backdrop-blur-sm fixed inset-0 z-50 flex items-center justify-center p-4"
           >
             <motion.div 
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="bg-surface-container rounded-2xl border border-primary/20 shadow-2xl w-full max-w-md overflow-hidden"
+              className="bg-surface-container rounded-2xl border border-primary/20 shadow-2xl w-full max-w-md overflow-hidden app-modal-wrapper flex flex-col"
             >
-              <div className="p-6 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-lowest">
+              <header className="app-overlay-header p-6 border-b border-outline-variant/10 flex justify-between items-center bg-surface-container-lowest shrink-0">
                 <h3 className="font-headline-sm text-primary">Staff Profile Details</h3>
-                <button onClick={() => { setSelectedMember(null); setActionError(''); }} className="text-on-surface-variant hover:text-primary transition-colors">
-                  <span className="material-symbols-outlined">close</span>
+                <button 
+                  type="button"
+                  onClick={() => { setSelectedMember(null); setActionError(''); }} 
+                  aria-label="Close dialog"
+                  className="text-on-surface-variant hover:text-primary transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">close</span>
                 </button>
-              </div>
+              </header>
 
-              <div className="p-6 flex flex-col gap-6">
+              <div className="app-overlay-scroll-body p-6 flex flex-col gap-6 overflow-y-auto flex-1">
                 {actionError && (
                   <div className="bg-error/10 text-error px-4 py-3 rounded-lg border border-error/20 text-sm font-medium">
                     {actionError}
@@ -645,7 +661,7 @@ export default function Settings({ user }) {
                           type="button"
                           disabled={isUpdatingRole}
                           onClick={() => handleUpdateRole(selectedMember._id, 'STAFF')}
-                          className={`flex-1 py-2.5 rounded-lg border text-xs font-label-caps uppercase tracking-widest transition-all ${
+                          className={`flex-1 py-2.5 rounded-lg border text-xs font-label-caps uppercase tracking-widest transition-all min-h-[44px] cursor-pointer focus-visible:ring-2 focus-visible:ring-primary outline-none ${
                             selectedMember.role === 'STAFF' 
                               ? 'bg-primary/10 border-primary text-primary shadow-[inset_0_0_10px_rgba(212,175,55,0.1)]' 
                               : 'bg-surface-container-highest border-outline-variant/30 text-on-surface-variant hover:text-on-surface'
@@ -657,7 +673,7 @@ export default function Settings({ user }) {
                           type="button"
                           disabled={isUpdatingRole}
                           onClick={() => handleUpdateRole(selectedMember._id, 'ADMIN')}
-                          className={`flex-1 py-2.5 rounded-lg border text-xs font-label-caps uppercase tracking-widest transition-all ${
+                          className={`flex-1 py-2.5 rounded-lg border text-xs font-label-caps uppercase tracking-widest transition-all min-h-[44px] cursor-pointer focus-visible:ring-2 focus-visible:ring-primary outline-none ${
                             selectedMember.role === 'ADMIN' 
                               ? 'bg-primary/10 border-primary text-primary shadow-[inset_0_0_10px_rgba(212,175,55,0.1)]' 
                               : 'bg-surface-container-highest border-outline-variant/30 text-on-surface-variant hover:text-on-surface'
@@ -676,7 +692,7 @@ export default function Settings({ user }) {
                       type="button"
                       disabled={isDeleting}
                       onClick={() => handleDeleteMember(selectedMember._id)}
-                      className="w-full border border-error/30 hover:bg-error/10 text-error py-3 rounded-lg font-label-caps text-[12px] uppercase tracking-widest transition-all duration-200 flex items-center justify-center gap-2"
+                      className="w-full border border-error/30 hover:bg-error/10 text-error py-3 rounded-lg font-label-caps text-[12px] uppercase tracking-widest transition-all duration-200 flex items-center justify-center gap-2 min-h-[44px] cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       {isDeleting ? (
                         <span className="material-symbols-outlined animate-spin text-[16px]">progress_activity</span>
@@ -687,17 +703,17 @@ export default function Settings({ user }) {
                     </button>
                   </div>
                 )}
-
-                <div className="pt-4 flex justify-end border-t border-outline-variant/10 mt-2">
-                  <button 
-                    type="button" 
-                    onClick={() => { setSelectedMember(null); setActionError(''); }} 
-                    className="px-6 py-2.5 bg-surface-container-highest hover:bg-surface-container-highest/80 text-on-surface rounded-lg font-label-caps text-[12px] uppercase tracking-widest transition-colors"
-                  >
-                    Close
-                  </button>
-                </div>
               </div>
+
+              <footer className="app-overlay-footer p-6 pt-4 flex justify-end border-t border-outline-variant/10 shrink-0">
+                <button 
+                  type="button" 
+                  onClick={() => { setSelectedMember(null); setActionError(''); }} 
+                  className="px-6 py-2.5 bg-surface-container-highest hover:bg-surface-container-highest/80 text-on-surface rounded-lg font-label-caps text-[12px] uppercase tracking-widest transition-colors min-h-[44px] flex items-center outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
+                >
+                  Close
+                </button>
+              </footer>
             </motion.div>
           </motion.div>
         )}

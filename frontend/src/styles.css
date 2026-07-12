@@ -256,3 +256,62 @@
   }
 }
 
+/* Centralized Overlays Positioning & Stacking */
+:root {
+  --app-header-height: 80px;
+}
+
+/* Modals & Backdrop Containers */
+.app-overlay-backdrop {
+  position: fixed;
+  top: var(--app-header-height);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 80;
+}
+
+/* Centered Modal Wrapper */
+.app-modal-wrapper {
+  width: 100%;
+  max-height: calc(100dvh - var(--app-header-height) - 2rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Reusable Overlay Header */
+.app-overlay-header {
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+}
+
+/* Reusable Internal Scroll Body */
+.app-overlay-scroll-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Reusable Footer */
+.app-overlay-footer {
+  flex-shrink: 0;
+}
+
+/* Side Drawers nested inside app-overlay-backdrop */
+.app-drawer-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  height: 100%;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 90;
+}
+
+

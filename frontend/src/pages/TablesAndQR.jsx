@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE } from '../config';
+import { useScrollLock } from '../hooks/useScrollLock';
 
 export default function TablesAndQR() {
   const [tables, setTables] = useState([]);
@@ -36,7 +37,6 @@ export default function TablesAndQR() {
   const fetchInFlightRef = useRef(false);
   const hasLoadedOnceRef = useRef(false);
   const toastTimeoutRef = useRef(null);
-  const originalOverflowRef = useRef('');
   const lastFocusedRef = useRef(null);
 
   const createInputRef = useRef(null);
@@ -129,26 +129,7 @@ export default function TablesAndQR() {
 
   const hasOpenOverlay = isModalOpen || isLocationModalOpen || !!editingTable || !!deleteTargetId || !!selectedTableId;
 
-  // Safe scroll lock handling open overlays
-  useEffect(() => {
-    if (hasOpenOverlay) {
-      if (document.body.style.overflow !== 'hidden') {
-        originalOverflowRef.current = document.body.style.overflow;
-      }
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = originalOverflowRef.current;
-    }
-  }, [hasOpenOverlay]);
-
-  // Restore scroll on unmount
-  useEffect(() => {
-    return () => {
-      if (originalOverflowRef.current !== undefined) {
-        document.body.style.overflow = originalOverflowRef.current;
-      }
-    };
-  }, []);
+  useScrollLock(hasOpenOverlay);
 
   // Escape key handler: Escape closes the topmost active dialog, or dropdown
   useEffect(() => {
@@ -1083,7 +1064,7 @@ export default function TablesAndQR() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+            className="app-overlay-backdrop bg-black/60 backdrop-blur-sm fixed inset-0 z-[100] flex items-center justify-center p-4"
             onClick={(e) => {
               if (e.target === e.currentTarget) return;
             }}
@@ -1095,7 +1076,7 @@ export default function TablesAndQR() {
               role="dialog"
               aria-modal="true"
               aria-labelledby="delete-dialog-title"
-              className="bg-surface-container-low border border-outline-variant/30 rounded-xl w-full max-w-sm p-6 shadow-2xl"
+              className="bg-surface-container-low border border-outline-variant/30 rounded-xl w-full max-w-sm p-6 shadow-2xl app-modal-wrapper"
             >
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-full bg-error/10 flex items-center justify-center">
@@ -1156,7 +1137,7 @@ export default function TablesAndQR() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+            className="app-overlay-backdrop bg-black/60 backdrop-blur-sm fixed inset-0 z-[100] flex items-center justify-center p-4"
             onClick={(e) => {
               if (e.target === e.currentTarget) {
                 setIsLocationModalOpen(false);
@@ -1171,9 +1152,9 @@ export default function TablesAndQR() {
               role="dialog"
               aria-modal="true"
               aria-labelledby="location-dialog-title"
-              className="bg-surface-container-low border border-outline-variant/30 rounded-xl w-full max-w-sm p-6 shadow-2xl overflow-y-auto max-h-[90vh]"
+              className="bg-surface-container-low border border-outline-variant/30 rounded-xl w-full max-w-sm p-6 shadow-2xl app-modal-wrapper flex flex-col"
             >
-              <div className="flex justify-between items-center mb-6">
+              <header className="app-overlay-header flex justify-between items-center mb-6 shrink-0">
                 <h2
                   id="location-dialog-title"
                   className="font-headline-sm text-primary text-[24px]"
@@ -1186,13 +1167,14 @@ export default function TablesAndQR() {
                     setIsLocationModalOpen(false);
                     restoreFocus();
                   }}
-                  aria-label="Close"
+                  aria-label="Close dialog"
                   className="text-on-surface-variant hover:text-primary transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
                 >
-                  <span className="material-symbols-outlined">close</span>
+                  <span className="material-symbols-outlined" aria-hidden="true">close</span>
                 </button>
-              </div>
-              <form onSubmit={submitCreateLocation} className="space-y-4">
+              </header>
+              <form onSubmit={submitCreateLocation} className="flex-1 min-h-0 flex flex-col">
+                <div className="app-overlay-scroll-body space-y-4 mb-4 pr-1">
                 <div>
                   <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">
                     Location Name
@@ -1207,7 +1189,8 @@ export default function TablesAndQR() {
                     className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                   />
                 </div>
-                <div className="pt-4 flex justify-end gap-3">
+                </div>
+                <footer className="app-overlay-footer pt-4 flex justify-end gap-3 border-t border-outline-variant/10 shrink-0">
                   <button
                      type="button"
                      onClick={() => {
@@ -1234,7 +1217,7 @@ export default function TablesAndQR() {
                       'Save Location'
                     )}
                   </button>
-                </div>
+                </footer>
               </form>
             </motion.div>
           </motion.div>
@@ -1248,7 +1231,7 @@ export default function TablesAndQR() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+            className="app-overlay-backdrop bg-black/60 backdrop-blur-sm fixed inset-0 z-[100] flex items-center justify-center p-4"
             onClick={(e) => {
               if (e.target === e.currentTarget) {
                 setIsModalOpen(false);
@@ -1263,9 +1246,9 @@ export default function TablesAndQR() {
               role="dialog"
               aria-modal="true"
               aria-labelledby="create-table-dialog-title"
-              className="bg-surface-container-low border border-outline-variant/30 rounded-xl w-full max-w-md p-6 shadow-2xl overflow-y-auto max-h-[90vh]"
+              className="bg-surface-container-low border border-outline-variant/30 rounded-xl w-full max-w-md p-6 shadow-2xl app-modal-wrapper flex flex-col"
             >
-              <div className="flex justify-between items-center mb-6">
+              <header className="app-overlay-header flex justify-between items-center mb-6 shrink-0">
                 <h2
                   id="create-table-dialog-title"
                   className="font-headline-sm text-primary text-[24px]"
@@ -1278,13 +1261,14 @@ export default function TablesAndQR() {
                     setIsModalOpen(false);
                     restoreFocus();
                   }}
-                  aria-label="Close"
+                  aria-label="Close dialog"
                   className="text-on-surface-variant hover:text-primary transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
                 >
-                  <span className="material-symbols-outlined">close</span>
+                  <span className="material-symbols-outlined" aria-hidden="true">close</span>
                 </button>
-              </div>
-              <form onSubmit={submitGenerateQR} className="space-y-4">
+              </header>
+              <form onSubmit={submitGenerateQR} className="flex-1 min-h-0 flex flex-col">
+                <div className="app-overlay-scroll-body space-y-4 mb-4 pr-1">
                 <div>
                   <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">
                     Table Name / Number
@@ -1336,7 +1320,8 @@ export default function TablesAndQR() {
                     className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                   />
                 </div>
-                <div className="pt-4 flex justify-end gap-3">
+                </div>
+                <footer className="app-overlay-footer pt-4 flex justify-end gap-3 border-t border-outline-variant/10 shrink-0">
                   <button
                     type="button"
                     onClick={() => {
@@ -1363,7 +1348,7 @@ export default function TablesAndQR() {
                       'Generate & Save'
                     )}
                   </button>
-                </div>
+                </footer>
               </form>
             </motion.div>
           </motion.div>
@@ -1377,7 +1362,7 @@ export default function TablesAndQR() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+            className="app-overlay-backdrop bg-black/60 backdrop-blur-sm fixed inset-0 z-[100] flex items-center justify-center p-4"
             onClick={(e) => {
               if (e.target === e.currentTarget) {
                 setEditingTable(null);
@@ -1392,9 +1377,9 @@ export default function TablesAndQR() {
               role="dialog"
               aria-modal="true"
               aria-labelledby="edit-table-dialog-title"
-              className="bg-surface-container-low border border-outline-variant/30 rounded-xl w-full max-w-md p-6 shadow-2xl overflow-y-auto max-h-[90vh]"
+              className="bg-surface-container-low border border-outline-variant/30 rounded-xl w-full max-w-md p-6 shadow-2xl app-modal-wrapper flex flex-col"
             >
-              <div className="flex justify-between items-center mb-6">
+              <header className="app-overlay-header flex justify-between items-center mb-6 shrink-0">
                 <h2
                   id="edit-table-dialog-title"
                   className="font-headline-sm text-primary text-[24px]"
@@ -1407,13 +1392,14 @@ export default function TablesAndQR() {
                     setEditingTable(null);
                     restoreFocus();
                   }}
-                  aria-label="Close"
+                  aria-label="Close dialog"
                   className="text-on-surface-variant hover:text-primary transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
                 >
-                  <span className="material-symbols-outlined">close</span>
+                  <span className="material-symbols-outlined" aria-hidden="true">close</span>
                 </button>
-              </div>
-              <form onSubmit={submitEditTable} className="space-y-4">
+              </header>
+              <form onSubmit={submitEditTable} className="flex-1 min-h-0 flex flex-col">
+                <div className="app-overlay-scroll-body space-y-4 mb-4 pr-1">
                 <div>
                   <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">
                     Table Name / Number
@@ -1464,7 +1450,8 @@ export default function TablesAndQR() {
                     className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                   />
                 </div>
-                <div className="pt-4 flex justify-end gap-3">
+                </div>
+                <footer className="app-overlay-footer pt-4 flex justify-end gap-3 border-t border-outline-variant/10 shrink-0">
                   <button
                     type="button"
                     onClick={() => {
@@ -1491,7 +1478,7 @@ export default function TablesAndQR() {
                       'Save Changes'
                     )}
                   </button>
-                </div>
+                </footer>
               </form>
             </motion.div>
           </motion.div>
@@ -1505,7 +1492,7 @@ export default function TablesAndQR() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[90] flex justify-end"
+            className="app-overlay-backdrop bg-black/60 backdrop-blur-sm fixed inset-0 z-[90] flex justify-end md:left-[280px]"
             onClick={(e) => {
               if (e.target === e.currentTarget) {
                 setSelectedTableId(null);
@@ -1522,10 +1509,10 @@ export default function TablesAndQR() {
               aria-modal="true"
               aria-labelledby="table-details-drawer-title"
               tabIndex={-1}
-              className="bg-surface-container-low border-l border-outline-variant/30 w-full max-w-md h-full flex flex-col shadow-2xl relative overflow-hidden"
+              className="app-drawer-panel bg-surface-container-low border-l border-outline-variant/30 w-full max-w-md h-full flex flex-col shadow-2xl relative overflow-hidden ml-auto"
             >
               {/* Header */}
-              <div className="p-6 border-b border-outline-variant/20 flex justify-between items-center bg-surface-container-low shrink-0">
+              <header className="app-overlay-header p-6 border-b border-outline-variant/20 flex justify-between items-center bg-surface-container-low shrink-0">
                 <div>
                   <span className="block font-label-caps text-[10px] tracking-widest text-primary font-bold uppercase mb-1">
                     Table Details
@@ -1552,10 +1539,10 @@ export default function TablesAndQR() {
                 >
                   <span className="material-symbols-outlined" aria-hidden="true">close</span>
                 </button>
-              </div>
+              </header>
 
               {/* Scrollable Content */}
-              <div className="flex-1 overflow-y-auto overscroll-contain p-6 space-y-8 pb-24">
+              <div className="app-overlay-scroll-body flex-1 overflow-y-auto overscroll-contain p-6 space-y-8 pb-24">
                 {/* QR Preview Section */}
                 <div className="flex flex-col items-center">
                   <div className="w-full max-w-[280px] aspect-square bg-white rounded-2xl flex items-center justify-center p-4 border border-primary/10 shadow-md">
