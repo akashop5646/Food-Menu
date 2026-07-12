@@ -116,21 +116,9 @@ router.post(
           return res.status(400).send('Bad Request: Missing transfer ID');
         }
 
-        const recipientAccountId = transfer.account;
-        const amount = transfer.amount;
-        const currency = transfer.currency;
-        const sourcePaymentId = transfer.source;
-        const orderNote = transfer.notes?.settlement_order_id;
-        const recipientNote = transfer.notes?.settlement_recipient_id;
-
         const syncResult = await syncRouteTransferStatus({
           transferId,
-          recipientAccountId,
-          amount,
-          currency,
-          sourcePaymentId,
-          orderNote,
-          recipientNote,
+          transfer,
           status: event === 'transfer.processed' ? 'processed' : 'failed',
           error: transfer.error
         });

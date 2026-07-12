@@ -668,3 +668,160 @@ test('Payment status remains PAID after synchronization or recovery execution', 
 
   assert.equal(mockOrders.docs[0].paymentStatus, 'PAID'); // remains PAID
 });
+
+// Part 4 & 5 Regression Tests
+test('transfer.processed with actual Razorpay linked-account field recipient', async () => {
+  mockOrders.docs = [getFreshOrder()];
+
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    transfer: {
+      id: 'trf_123',
+      recipient: 'acc_1', // actual Razorpay linked-account field
+      amount: 500,
+      currency: 'INR',
+      source: 'pay_123',
+      notes: {
+        settlement_order_id: 'order123',
+        settlement_recipient_id: 'rec_1'
+      }
+    },
+    status: 'processed'
+  });
+
+  assert.equal(res.success, true);
+  assert.equal(res.status, 'PROCESSED');
+  const recipient = mockOrders.docs[0].splitSettlement.recipients[0];
+  assert.equal(recipient.status, 'PROCESSED');
+  assert.equal(recipient.transferStatus, 'processed');
+  assert.ok(recipient.processedAt instanceof Date);
+  assert.equal(mockOrders.docs[0].splitSettlement.status, 'PROCESSED');
+});
+
+test('transfer.failed with actual linked-account field correctly', async () => {
+  mockOrders.docs = [getFreshOrder()];
+
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    transfer: {
+      id: 'trf_123',
+      recipient: 'acc_1',
+      amount: 500,
+      currency: 'INR',
+      source: 'pay_123',
+      notes: {
+        settlement_order_id: 'order123',
+        settlement_recipient_id: 'rec_1'
+      }
+    },
+    status: 'failed',
+    error: { code: 'FAIL_TEST_2', description: 'Actual fail description' }
+  });
+
+  assert.equal(res.success, true);
+  assert.equal(res.status, 'FAILED');
+  const recipient = mockOrders.docs[0].splitSettlement.recipients[0];
+  assert.equal(recipient.status, 'FAILED');
+  assert.equal(recipient.transferStatus, 'failed');
+  assert.equal(recipient.failureCode, 'FAIL_TEST_2');
+  assert.equal(recipient.failureDescription, 'Actual fail description');
+});
+
+test('Legacy transfer response shape account is supported', async () => {
+  mockOrders.docs = [getFreshOrder()];
+
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    transfer: {
+      id: 'trf_123',
+      account: 'acc_1', // legacy field
+      amount: 500,
+      currency: 'INR',
+      source: 'pay_123',
+      notes: {
+        settlement_order_id: 'order123',
+        settlement_recipient_id: 'rec_1'
+      }
+    },
+    status: 'processed'
+  });
+
+  assert.equal(res.success, true);
+  assert.equal(res.status, 'PROCESSED');
+});
+
+test('Missing linked-account fields is rejected safely', async () => {
+  mockOrders.docs = [getFreshOrder()];
+
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    transfer: {
+      id: 'trf_123',
+      amount: 500,
+      currency: 'INR',
+      source: 'pay_123',
+      notes: {
+        settlement_order_id: 'order123',
+        settlement_recipient_id: 'rec_1'
+      }
+    },
+    status: 'processed'
+  });
+
+  assert.equal(res.success, false);
+  assert.equal(res.reason, 'MISSING_ACCOUNT');
+});
+
+test('Incorrect linked-account ID is rejected', async () => {
+  mockOrders.docs = [getFreshOrder()];
+
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    transfer: {
+      id: 'trf_123',
+      recipient: 'acc_wrong',
+      amount: 500,
+      currency: 'INR',
+      source: 'pay_123',
+      notes: {
+        settlement_order_id: 'order123',
+        settlement_recipient_id: 'rec_1'
+      }
+    },
+    status: 'processed'
+  });
+
+  assert.equal(res.success, false);
+  assert.equal(res.reason, 'ACCOUNT_MISMATCH');
+});
+
+test('Conflicting linked-account fields is rejected safely', async () => {
+  mockOrders.docs = [getFreshOrder()];
+
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    transfer: {
+      id: 'trf_123',
+      recipient: 'acc_1',
+      account: 'acc_2', // conflict
+      amount: 500,
+      currency: 'INR',
+      source: 'pay_123',
+      notes: {
+        settlement_order_id: 'order123',
+        settlement_recipient_id: 'rec_1'
+      }
+    },
+    status: 'processed'
+  });
+
+  assert.equal(res.success, false);
+  assert.equal(res.reason, 'RECONCILIATION_REQUIRED');
+});
+
+test('Express trust proxy configuration is set correctly', async () => {
+  process.env.VERCEL = 'true';
+  const serverModule = await import('../server.js');
+  const app = serverModule.default;
+  assert.ok(app.get('trust proxy'));
+});

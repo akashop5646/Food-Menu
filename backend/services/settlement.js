@@ -261,8 +261,20 @@ export async function initializeAndProcessSettlementForPaidOrder(orderId) {
   return { initialized: true, processed: true, status: settlement.status };
 }
 
+export function getTransferLinkedAccountId(transfer) {
+  if (!transfer) return null;
+  const recipient = transfer.recipient;
+  const account = transfer.account;
+  if (recipient && account && recipient !== account) {
+    return { conflict: true };
+  }
+  const result = recipient || account || null;
+  return typeof result === 'string' ? result : null;
+}
+
 export async function syncRouteTransferStatus({
   transferId,
+  transfer,
   recipientAccountId,
   amount,
   currency,
@@ -275,6 +287,19 @@ export async function syncRouteTransferStatus({
   const db = await getDB();
   const maxRetries = 3;
   let attempt = 0;
+
+  // Backward compatibility: map flat parameters to a transfer entity if transfer is not provided
+  const resolvedTransfer = transfer || {
+    id: transferId,
+    recipient: recipientAccountId,
+    amount,
+    currency,
+    source: sourcePaymentId,
+    notes: {
+      settlement_order_id: orderNote,
+      settlement_recipient_id: recipientNote
+    }
+  };
 
   while (attempt < maxRetries) {
     attempt++;
@@ -294,28 +319,46 @@ export async function syncRouteTransferStatus({
     }
     const recipient = settlement.recipients[recipientIndex];
 
-    // Secondary validations
-    if (recipient.linkedAccountId !== recipientAccountId) {
-      return { success: false, retryable: false, reason: 'ACCOUNT_MISMATCH' };
-    }
-    if (Number(recipient.amountPaise) !== Number(amount)) {
-      return { success: false, retryable: false, reason: 'AMOUNT_MISMATCH' };
-    }
-    if (String(currency).toUpperCase() !== 'INR') {
-      return { success: false, retryable: false, reason: 'CURRENCY_MISMATCH' };
-    }
-    if (sourcePaymentId && settlement.razorpayPaymentId && sourcePaymentId !== settlement.razorpayPaymentId) {
-      return { success: false, retryable: false, reason: 'SOURCE_PAYMENT_MISMATCH' };
-    }
-    if (orderNote && String(orderNote) !== String(order._id)) {
-      return { success: false, retryable: false, reason: 'ORDER_NOTE_MISMATCH' };
-    }
-    if (recipientNote && String(recipientNote) !== String(recipient.recipientId)) {
-      return { success: false, retryable: false, reason: 'RECIPIENT_NOTE_MISMATCH' };
-    }
-
     const now = new Date();
     let changed = false;
+
+    // Validate account using the helper
+    const recipientAccountId = getTransferLinkedAccountId(resolvedTransfer);
+
+    if (recipientAccountId && recipientAccountId.conflict) {
+      console.warn('⚠️ Transfer webhook validation failed: reason=CONFLICTING_ACCOUNT_FIELDS');
+      return { success: false, retryable: false, reason: 'RECONCILIATION_REQUIRED' };
+    }
+
+    const amount = resolvedTransfer.amount;
+    const currency = resolvedTransfer.currency;
+    const sourcePaymentId = resolvedTransfer.source;
+    const orderNote = resolvedTransfer.notes?.settlement_order_id;
+    const recipientNote = resolvedTransfer.notes?.settlement_recipient_id;
+
+    // Primary validation check for mismatch
+    let validationError = null;
+
+    if (!recipientAccountId) {
+      validationError = 'MISSING_ACCOUNT';
+    } else if (recipient.linkedAccountId !== recipientAccountId) {
+      validationError = 'ACCOUNT_MISMATCH';
+    } else if (Number(recipient.amountPaise) !== Number(amount)) {
+      validationError = 'AMOUNT_MISMATCH';
+    } else if (String(currency).toUpperCase() !== 'INR') {
+      validationError = 'CURRENCY_MISMATCH';
+    } else if (sourcePaymentId && settlement.razorpayPaymentId && sourcePaymentId !== settlement.razorpayPaymentId) {
+      validationError = 'SOURCE_PAYMENT_MISMATCH';
+    } else if (orderNote && String(orderNote) !== String(order._id)) {
+      validationError = 'ORDER_NOTE_MISMATCH';
+    } else if (recipientNote && String(recipientNote) !== String(recipient.recipientId)) {
+      validationError = 'RECIPIENT_NOTE_MISMATCH';
+    }
+
+    if (validationError) {
+      console.warn(`⚠️ Transfer webhook validation failed: reason=${validationError} recipientFieldPresent=${Boolean(resolvedTransfer.recipient)} accountFieldPresent=${Boolean(resolvedTransfer.account)} amountMatches=${Number(recipient.amountPaise) === Number(amount)} currencyMatches=${String(currency).toUpperCase() === 'INR'}`);
+      return { success: false, retryable: false, reason: validationError };
+    }
 
     // Idempotency & Out-of-order handling
     if (recipient.status === 'PROCESSED') {
