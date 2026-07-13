@@ -2,6 +2,13 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE } from '../config';
 import { useScrollLock } from '../hooks/useScrollLock';
+import {
+  buildSinglePaymentReceiptData,
+  generateSinglePaymentReceiptHtml,
+  buildFilteredPaymentReportData,
+  generatePaymentReportHtml,
+  openPrintableDocument
+} from '../utils/paymentDocumentHelper';
 
 // Money formatting and numeric extraction helpers
 const getFoodSubtotal = (order) => {
@@ -174,6 +181,8 @@ export default function Payments({ refreshKey }) {
   const [paymentsError, setPaymentsError] = useState(false);
   const [isPaymentsRefreshing, setIsPaymentsRefreshing] = useState(false);
   const [copyStatus, setCopyStatus] = useState({});
+  const [isGeneratingReceipt, setIsGeneratingReceipt] = useState(false);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
   const paymentsRequestIdRef = useRef(0);
   const paymentsInFlightRef = useRef(false);
@@ -293,6 +302,41 @@ export default function Payments({ refreshKey }) {
       .catch(err => console.error('Failed to copy text:', err));
   }, []);
 
+  const handlePrintReceipt = useCallback((order) => {
+    if (isGeneratingReceipt) return;
+    // ponytail: open window synchronously before any data work to avoid popup blocking
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('The print preview was blocked. Allow pop-ups for Aurum OS and try again.');
+      return;
+    }
+    setIsGeneratingReceipt(true);
+    try {
+      const receiptData = buildSinglePaymentReceiptData(order);
+      if (!receiptData) {
+        printWindow.close();
+        alert('Unable to generate receipt. Only paid orders can produce receipts.');
+        return;
+      }
+      const html = generateSinglePaymentReceiptHtml(receiptData);
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.document.title = 'Payment Receipt';
+      if (printWindow.document.readyState === 'complete') {
+        printWindow.print();
+      } else {
+        printWindow.addEventListener('load', () => printWindow.print());
+      }
+      // ponytail: intentionally NOT closing — user closes after print/save
+    } catch (err) {
+      console.error('Receipt generation failed:', err.message);
+      alert('Failed to generate the receipt. Please try again.');
+    } finally {
+      setIsGeneratingReceipt(false);
+    }
+  }, [isGeneratingReceipt]);
+
   const handleMarkAsPaid = async (orderId) => {
     // ponytail: optimistic UI updates for instant verification change feedback in payments list
     const prevPaymentOrders = [...paymentOrders];
@@ -392,6 +436,48 @@ export default function Payments({ refreshKey }) {
       return true;
     });
   }, [paymentOrders, dateBounds, paymentsStatusFilter, paymentsTypeFilter, paymentsSearch, paymentsTimeRange, paymentsCustomStartDate, paymentsCustomEndDate]);
+
+  const handlePrintReport = useCallback(() => {
+    if (isGeneratingReport) return;
+    // ponytail: open window synchronously before data work
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('The print preview was blocked. Allow pop-ups for Aurum OS and try again.');
+      return;
+    }
+    setIsGeneratingReport(true);
+    try {
+      const activeFilters = {
+        timeRange: paymentsTimeRange,
+        customStartDate: paymentsCustomStartDate,
+        customEndDate: paymentsCustomEndDate,
+        statusFilter: paymentsStatusFilter,
+        typeFilter: paymentsTypeFilter,
+        search: paymentsSearch
+      };
+      const reportData = buildFilteredPaymentReportData(filteredPaymentOrders, activeFilters);
+      if (!reportData) {
+        printWindow.close();
+        alert('Unable to generate the report. Please try again.');
+        return;
+      }
+      const html = generatePaymentReportHtml(reportData);
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.document.title = 'Payment History Report';
+      if (printWindow.document.readyState === 'complete') {
+        printWindow.print();
+      } else {
+        printWindow.addEventListener('load', () => printWindow.print());
+      }
+    } catch (err) {
+      console.error('Report generation failed:', err.message);
+      alert('Failed to generate the report. Please try again.');
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  }, [isGeneratingReport, filteredPaymentOrders, paymentsTimeRange, paymentsCustomStartDate, paymentsCustomEndDate, paymentsStatusFilter, paymentsTypeFilter, paymentsSearch]);
 
   // Pagination states
   const ITEMS_PER_PAGE = 25;
@@ -722,6 +808,19 @@ export default function Payments({ refreshKey }) {
               ))}
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={handlePrintReport}
+            disabled={isGeneratingReport || filteredPaymentOrders.length === 0}
+            aria-label="Print or save payment history report"
+            className="bg-primary/10 hover:bg-primary text-primary hover:text-on-primary border border-primary/30 px-3 py-1.5 rounded-xl font-semibold text-xs transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 whitespace-nowrap"
+          >
+            <span className={`material-symbols-outlined text-sm ${isGeneratingReport ? 'animate-spin' : ''}`}>
+              {isGeneratingReport ? 'progress_activity' : 'print'}
+            </span>
+            {isGeneratingReport ? 'Generating...' : 'Print / Save Report'}
+          </button>
         </div>
 
         {/* Custom Date Pickers */}
@@ -1196,6 +1295,31 @@ export default function Payments({ refreshKey }) {
                     </div>
                   )}
                 </div>
+
+                {/* Print/Save Receipt action for PAID orders */}
+                {selectedOrder.paymentStatus === 'PAID' && (
+                  <div className="pt-4 border-t border-outline-variant/10">
+                    <button
+                      type="button"
+                      onClick={() => handlePrintReceipt(selectedOrder)}
+                      disabled={isGeneratingReceipt}
+                      aria-label="Print or save receipt for this paid order"
+                      className="w-full bg-gold-metallic text-on-primary-fixed h-12 rounded-xl font-label-caps text-label-caps uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50"
+                    >
+                      {isGeneratingReceipt ? (
+                        <>
+                          <span className="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined text-[18px]">receipt_long</span>
+                          Print / Save Receipt
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
             </aside>
           </div>
