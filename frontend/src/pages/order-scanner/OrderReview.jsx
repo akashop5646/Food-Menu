@@ -92,7 +92,7 @@ export default function OrderReview({
             value={paymentType}
             onChange={(e) => setPaymentType(e.target.value)}
             disabled={isSubmitting}
-            className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-xl px-3 py-2.5 focus:border-primary outline-none text-sm disabled:opacity-50"
+            className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-xl px-3 py-2.5 focus:border-primary outline-none text-base md:text-sm disabled:opacity-50"
           >
             {paymentMethods.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -106,7 +106,7 @@ export default function OrderReview({
             value={paymentStatus}
             onChange={(e) => setPaymentStatus(e.target.value)}
             disabled={isSubmitting}
-            className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-xl px-3 py-2.5 focus:border-primary outline-none text-sm disabled:opacity-50"
+            className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-xl px-3 py-2.5 focus:border-primary outline-none text-base md:text-sm disabled:opacity-50"
           >
             {paymentStatuses.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -120,7 +120,7 @@ export default function OrderReview({
           type="button"
           onClick={onBack}
           disabled={isSubmitting}
-          className="flex-1 bg-surface-container-high border border-outline-variant/50 text-on-surface hover:text-error hover:border-error/50 py-3.5 rounded-xl font-label-caps text-[13px] uppercase tracking-widest transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          className="flex-1 bg-surface-container-high border border-outline-variant/50 text-on-surface hover:text-error hover:border-error/50 h-12 py-0 rounded-xl font-label-caps text-[13px] uppercase tracking-widest transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
         >
           <span className="material-symbols-outlined text-[18px]">arrow_back</span>
           Back to Edit
@@ -129,7 +129,7 @@ export default function OrderReview({
           type="button"
           onClick={onConfirm}
           disabled={isSubmitting}
-          className="flex-[2] bg-gold-metallic text-on-primary-fixed py-3.5 rounded-xl font-label-caps text-[13px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
+          className="flex-[2] bg-gold-metallic text-on-primary-fixed h-12 py-0 rounded-xl font-label-caps text-[13px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
         >
           {isSubmitting ? (
             <>

@@ -44,7 +44,7 @@ export default function ManualOrderSummary({
         type="button"
         disabled={isSubmitting || !selectedTable || manualLineItems.length === 0}
         onClick={onReview}
-        className="w-full bg-gold-metallic text-on-primary-fixed py-4 rounded-xl font-label-caps text-[13px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full bg-gold-metallic text-on-primary-fixed h-12 py-0 rounded-xl font-label-caps text-[13px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <span className="material-symbols-outlined text-[18px]">visibility</span>
         Review Order

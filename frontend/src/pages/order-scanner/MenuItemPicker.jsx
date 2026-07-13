@@ -29,7 +29,7 @@ export default function MenuItemPicker({
             value={manualSearch}
             onChange={(e) => setManualSearch(e.target.value)}
             placeholder="Search menu items..."
-            className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-xl pl-10 pr-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm"
+            className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-xl pl-10 pr-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none text-base md:text-sm"
           />
         </div>
       </div>
@@ -80,15 +80,15 @@ export default function MenuItemPicker({
                       </div>
                     </div>
 
-                    <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="text-[10px] uppercase tracking-widest text-on-surface-variant min-w-0">
+                    <div className="mt-3 flex flex-row items-center justify-between gap-3">
+                      <div className="text-[10px] uppercase tracking-widest text-on-surface-variant min-w-0 truncate pr-2">
                         {item.categories && item.categories.length > 0 ? item.categories.join(' · ') : 'Menu Item'}
                       </div>
-                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                      <div className="flex items-center gap-2 shrink-0">
                         <button
                           type="button"
                           onClick={() => setItemQuantity(item, -1)}
-                          className="w-8 h-8 rounded-full border border-outline-variant/30 text-on-surface-variant hover:text-error hover:border-error/40 flex items-center justify-center cursor-pointer"
+                          className="w-10 h-10 md:w-8 md:h-8 rounded-full border border-outline-variant/30 text-on-surface-variant hover:text-error hover:border-error/40 flex items-center justify-center cursor-pointer"
                           aria-label={`Remove one ${item.name}`}
                         >
                           <span className="material-symbols-outlined text-[18px]">remove</span>
@@ -97,7 +97,7 @@ export default function MenuItemPicker({
                         <button
                           type="button"
                           onClick={() => setItemQuantity(item, 1)}
-                          className="w-8 h-8 rounded-full bg-primary text-on-primary hover:opacity-90 flex items-center justify-center cursor-pointer"
+                          className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-primary text-on-primary hover:opacity-90 flex items-center justify-center cursor-pointer"
                           aria-label={`Add one ${item.name}`}
                         >
                           <span className="material-symbols-outlined text-[18px]">add</span>

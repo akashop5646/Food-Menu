@@ -13,7 +13,7 @@ export default function ManualOrderBuilder({
   clearManualOrder
 }) {
   return (
-    <div className="flex items-start justify-between gap-4">
+    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
       <div className="flex-1">
         <h3 className="font-headline-sm text-xl text-on-surface">Manual order composer</h3>
         <p className="text-sm text-on-surface-variant mt-1">
@@ -26,7 +26,7 @@ export default function ManualOrderBuilder({
             <select
               value={selectedTableId}
               onChange={(e) => selectTable(e.target.value)}
-              className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-xl px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm"
+              className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-xl px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none text-base md:text-sm"
             >
               <option value="" disabled>Select a table</option>
               {tables.map(table => (
@@ -42,7 +42,7 @@ export default function ManualOrderBuilder({
             <select
               value={selectedLocationId}
               onChange={(e) => setSelectedLocationId(e.target.value)}
-              className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-xl px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm"
+              className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-xl px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none text-base md:text-sm"
             >
               <option value="">Use table location</option>
               {locations.map(location => (

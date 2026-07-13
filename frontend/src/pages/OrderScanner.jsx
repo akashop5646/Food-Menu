@@ -363,7 +363,7 @@ export default function OrderScanner() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto py-8 px-0 flex flex-col gap-6">
+    <div className="max-w-6xl mx-auto py-8 px-4 md:px-0 flex flex-col gap-6">
       <div className="bg-surface-container rounded-2xl border border-outline-variant/20 shadow-lg overflow-hidden">
         <div className="p-4 md:p-8 border-b border-outline-variant/10 bg-surface-container-low">
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
@@ -381,7 +381,7 @@ export default function OrderScanner() {
               </p>
             </div>
 
-            <div className="flex items-center gap-2 bg-surface-container-high rounded-2xl p-1 border border-outline-variant/20">
+            <div className="w-full lg:w-auto h-11 flex items-center bg-surface-container-high rounded-xl p-1 border border-outline-variant/20">
               <button
                 type="button"
                 onClick={() => {
@@ -391,9 +391,9 @@ export default function OrderScanner() {
                   setSuccessMsg('');
                 }}
                 disabled={isSubmitting}
-                className={`px-4 py-2 rounded-xl font-label-caps text-[11px] uppercase tracking-widest transition-colors cursor-pointer ${
+                className={`h-full flex-1 lg:flex-initial px-4 flex items-center justify-center rounded-lg font-label-caps text-[10px] md:text-[11px] uppercase tracking-widest transition-colors cursor-pointer ${
                   mode === 'scan'
-                    ? 'bg-primary text-on-primary shadow-lg'
+                    ? 'bg-primary text-on-primary shadow-lg font-semibold'
                     : 'text-on-surface-variant hover:text-on-surface'
                 }`}
               >
@@ -408,9 +408,9 @@ export default function OrderScanner() {
                   setSuccessMsg('');
                 }}
                 disabled={isSubmitting || (catalogError && tables.length === 0)}
-                className={`px-4 py-2 rounded-xl font-label-caps text-[11px] uppercase tracking-widest transition-colors cursor-pointer ${
+                className={`h-full flex-1 lg:flex-initial px-4 flex items-center justify-center rounded-lg font-label-caps text-[10px] md:text-[11px] uppercase tracking-widest transition-colors cursor-pointer ${
                   mode === 'manual'
-                    ? 'bg-primary text-on-primary shadow-lg'
+                    ? 'bg-primary text-on-primary shadow-lg font-semibold'
                     : 'text-on-surface-variant hover:text-on-surface'
                 } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
@@ -424,18 +424,18 @@ export default function OrderScanner() {
           <OrderStatusMessage successMsg={successMsg} errorMsg={error || catalogError} />
 
           {/* Simple Statistics Header */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-surface-container-lowest border border-outline-variant/15 rounded-2xl p-4">
-              <span className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">Tables</span>
-              <div className="mt-2 text-2xl font-headline-sm text-on-surface">{catalogLoading ? '...' : tables.length}</div>
+          <div className="grid grid-cols-3 gap-3 md:gap-4">
+            <div className="bg-surface-container-lowest border border-outline-variant/15 rounded-xl md:rounded-2xl p-3 md:p-4">
+              <span className="font-label-caps text-[9px] md:text-[10px] text-on-surface-variant uppercase tracking-widest block truncate">Tables</span>
+              <div className="mt-1 md:mt-2 text-xl md:text-2xl font-headline-sm text-on-surface">{catalogLoading ? '...' : tables.length}</div>
             </div>
-            <div className="bg-surface-container-lowest border border-outline-variant/15 rounded-2xl p-4">
-              <span className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">Locations</span>
-              <div className="mt-2 text-2xl font-headline-sm text-on-surface">{catalogLoading ? '...' : locations.length}</div>
+            <div className="bg-surface-container-lowest border border-outline-variant/15 rounded-xl md:rounded-2xl p-3 md:p-4">
+              <span className="font-label-caps text-[9px] md:text-[10px] text-on-surface-variant uppercase tracking-widest block truncate">Locations</span>
+              <div className="mt-1 md:mt-2 text-xl md:text-2xl font-headline-sm text-on-surface">{catalogLoading ? '...' : locations.length}</div>
             </div>
-            <div className="bg-surface-container-lowest border border-outline-variant/15 rounded-2xl p-4">
-              <span className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">Menu Items</span>
-              <div className="mt-2 text-2xl font-headline-sm text-on-surface">{catalogLoading ? '...' : menuItems.length}</div>
+            <div className="bg-surface-container-lowest border border-outline-variant/15 rounded-xl md:rounded-2xl p-3 md:p-4">
+              <span className="font-label-caps text-[9px] md:text-[10px] text-on-surface-variant uppercase tracking-widest block truncate">Items</span>
+              <div className="mt-1 md:mt-2 text-xl md:text-2xl font-headline-sm text-on-surface">{catalogLoading ? '...' : menuItems.length}</div>
             </div>
           </div>
 

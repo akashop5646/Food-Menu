@@ -96,7 +96,7 @@ export default function ScanOrderPanel({
                 </p>
               </div>
 
-              <div className="flex items-center justify-center gap-2 sm:gap-3 py-3">
+              <div className="flex flex-nowrap items-center justify-center gap-2 sm:gap-3 py-3">
                 {[0, 1, 2, 3].map((idx) => (
                   <input
                     key={idx}
@@ -110,7 +110,7 @@ export default function ScanOrderPanel({
                     onChange={(e) => handleInputChange(e, idx)}
                     onKeyDown={(e) => handleKeyDown(e, idx)}
                     onPaste={handlePaste}
-                    className="w-12 h-16 sm:w-16 sm:h-20 text-center text-2xl sm:text-3xl font-bold font-mono bg-surface-container-highest border-2 border-outline-variant/50 rounded-xl text-on-surface focus:border-primary focus:ring-2 focus:ring-primary/30 outline-none transition-all"
+                    className="w-full max-w-[56px] min-w-0 aspect-square text-center text-2xl sm:text-3xl font-bold font-mono bg-surface-container-highest border-2 border-outline-variant/50 rounded-xl text-on-surface focus:border-primary focus:ring-2 focus:ring-primary/30 outline-none transition-all"
                   />
                 ))}
               </div>
@@ -118,7 +118,7 @@ export default function ScanOrderPanel({
               <button
                 type="submit"
                 disabled={codeInput.length !== 4 || isVerifying}
-                className="bg-primary text-on-primary px-6 py-4 rounded-xl font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full h-12 py-0 bg-primary text-on-primary rounded-xl font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isVerifying ? (
                   <>
@@ -143,7 +143,8 @@ export default function ScanOrderPanel({
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-3">
+            {/* Desktop step cards */}
+            <div className="hidden md:grid md:grid-cols-1 gap-3">
               <div className="rounded-xl border border-outline-variant/15 bg-surface-container-high p-4">
                 <div className="text-[10px] uppercase tracking-widest text-on-surface-variant">Step 1</div>
                 <div className="text-sm text-on-surface mt-1">Ask the customer for their 4-digit order code.</div>
@@ -155,6 +156,25 @@ export default function ScanOrderPanel({
               <div className="rounded-xl border border-outline-variant/15 bg-surface-container-high p-4">
                 <div className="text-[10px] uppercase tracking-widest text-on-surface-variant">Step 3</div>
                 <div className="text-sm text-on-surface mt-1">Confirm and send the order to Live KDS.</div>
+              </div>
+            </div>
+
+            {/* Mobile stepper list */}
+            <div className="flex md:hidden flex-col gap-4 border-l-2 border-outline-variant/30 pl-5 py-1 ml-2 text-left">
+              <div className="relative">
+                <div className="absolute -left-[28px] top-0.5 w-4 h-4 rounded-full bg-primary flex items-center justify-center text-[10px] font-bold text-on-primary">1</div>
+                <div className="text-[10px] font-label-caps text-on-surface-variant uppercase tracking-widest">Step 1</div>
+                <div className="text-sm text-on-surface mt-0.5">Ask the customer for their 4-digit order code.</div>
+              </div>
+              <div className="relative">
+                <div className="absolute -left-[28px] top-0.5 w-4 h-4 rounded-full bg-primary flex items-center justify-center text-[10px] font-bold text-on-primary">2</div>
+                <div className="text-[10px] font-label-caps text-on-surface-variant uppercase tracking-widest">Step 2</div>
+                <div className="text-sm text-on-surface mt-0.5">Verify items, payment method, and table details.</div>
+              </div>
+              <div className="relative">
+                <div className="absolute -left-[28px] top-0.5 w-4 h-4 rounded-full bg-primary flex items-center justify-center text-[10px] font-bold text-on-primary">3</div>
+                <div className="text-[10px] font-label-caps text-on-surface-variant uppercase tracking-widest">Step 3</div>
+                <div className="text-sm text-on-surface mt-0.5">Confirm and send the order to Live KDS.</div>
               </div>
             </div>
           </div>
@@ -224,7 +244,7 @@ export default function ScanOrderPanel({
                       <select
                         value={paymentType}
                         onChange={(e) => setPaymentType(e.target.value)}
-                        className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-3 py-2.5 focus:border-primary outline-none text-sm"
+                        className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-3 py-2.5 focus:border-primary outline-none text-base md:text-sm"
                       >
                         <option value="ONLINE">Razorpay / Online</option>
                         <option value="CASH">Cash Payment</option>
@@ -237,7 +257,7 @@ export default function ScanOrderPanel({
                       <select
                         value={paymentStatus}
                         onChange={(e) => setPaymentStatus(e.target.value)}
-                        className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-3 py-2.5 focus:border-primary outline-none text-sm"
+                        className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-3 py-2.5 focus:border-primary outline-none text-base md:text-sm"
                       >
                         <option value="PENDING">Pending (Pay Later)</option>
                         <option value="PAID">Paid (Manually Verified)</option>
@@ -249,7 +269,7 @@ export default function ScanOrderPanel({
                     <button
                       type="button"
                       onClick={onCancel}
-                      className="flex-1 bg-surface-container-high border border-outline-variant/50 text-on-surface hover:text-error hover:border-error/50 py-3.5 rounded-xl font-label-caps text-[13px] uppercase tracking-widest transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                      className="flex-1 bg-surface-container-high border border-outline-variant/50 text-on-surface hover:text-error hover:border-error/50 h-12 py-0 rounded-xl font-label-caps text-[13px] uppercase tracking-widest transition-colors flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <span className="material-symbols-outlined text-[18px]">close</span>
                       Cancel / Reset
@@ -258,7 +278,7 @@ export default function ScanOrderPanel({
                       type="button"
                       onClick={onReview}
                       disabled={isSubmitting}
-                      className="flex-[2] bg-gold-metallic text-on-primary-fixed py-3.5 rounded-xl font-label-caps text-[13px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
+                      className="flex-[2] bg-gold-metallic text-on-primary-fixed h-12 py-0 rounded-xl font-label-caps text-[13px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
                     >
                       <span className="material-symbols-outlined text-[18px]">visibility</span>
                       Review & Confirm Order

@@ -19,6 +19,7 @@ export default function LiveKDS({
   const [orders, setOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [newOrderToast, setNewOrderToast] = useState(null);
+  const [activeMobileStage, setActiveMobileStage] = useState('NEW');
 
   // KDS sound states & refs
   const [kdsSoundEnabled, setKdsSoundEnabled] = useState(() => {
@@ -162,6 +163,9 @@ export default function LiveKDS({
 
     // Direct trigger: fetch active orders immediately upon new order creation
     fetchActiveOrders();
+
+    // Automatically transition to NEW active stage on mobile for a genuine new ORDER_CREATED event
+    setActiveMobileStage('NEW');
 
     const timer = setTimeout(() => setNewOrderToast(null), 3000);
     return () => clearTimeout(timer);
@@ -559,21 +563,23 @@ export default function LiveKDS({
         }`}
       >
         {/* Prominent Table Badge */}
-        <div className="flex items-center gap-2 bg-surface-container-high border border-outline-variant/30 rounded-xl px-3 py-2">
-          <span className="material-symbols-outlined text-primary text-lg">table_restaurant</span>
-          <span className="font-headline-sm text-base text-primary font-bold">{order.table}</span>
-          {order.version > 1 && (
-            <span className="text-[9px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-lg ml-1 shrink-0">
-              Updated (v{order.version})
-            </span>
-          )}
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-surface-container-high border border-outline-variant/30 rounded-xl px-3 py-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="material-symbols-outlined text-primary text-lg">table_restaurant</span>
+            <span className="font-headline-sm text-base text-primary font-bold">{order.table}</span>
+            {order.version > 1 && (
+              <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-lg ml-1 shrink-0">
+                Updated (v{order.version})
+              </span>
+            )}
+          </div>
           {order.location && (
-            <span className="text-[11px] text-on-surface-variant font-mono font-medium ml-auto bg-surface-container-lowest/80 px-2 py-0.5 rounded-lg border border-outline-variant/10">📍 {order.location}</span>
+            <span className="text-[11px] text-on-surface-variant font-mono font-medium bg-surface-container-lowest/80 px-2 py-0.5 rounded-lg border border-outline-variant/10">📍 {order.location}</span>
           )}
         </div>
 
         <div className="flex justify-between items-center gap-2">
-          <span className={`text-[11px] font-mono flex items-center gap-1 ${isOverdue ? 'text-primary font-bold' : 'text-on-surface-variant/70'}`}>
+          <span className={`text-[11px] font-mono flex flex-wrap items-center gap-x-1.5 gap-y-0.5 ${isOverdue ? 'text-primary font-bold' : 'text-on-surface-variant/70'}`}>
             <span className="material-symbols-outlined text-[14px]">{isOverdue ? 'alarm' : 'schedule'}</span>
             Total {totalAgeMinutes}m · {stageLabel} {stageAgeMinutes}m · by {confirmedByName}
           </span>
@@ -605,7 +611,8 @@ export default function LiveKDS({
               <button
                 type="button"
                 onClick={() => handleOpenEditModal(order)}
-                className="bg-surface-container-highest hover:bg-amber-500/20 hover:text-amber-500 text-on-surface p-2 rounded-xl border border-outline-variant/50 hover:border-amber-500/30 transition-all flex items-center justify-center cursor-pointer shrink-0"
+                aria-label={`Amend order table ${order.table}`}
+                className="bg-surface-container-highest hover:bg-amber-500/20 hover:text-amber-500 text-on-surface p-2 w-11 h-11 rounded-xl border border-outline-variant/50 hover:border-amber-500/30 transition-all flex items-center justify-center cursor-pointer shrink-0"
                 title="Edit Order Items & Details"
               >
                 <span className="material-symbols-outlined text-base">edit</span>
@@ -614,7 +621,7 @@ export default function LiveKDS({
             <motion.button
               whileTap={{ scale: 0.98 }}
               onClick={() => handleMoveStatus(order._id, order.status)}
-              className="flex-1 bg-surface-container-highest hover:bg-primary/25 hover:text-primary text-on-surface py-2 rounded-xl font-label-caps text-[11px] uppercase tracking-widest border border-outline-variant/50 hover:border-primary/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer font-bold"
+              className="flex-1 bg-surface-container-highest hover:bg-primary/25 hover:text-primary text-on-surface h-11 py-0 rounded-xl font-label-caps text-[11px] uppercase tracking-widest border border-outline-variant/50 hover:border-primary/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer font-bold"
             >
               {order.status === 'NEW' && (
                 <>
@@ -656,30 +663,93 @@ export default function LiveKDS({
             <span className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-error animate-pulse'}`} title={wsConnected ? 'Live' : 'Disconnected'} />
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={toggleKdsSound} className="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-all px-2 py-1.5 rounded-lg hover:bg-primary/10 cursor-pointer" title={kdsSoundEnabled ? 'Sound On' : 'Sound Off'}>
+            <button
+              onClick={toggleKdsSound}
+              aria-label={kdsSoundEnabled ? 'Disable KDS sound' : 'Enable KDS sound'}
+              className="flex items-center justify-center gap-1 text-on-surface-variant hover:text-primary transition-all w-11 h-11 sm:w-auto sm:px-2 sm:py-1.5 rounded-lg hover:bg-primary/10 cursor-pointer"
+              title={kdsSoundEnabled ? 'Sound On' : 'Sound Off'}
+            >
               <span className="material-symbols-outlined text-lg">{kdsSoundEnabled ? 'volume_up' : 'volume_off'}</span>
               <span className="text-[10px] font-label-caps uppercase tracking-wider font-semibold hidden sm:inline">{kdsSoundEnabled ? 'Sound On' : 'Sound Off'}</span>
             </button>
             {kdsSoundEnabled && (
-              <button onClick={playTestTone} className="text-on-surface-variant hover:text-primary transition-all cursor-pointer p-1.5 rounded-lg hover:bg-primary/10" title="Test Sound">
+              <button
+                onClick={playTestTone}
+                aria-label="Play test chime"
+                className="text-on-surface-variant hover:text-primary transition-all cursor-pointer w-11 h-11 flex items-center justify-center rounded-lg hover:bg-primary/10"
+                title="Test Sound"
+              >
                 <span className="material-symbols-outlined text-lg">notifications_active</span>
               </button>
             )}
-            <button onClick={handleThemeToggle} className="text-on-surface-variant hover:text-primary transition-all cursor-pointer p-1.5 rounded-lg hover:bg-primary/10">
+            <button
+              onClick={handleThemeToggle}
+              aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              className="text-on-surface-variant hover:text-primary transition-all cursor-pointer w-11 h-11 flex items-center justify-center rounded-lg hover:bg-primary/10"
+            >
               <span className="material-symbols-outlined text-lg">{isDark ? 'light_mode' : 'dark_mode'}</span>
             </button>
-            <button onClick={toggleKitchenMode} className="flex items-center gap-1 bg-primary/10 hover:bg-primary text-primary hover:text-on-primary border border-primary/30 px-3 py-1.5 rounded-xl font-label-caps text-[10px] uppercase tracking-wider font-bold transition-all cursor-pointer">
+            <button
+              onClick={toggleKitchenMode}
+              aria-label="Exit kitchen fullscreen mode"
+              className="flex items-center justify-center gap-1 bg-primary/10 hover:bg-primary text-primary hover:text-on-primary border border-primary/30 h-11 px-3 rounded-xl font-label-caps text-[10px] uppercase tracking-wider font-bold transition-all cursor-pointer"
+            >
               <span className="material-symbols-outlined text-sm">fullscreen_exit</span>
-              Exit Kitchen Mode
+              <span className="hidden xs:inline">Exit Kitchen Mode</span>
             </button>
           </div>
         </header>
       )}
 
+      {/* Mobile Stage Switcher */}
+      <div className="flex md:hidden bg-surface-container-high border-b border-outline-variant/20 p-2 shrink-0 select-none">
+        <div className="flex w-full bg-surface-container-lowest/80 rounded-xl p-1 border border-outline-variant/10">
+          <button
+            type="button"
+            onClick={() => setActiveMobileStage('NEW')}
+            aria-pressed={activeMobileStage === 'NEW'}
+            className={`h-11 flex-1 py-0 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              activeMobileStage === 'NEW'
+                ? 'bg-error text-white shadow-sm'
+                : 'text-on-surface-variant hover:text-on-surface'
+            }`}
+          >
+            <span className="material-symbols-outlined text-base">receipt_long</span>
+            <span>New ({newOrders.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveMobileStage('PREPARING')}
+            aria-pressed={activeMobileStage === 'PREPARING'}
+            className={`h-11 flex-1 py-0 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              activeMobileStage === 'PREPARING'
+                ? 'bg-primary text-on-primary shadow-sm'
+                : 'text-on-surface-variant hover:text-on-surface'
+            }`}
+          >
+            <span className="material-symbols-outlined text-base">soup_kitchen</span>
+            <span>Prep ({preparingOrders.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveMobileStage('READY')}
+            aria-pressed={activeMobileStage === 'READY'}
+            className={`h-11 flex-1 py-0 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              activeMobileStage === 'READY'
+                ? 'bg-tertiary text-on-tertiary shadow-sm'
+                : 'text-on-surface-variant hover:text-on-surface'
+            }`}
+          >
+            <span className="material-symbols-outlined text-base">done_all</span>
+            <span>Ready ({readyOrders.length})</span>
+          </button>
+        </div>
+      </div>
+
       {/* Column lists */}
-      <div className={`flex-1 flex flex-col md:flex-row gap-gutter ${isKitchenMode ? 'p-4 md:p-6 overflow-hidden' : 'h-auto md:h-full'} md:min-w-[900px]`}>
+      <div className={`flex-1 flex flex-col md:flex-row gap-gutter ${isKitchenMode ? 'p-4 md:p-6 overflow-hidden' : 'h-auto md:h-full'} min-w-0 md:min-w-[900px]`}>
         {/* Column 1: New Orders */}
-        <section className="flex-1 min-h-[400px] md:min-h-0 flex flex-col bg-surface/50 rounded-xl border border-outline-variant/20 overflow-hidden stagger-1">
+        <section className={`${activeMobileStage === 'NEW' ? 'flex' : 'hidden'} md:flex flex-1 min-h-[calc(100dvh-12rem)] md:min-h-0 flex-col bg-surface/50 rounded-xl border border-outline-variant/20 overflow-hidden stagger-1`}>
           <div className="p-4 border-b border-outline-variant/20 flex justify-between items-center bg-surface-container-low">
             <h3 className="font-title-md text-title-md text-on-surface flex items-center gap-2">
               New
@@ -688,16 +758,31 @@ export default function LiveKDS({
             {/* Kitchen mode + sound buttons in first column header — only when NOT in fullscreen kitchen mode */}
             {!isKitchenMode && (
               <div className="flex items-center gap-1">
-                <button onClick={toggleKdsSound} className="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-all px-1.5 py-1 rounded-lg hover:bg-primary/10 cursor-pointer" title={kdsSoundEnabled ? 'Sound On' : 'Sound Off'}>
-                  <span className="material-symbols-outlined text-[16px]">{kdsSoundEnabled ? 'volume_up' : 'volume_off'}</span>
+                <button
+                  onClick={toggleKdsSound}
+                  aria-label={kdsSoundEnabled ? 'Disable KDS sound' : 'Enable KDS sound'}
+                  className="flex items-center justify-center text-on-surface-variant hover:text-primary transition-all w-11 h-11 rounded-lg hover:bg-primary/10 cursor-pointer"
+                  title={kdsSoundEnabled ? 'Sound On' : 'Sound Off'}
+                >
+                  <span className="material-symbols-outlined text-[18px]">{kdsSoundEnabled ? 'volume_up' : 'volume_off'}</span>
                 </button>
                 {kdsSoundEnabled && (
-                  <button onClick={playTestTone} className="text-on-surface-variant hover:text-primary transition-all cursor-pointer p-1 rounded-lg hover:bg-primary/10" title="Test Sound">
-                    <span className="material-symbols-outlined text-[16px]">notifications_active</span>
+                  <button
+                    onClick={playTestTone}
+                    aria-label="Play test chime"
+                    className="text-on-surface-variant hover:text-primary transition-all cursor-pointer w-11 h-11 flex items-center justify-center rounded-lg hover:bg-primary/10"
+                    title="Test Sound"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">notifications_active</span>
                   </button>
                 )}
-                <button onClick={toggleKitchenMode} className="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-all px-1.5 py-1 rounded-lg hover:bg-primary/10 cursor-pointer" title="Enter Kitchen Mode">
-                  <span className="material-symbols-outlined text-[16px]">fullscreen</span>
+                <button
+                  onClick={toggleKitchenMode}
+                  aria-label="Enter kitchen fullscreen mode"
+                  className="flex items-center justify-center text-on-surface-variant hover:text-primary transition-all w-11 h-11 rounded-lg hover:bg-primary/10 cursor-pointer"
+                  title="Enter Kitchen Mode"
+                >
+                  <span className="material-symbols-outlined text-[18px]">fullscreen</span>
                 </button>
               </div>
             )}
@@ -721,7 +806,7 @@ export default function LiveKDS({
         </section>
 
         {/* Column 2: Preparing */}
-        <section className="flex-1 min-h-[400px] md:min-h-0 flex flex-col bg-surface/50 rounded-xl border border-outline-variant/20 overflow-hidden stagger-2">
+        <section className={`${activeMobileStage === 'PREPARING' ? 'flex' : 'hidden'} md:flex flex-1 min-h-[calc(100dvh-12rem)] md:min-h-0 flex-col bg-surface/50 rounded-xl border border-outline-variant/20 overflow-hidden stagger-2`}>
           <div className="p-4 border-b border-outline-variant/20 flex justify-between items-center bg-surface-container-low">
             <h3 className="font-title-md text-title-md text-on-surface flex items-center gap-2">
               Preparing
@@ -747,7 +832,7 @@ export default function LiveKDS({
         </section>
 
         {/* Column 3: Ready */}
-        <section className="flex-1 min-h-[400px] md:min-h-0 flex flex-col bg-surface/50 rounded-xl border border-outline-variant/20 overflow-hidden stagger-3">
+        <section className={`${activeMobileStage === 'READY' ? 'flex' : 'hidden'} md:flex flex-1 min-h-[calc(100dvh-12rem)] md:min-h-0 flex-col bg-surface/50 rounded-xl border border-outline-variant/20 overflow-hidden stagger-3`}>
           <div className="p-4 border-b border-outline-variant/20 flex justify-between items-center bg-surface-container-low">
             <h3 className="font-title-md text-title-md text-on-surface flex items-center gap-2">
               Ready
@@ -791,15 +876,16 @@ export default function LiveKDS({
       {/* Edit Order Modal */}
       <AnimatePresence>
         {editingOrder && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-4 bg-black/60 backdrop-blur-sm app-overlay-backdrop md:top-0 md:right-0 md:bottom-0 md:left-0">
             <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-surface-container-low border border-outline-variant/30 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden text-on-surface"
+              initial={{ y: '100%', opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: '100%', opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="bg-surface-container-low border-t md:border border-outline-variant/30 rounded-t-2xl md:rounded-2xl w-full max-w-4xl h-[calc(100dvh-80px)] md:h-auto md:max-h-[85vh] flex flex-col shadow-2xl overflow-hidden text-on-surface"
             >
               {/* Header */}
-              <div className="px-6 py-4 bg-surface-container-high border-b border-outline-variant/30 flex justify-between items-center">
+              <div className="px-6 py-4 bg-surface-container-high border-b border-outline-variant/30 flex justify-between items-center app-overlay-header">
                 <div className="space-y-1">
                   <h3 className="font-headline-sm text-lg font-bold flex items-center gap-2 text-primary">
                     <span className="material-symbols-outlined">edit_square</span>
@@ -864,7 +950,7 @@ export default function LiveKDS({
               )}
 
               {/* Scrollable Content */}
-              <div className="flex-1 overflow-y-auto p-6">
+              <div className="flex-1 overflow-y-auto p-6 pb-32 md:pb-6 app-overlay-scroll-body">
                 {editTab === 'edit' ? (
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                     {/* Left Column: Table/Location details & Add Item */}
@@ -878,7 +964,7 @@ export default function LiveKDS({
                           <select
                             value={editTableId}
                             onChange={(e) => setEditTableId(e.target.value)}
-                            className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary text-on-surface"
+                            className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-xl px-3 py-2 text-base md:text-sm focus:outline-none focus:ring-1 focus:ring-primary text-on-surface"
                           >
                             <option value="">Choose Table...</option>
                             {editTables.map(t => (
@@ -892,7 +978,7 @@ export default function LiveKDS({
                           <select
                             value={editLocationId}
                             onChange={(e) => setEditLocationId(e.target.value)}
-                            className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary text-on-surface"
+                            className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-xl px-3 py-2 text-base md:text-sm focus:outline-none focus:ring-1 focus:ring-primary text-on-surface"
                           >
                             <option value="">Choose Location...</option>
                             {editLocations.map(l => (
@@ -912,7 +998,7 @@ export default function LiveKDS({
                             placeholder="Search menu..."
                             value={editMenuSearch}
                             onChange={(e) => handleSearchMenu(e.target.value)}
-                            className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary text-on-surface"
+                            className="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-xl pl-9 pr-3 py-2 text-base md:text-sm focus:outline-none focus:ring-1 focus:ring-primary text-on-surface"
                           />
                         </div>
 
@@ -990,7 +1076,7 @@ export default function LiveKDS({
                                     <button
                                       type="button"
                                       onClick={() => handleUpdateItemQty(itemId, -1)}
-                                      className="w-7 h-7 rounded-lg bg-surface-container-high border border-outline-variant/30 flex items-center justify-center font-bold text-on-surface-variant hover:bg-surface-variant cursor-pointer"
+                                      className="w-10 h-10 md:w-7 md:h-7 rounded-lg bg-surface-container-high border border-outline-variant/30 flex items-center justify-center font-bold text-on-surface-variant hover:bg-surface-variant cursor-pointer text-lg md:text-sm"
                                     >
                                       -
                                     </button>
@@ -1001,7 +1087,7 @@ export default function LiveKDS({
                                       type="button"
                                       onClick={() => handleUpdateItemQty(itemId, 1)}
                                       disabled={disableIncrease}
-                                      className={`w-7 h-7 rounded-lg bg-surface-container-high border border-outline-variant/30 flex items-center justify-center font-bold text-on-surface-variant hover:bg-surface-variant cursor-pointer ${
+                                      className={`w-10 h-10 md:w-7 md:h-7 rounded-lg bg-surface-container-high border border-outline-variant/30 flex items-center justify-center font-bold text-on-surface-variant hover:bg-surface-variant cursor-pointer text-lg md:text-sm ${
                                         disableIncrease ? 'opacity-30 cursor-not-allowed' : ''
                                       }`}
                                     >
@@ -1029,7 +1115,7 @@ export default function LiveKDS({
                           placeholder="Provide the reason for this order amendment (5 to 500 characters)..."
                           value={editReason}
                           onChange={(e) => setEditReason(e.target.value)}
-                          className="w-full h-16 bg-surface-container-lowest border border-outline-variant/30 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary text-on-surface resize-none"
+                          className="w-full h-16 bg-surface-container-lowest border border-outline-variant/30 rounded-xl px-3 py-2 text-base md:text-sm focus:outline-none focus:ring-1 focus:ring-primary text-on-surface resize-none"
                           maxLength={500}
                         />
                         <div className="flex justify-between items-center text-[10px] font-mono text-on-surface-variant/60">
@@ -1142,7 +1228,7 @@ export default function LiveKDS({
               </div>
 
               {/* Footer */}
-              <div className="px-6 py-4 bg-surface-container-high border-t border-outline-variant/30 flex justify-between items-center">
+              <div className="px-6 py-4 bg-surface-container-high border-t border-outline-variant/30 flex justify-between items-center app-overlay-footer pb-[calc(1rem+env(safe-area-inset-bottom))]">
                 <span className="text-xs text-on-surface-variant/80 italic font-mono flex items-center gap-1">
                   <span className="material-symbols-outlined text-sm">shield</span>
                   Changes sent immediately to KDS
