@@ -9,6 +9,71 @@ import { recordEmployeeActivity } from '../services/employeeAudit.js';
 
 const router = Router();
 
+const MAX_UNIQUE_ITEMS = 50;
+const MAX_ITEM_QUANTITY = 99;
+const MAX_TOTAL_QUANTITY = 500;
+
+function getCanonicalFingerprint(userId, payload) {
+  const mergedItems = {};
+  for (const item of payload.items || []) {
+    const id = String(item.id || item._id || '').trim();
+    if (id) {
+      const quantity = Math.max(0, parseInt(item.quantity, 10) || 0);
+      mergedItems[id] = (mergedItems[id] || 0) + quantity;
+    }
+  }
+
+  const sortedItemIds = Object.keys(mergedItems).sort();
+  const canonicalItems = sortedItemIds.map(id => ({
+    id,
+    quantity: mergedItems[id]
+  }));
+
+  const canonicalRequest = {
+    userId: String(userId || '').trim(),
+    table: payload.table ? String(payload.table).trim() : '',
+    tableId: payload.tableId ? String(payload.tableId).trim() : '',
+    location: payload.location ? String(payload.location).trim() : '',
+    locationId: payload.locationId ? String(payload.locationId).trim() : '',
+    paymentType: payload.paymentType ? String(payload.paymentType).trim() : 'LATER',
+    paymentStatus: payload.paymentStatus ? String(payload.paymentStatus).trim() : 'PENDING',
+    items: canonicalItems
+  };
+
+  const sortedKeys = Object.keys(canonicalRequest).sort();
+  const sortedObj = {};
+  for (const key of sortedKeys) {
+    sortedObj[key] = canonicalRequest[key];
+  }
+
+  const canonicalString = JSON.stringify(sortedObj);
+  return crypto.createHash('sha256').update(canonicalString).digest('hex');
+}
+
+function getAllowlistedResponse(order) {
+  if (!order) return null;
+  return {
+    _id: order._id,
+    table: order.table,
+    location: order.location,
+    tableId: order.tableId,
+    locationId: order.locationId,
+    items: order.items,
+    total: order.total,
+    convenienceFee: order.convenienceFee,
+    totalPayable: order.totalPayable,
+    paymentType: order.paymentType,
+    paymentStatus: order.paymentStatus,
+    source: order.source,
+    status: order.status,
+    confirmedBy: order.confirmedBy,
+    createdAt: order.createdAt,
+    deviceId: order.deviceId,
+    customerIp: order.customerIp,
+    checkoutSessionId: order.checkoutSessionId
+  };
+}
+
 // Drop TTL index on checkout_codes collection to remove code expiration
 (async () => {
   try {
@@ -171,9 +236,11 @@ router.get('/active', async (req, res) => {
 
 // Create a verified order (called by Waiter scanning page)
 router.post('/', requireAuth, async (req, res) => {
-  try {
-    const { table, location, tableId, locationId, items, total, paymentType, paymentStatus, source, deviceId, customerIp, checkoutSessionId } = req.body;
+  let idempotencyFingerprint = null;
+  let idempotencyKey = null;
+  const { table, location, tableId, locationId, items, total, paymentType, paymentStatus, source, deviceId, customerIp, checkoutSessionId } = req.body;
 
+  try {
     // Validation checks
     if (!table) return res.status(400).json({ error: 'Table is required.' });
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -192,28 +259,108 @@ router.post('/', requireAuth, async (req, res) => {
 
     const db = await getDB();
 
-    // Verify items and calculate authoritative total from DB prices
-    const verifiedItems = [];
-    let calculatedTotal = 0;
-    
+    // 1. Mandatory Manual Idempotency Check & Fingerprinting
+    if (source === 'MANUAL') {
+      idempotencyKey = req.headers && req.headers['idempotency-key'];
+      if (!idempotencyKey || typeof idempotencyKey !== 'string') {
+        return res.status(400).json({ error: 'Idempotency-Key header is required for manual orders.' });
+      }
+
+      const validKeyRegex = /^[a-zA-Z0-9-]{16,64}$/;
+      if (!validKeyRegex.test(idempotencyKey)) {
+        return res.status(400).json({ error: 'Invalid Idempotency-Key format. Must be UUID or alphanumeric between 16 and 64 characters.' });
+      }
+
+      idempotencyFingerprint = getCanonicalFingerprint(req.user.id, {
+        table,
+        tableId,
+        location,
+        locationId,
+        paymentType: normalizedPaymentType,
+        paymentStatus,
+        items
+      });
+
+      const existing = await db.collection('orders').findOne({ idempotencyKey });
+      if (existing) {
+        if (existing.idempotencyFingerprint === idempotencyFingerprint) {
+          return res.status(201).json({
+            ...getAllowlistedResponse(existing),
+            duplicate: true
+          });
+        } else {
+          return res.status(409).json({ error: 'Idempotency conflict: An order with this key already exists with different details.' });
+        }
+      }
+    }
+
+    // 2. Scanned Orders Idempotency Check
+    if (source !== 'MANUAL' && checkoutSessionId) {
+      const existing = await db.collection('orders').findOne({ checkoutSessionId });
+      if (existing) {
+        return res.status(201).json({
+          ...getAllowlistedResponse(existing),
+          duplicate: true
+        });
+      }
+    }
+
+    // 3. Validation Bounds on Items
+    const itemMap = {};
     for (const item of items) {
       const id = item.id || item._id;
       if (!id || !ObjectId.isValid(id)) {
         return res.status(400).json({ error: `Invalid item ID: ${id}` });
       }
-      const dbItem = await db.collection('menu_items').findOne({ _id: new ObjectId(id) });
-      if (!dbItem) {
-        return res.status(400).json({ error: `Menu item not found in database: ${item.name || id}` });
-      }
-      const quantity = Number(item.quantity);
-      if (isNaN(quantity) || quantity <= 0) {
+      const qty = Number(item.quantity);
+      if (isNaN(qty) || qty <= 0 || !Number.isInteger(qty)) {
         return res.status(400).json({ error: `Invalid quantity for item: ${item.name || id}` });
       }
+      if (qty > MAX_ITEM_QUANTITY) {
+        return res.status(400).json({ error: `Quantity for item exceeds the maximum limit of ${MAX_ITEM_QUANTITY}.` });
+      }
+      const stringId = String(id);
+      itemMap[stringId] = (itemMap[stringId] || 0) + qty;
+    }
+
+    const uniqueItemIds = Object.keys(itemMap);
+    if (uniqueItemIds.length > MAX_UNIQUE_ITEMS) {
+      return res.status(400).json({ error: `Order exceeds the maximum limit of ${MAX_UNIQUE_ITEMS} unique items.` });
+    }
+
+    const totalQuantity = Object.values(itemMap).reduce((sum, q) => sum + q, 0);
+    if (totalQuantity > MAX_TOTAL_QUANTITY) {
+      return res.status(400).json({ error: `Total order quantity exceeds the maximum limit of ${MAX_TOTAL_QUANTITY} items.` });
+    }
+
+    // 4. Fetch menu items and build the canonical items list using DB values
+    const dbItems = await db.collection('menu_items').find({
+      _id: { $in: uniqueItemIds.map(id => new ObjectId(id)) }
+    }).toArray();
+
+    if (dbItems.length !== uniqueItemIds.length) {
+      return res.status(400).json({ error: 'One or more menu items not found in database.' });
+    }
+
+    const verifiedItems = [];
+    let calculatedTotal = 0;
+
+    for (const dbItem of dbItems) {
+      const stringId = dbItem._id.toString();
+      const quantity = itemMap[stringId];
+
+      if (dbItem.available === false) {
+        return res.status(400).json({ error: `Menu item is currently unavailable: ${dbItem.name}` });
+      }
+      if (dbItem.deleted === true) {
+        return res.status(400).json({ error: `Menu item was deleted: ${dbItem.name}` });
+      }
+
       const verifiedPrice = Number(dbItem.price);
       calculatedTotal += verifiedPrice * quantity;
-      
+
       verifiedItems.push({
-        id: dbItem._id,
+        id: dbItem._id, // MongoDB ObjectId object
         name: dbItem.name,
         price: verifiedPrice,
         quantity: quantity
@@ -242,7 +389,6 @@ router.post('/', requireAuth, async (req, res) => {
       }
     });
 
-    // Safely normalize malformed stored config to disabled/0
     if (feeEnabled && !feeAmountValid) {
       feeEnabled = false;
       feeAmount = 0;
@@ -274,6 +420,11 @@ router.post('/', requireAuth, async (req, res) => {
       checkoutSessionId: checkoutSessionId || null
     };
 
+    if (source === 'MANUAL') {
+      newOrder.idempotencyKey = idempotencyKey;
+      newOrder.idempotencyFingerprint = idempotencyFingerprint;
+    }
+
     const result = await db.collection('orders').insertOne(newOrder);
 
     // Clean up any remaining checkout codes for this checkoutSessionId so they don't pile up
@@ -282,9 +433,9 @@ router.post('/', requireAuth, async (req, res) => {
     }
 
     // Broadcast order creation event
-    broadcast('ORDER_CREATED', newOrder);
+    broadcast('ORDER_CREATED', getAllowlistedResponse(newOrder));
 
-    res.status(201).json(newOrder);
+    res.status(201).json(getAllowlistedResponse(newOrder));
 
     // Record employee activity post-response/mutation
     await recordEmployeeActivity(
@@ -306,6 +457,35 @@ router.post('/', requireAuth, async (req, res) => {
       }
     );
   } catch (error) {
+    if (error.code === 11000) {
+      const isIdempotencyConflict = error.keyPattern && error.keyPattern.idempotencyKey;
+      const isSessionConflict = error.keyPattern && error.keyPattern.checkoutSessionId;
+
+      if (isIdempotencyConflict && idempotencyKey) {
+        const existing = await db.collection('orders').findOne({ idempotencyKey });
+        if (existing) {
+          if (existing.idempotencyFingerprint === idempotencyFingerprint) {
+            return res.status(201).json({
+              ...getAllowlistedResponse(existing),
+              duplicate: true
+            });
+          } else {
+            return res.status(409).json({ error: 'Idempotency conflict: An order with this key already exists with different details.' });
+          }
+        }
+      }
+
+      if (isSessionConflict && checkoutSessionId) {
+        const existing = await db.collection('orders').findOne({ checkoutSessionId });
+        if (existing) {
+          return res.status(201).json({
+            ...getAllowlistedResponse(existing),
+            duplicate: true
+          });
+        }
+      }
+    }
+
     console.error('Failed to create order:', error);
     res.status(500).json({ error: 'Failed to confirm order.' });
   }
