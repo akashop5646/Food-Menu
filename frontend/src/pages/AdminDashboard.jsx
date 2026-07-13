@@ -119,6 +119,7 @@ export default function AdminDashboard() {
   // Real-time signals
   const [refreshKey, setRefreshKey] = useState(0);
   const [lastOrderCreatedEvent, setLastOrderCreatedEvent] = useState(null);
+  const [lastOrderUpdatedEvent, setLastOrderUpdatedEvent] = useState(null);
   const [wsConnected, setWsConnected] = useState(false);
   const [isKitchenMode, setIsKitchenMode] = useState(false);
 
@@ -199,7 +200,7 @@ export default function AdminDashboard() {
         ws.onmessage = (event) => {
           try {
             const msg = JSON.parse(event.data);
-            if (msg.type === 'ORDER_CREATED' || msg.type === 'ORDER_STATUS_CHANGED' || msg.type === 'PAYMENT_UPDATED') {
+            if (msg.type === 'ORDER_CREATED' || msg.type === 'ORDER_STATUS_CHANGED' || msg.type === 'PAYMENT_UPDATED' || msg.type === 'ORDER_UPDATED') {
               triggerRefresh();
               
               // Handoff ORDER_CREATED to LiveKDS with seq/stale guards
@@ -235,6 +236,20 @@ export default function AdminDashboard() {
                     table: tableName
                   }
                 });
+              }
+              if (msg.type === 'ORDER_UPDATED') {
+                const orderPayload = msg.payload || msg.order || {};
+                const orderId = msg.orderId || orderPayload?._id || orderPayload?.order?._id;
+                const orderData = orderPayload?.order || orderPayload;
+                if (orderId) {
+                  setLastOrderUpdatedEvent({
+                    id: orderId,
+                    timestamp: Date.now(),
+                    orderId,
+                    version: msg.version || orderPayload?.version || orderData?.version || 1,
+                    order: orderData
+                  });
+                }
               }
               if (msg.type === 'PAYMENT_UPDATED') {
                 const paymentOrderId = msg.payload?._id;
@@ -692,9 +707,11 @@ export default function AdminDashboard() {
         <main className="flex-1 p-margin-mobile md:p-margin-desktop overflow-y-auto pb-24 md:pb-8 relative z-10">
           {activeTab === 'dashboard' && (
             <LiveKDS
+              user={user}
               refreshKey={refreshKey}
               wsConnected={wsConnected}
               lastOrderCreatedEvent={lastOrderCreatedEvent}
+              lastOrderUpdatedEvent={lastOrderUpdatedEvent}
               isDark={isDark}
               handleThemeToggle={handleThemeToggle}
               isKitchenMode={isKitchenMode}

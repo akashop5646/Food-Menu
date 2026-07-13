@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { ObjectId } from 'mongodb';
 import crypto from 'crypto';
 import { getDB } from '../db.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { broadcast } from '../websocket.js';
 import { initializeAndProcessSettlementForPaidOrder } from '../services/settlement.js';
 import { recordEmployeeActivity } from '../services/employeeAudit.js';
@@ -70,7 +70,11 @@ function getAllowlistedResponse(order) {
     createdAt: order.createdAt,
     deviceId: order.deviceId,
     customerIp: order.customerIp,
-    checkoutSessionId: order.checkoutSessionId
+    checkoutSessionId: order.checkoutSessionId,
+    version: order.version,
+    isUpdated: order.isUpdated,
+    updatedAt: order.updatedAt,
+    lastAmendedBy: order.lastAmendedBy
   };
 }
 
@@ -417,7 +421,8 @@ router.post('/', requireAuth, async (req, res) => {
       createdAt: new Date(),
       deviceId: deviceId || null,
       customerIp: customerIp || null,
-      checkoutSessionId: checkoutSessionId || null
+      checkoutSessionId: checkoutSessionId || null,
+      version: 1
     };
 
     if (source === 'MANUAL') {
@@ -899,6 +904,419 @@ router.post('/:id/verify-payment', async (req, res) => {
   } catch (error) {
     console.error('Failed to verify payment:', error);
     res.status(500).json({ error: 'Failed to verify payment' });
+  }
+});
+
+// Amend an active unpaid order (KDS editing endpoint)
+router.patch('/:id/amend', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { reason, version, tableId, locationId, items } = req.body;
+
+  try {
+    if (!id || !ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Valid order ID is required.' });
+    }
+
+    // 1. Normalize reason: trim, 5-500 characters, reject whitespace-only
+    const normalizedReason = typeof reason === 'string' ? reason.trim() : '';
+    if (!normalizedReason || normalizedReason.length < 5 || normalizedReason.length > 500) {
+      return res.status(400).json({ error: 'Amendment reason must be between 5 and 500 characters long.' });
+    }
+
+    const db = await getDB();
+    const order = await db.collection('orders').findOne({ _id: new ObjectId(id) });
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    // 2. State locks: PAID, COMPLETED, splitSettlement present (except SKIPPED)
+    if (order.paymentStatus === 'PAID') {
+      return res.status(400).json({ error: 'Paid orders cannot be amended.' });
+    }
+    if (order.status === 'COMPLETED') {
+      return res.status(400).json({ error: 'Completed orders cannot be amended.' });
+    }
+    if (order.splitSettlement && order.splitSettlement.status !== 'SKIPPED') {
+      return res.status(400).json({ error: 'Settlement-linked orders cannot be amended.' });
+    }
+
+    // 3. Optimistic Concurrency loaded version verification (supporting physically absent legacy versions)
+    const loadedVersion = Number(version);
+    if (isNaN(loadedVersion) || loadedVersion <= 0) {
+      return res.status(400).json({ error: 'A valid loaded version is required.' });
+    }
+
+    const dbVersion = Number(order.version || 1);
+    if (loadedVersion !== dbVersion) {
+      return res.status(409).json({ error: 'Concurrency conflict: The order has been updated by another terminal. Please reload.' });
+    }
+
+    // 4. Resolve Table and Location authoritatively from database records
+    let targetTableName = order.table;
+    let targetLocationName = order.location;
+    let targetTableId = order.tableId ? new ObjectId(order.tableId) : null;
+    let targetLocationId = order.locationId ? new ObjectId(order.locationId) : null;
+
+    if (tableId) {
+      if (!ObjectId.isValid(tableId)) {
+        return res.status(400).json({ error: 'Invalid Table ID format.' });
+      }
+      const dbTable = await db.collection('tables').findOne({ _id: new ObjectId(tableId) });
+      if (!dbTable) {
+        return res.status(400).json({ error: 'Invalid or non-existent Table.' });
+      }
+      targetTableId = dbTable._id;
+      targetTableName = dbTable.name || `Table ${dbTable.number}`;
+
+      // Automatically sync location from table
+      if (dbTable.locationId) {
+        targetLocationId = new ObjectId(dbTable.locationId);
+        targetLocationName = dbTable.location;
+      } else if (dbTable.location) {
+        const dbLocation = await db.collection('locations').findOne({ name: dbTable.location });
+        if (dbLocation) {
+          targetLocationId = dbLocation._id;
+          targetLocationName = dbLocation.name;
+        } else {
+          targetLocationId = null;
+          targetLocationName = dbTable.location;
+        }
+      }
+    }
+
+    if (locationId) {
+      if (!ObjectId.isValid(locationId)) {
+        return res.status(400).json({ error: 'Invalid Location ID format.' });
+      }
+      const dbLocation = await db.collection('locations').findOne({ _id: new ObjectId(locationId) });
+      if (!dbLocation) {
+        return res.status(400).json({ error: 'Invalid or non-existent Location.' });
+      }
+      targetLocationId = dbLocation._id;
+      targetLocationName = dbLocation.name;
+    }
+
+    // 5. Items validation
+    if (!items || !Array.isArray(items)) {
+      return res.status(400).json({ error: 'Items must be a valid array.' });
+    }
+
+    const itemMap = {};
+    for (const item of items) {
+      const itemId = item.id || item._id;
+      if (!itemId || !ObjectId.isValid(itemId)) {
+        return res.status(400).json({ error: `Invalid item ID: ${itemId}` });
+      }
+      const qty = Number(item.quantity);
+      if (isNaN(qty) || qty < 0 || !Number.isInteger(qty)) {
+        return res.status(400).json({ error: `Invalid quantity for item: ${item.name || itemId}` });
+      }
+      if (qty > MAX_ITEM_QUANTITY) {
+        return res.status(400).json({ error: `Quantity for item exceeds the maximum limit of ${MAX_ITEM_QUANTITY}.` });
+      }
+      const stringId = String(itemId);
+      itemMap[stringId] = (itemMap[stringId] || 0) + qty;
+    }
+
+    const uniqueItemIds = Object.keys(itemMap).filter(id => itemMap[id] > 0);
+    if (uniqueItemIds.length === 0) {
+      return res.status(400).json({ error: 'Amended order must contain at least one item.' });
+    }
+    if (uniqueItemIds.length > MAX_UNIQUE_ITEMS) {
+      return res.status(400).json({ error: `Order exceeds the maximum limit of ${MAX_UNIQUE_ITEMS} unique items.` });
+    }
+
+    const totalQuantity = Object.values(itemMap).reduce((sum, q) => sum + q, 0);
+    if (totalQuantity > MAX_TOTAL_QUANTITY) {
+      return res.status(400).json({ error: `Total order quantity exceeds the maximum limit of ${MAX_TOTAL_QUANTITY} items.` });
+    }
+
+    const dbItems = await db.collection('menu_items').find({
+      _id: { $in: uniqueItemIds.map(id => new ObjectId(id)) }
+    }).toArray();
+
+    if (dbItems.length !== uniqueItemIds.length) {
+      return res.status(400).json({ error: 'One or more menu items not found in database.' });
+    }
+
+    const verifiedItems = [];
+    let calculatedTotal = 0;
+
+    for (const dbItem of dbItems) {
+      const stringId = dbItem._id.toString();
+      const qty = itemMap[stringId];
+      const previousItem = order.items.find(i => String(i.id || i._id || '') === stringId);
+
+      // Gating Rules for Unavailable/Deleted Items
+      if (dbItem.available === false || dbItem.deleted === true) {
+        if (!previousItem) {
+          return res.status(400).json({ error: `Cannot add new unavailable item: ${dbItem.name}` });
+        }
+        if (qty > previousItem.quantity) {
+          return res.status(400).json({ error: `Cannot increase quantity of unavailable item: ${dbItem.name}` });
+        }
+      }
+
+      const verifiedPrice = Number(dbItem.price);
+      calculatedTotal += verifiedPrice * qty;
+
+      verifiedItems.push({
+        id: dbItem._id,
+        name: dbItem.name,
+        price: verifiedPrice,
+        quantity: qty
+      });
+    }
+
+    // 6. Reject no-op amendments
+    const tableIdMatches = String(targetTableId || '') === String(order.tableId || '');
+    const locationIdMatches = String(targetLocationId || '') === String(order.locationId || '');
+    const itemsMatches = order.items.length === verifiedItems.length &&
+      order.items.every(oldItem => {
+        const newItem = verifiedItems.find(n => String(n.id) === String(oldItem.id));
+        return newItem && newItem.quantity === oldItem.quantity;
+      });
+
+    if (tableIdMatches && locationIdMatches && itemsMatches && targetTableName === order.table && targetLocationName === order.location) {
+      return res.status(400).json({ error: 'No changes detected. The amendment matches the current order state.' });
+    }
+
+    // 7. Calculate structured diff (added, removed, modified) preserving item detail info
+    const added = [];
+    const removed = [];
+    const modified = [];
+
+    for (const newItem of verifiedItems) {
+      const oldItem = order.items.find(i => String(i.id) === String(newItem.id));
+      if (!oldItem) {
+        added.push({ id: newItem.id, name: newItem.name, price: newItem.price, quantity: newItem.quantity });
+      } else if (newItem.quantity !== oldItem.quantity) {
+        modified.push({
+          id: newItem.id,
+          name: newItem.name,
+          price: newItem.price,
+          prevQuantity: oldItem.quantity,
+          newQuantity: newItem.quantity
+        });
+      }
+    }
+
+    for (const oldItem of order.items) {
+      const newItem = verifiedItems.find(n => String(n.id) === String(oldItem.id));
+      if (!newItem) {
+        removed.push({ id: oldItem.id, name: oldItem.name, price: oldItem.price, quantity: oldItem.quantity });
+      }
+    }
+
+    const diff = { added, removed, modified };
+
+    // Recalculate convenience fee config
+    const feeConfigs = await db.collection('configs').find({
+      key: { $in: ['convenience_fee_enabled', 'convenience_fee_amount'] }
+    }).toArray();
+
+    let feeEnabled = false;
+    let feeAmount = 0;
+    let feeAmountValid = false;
+
+    feeConfigs.forEach(c => {
+      if (c.key === 'convenience_fee_enabled') {
+        feeEnabled = typeof c.value === 'boolean' ? c.value : c.value === 'true';
+      }
+      if (c.key === 'convenience_fee_amount') {
+        const val = Number(c.value);
+        if (Number.isFinite(val) && val >= 0 && val <= 20) {
+          feeAmount = val;
+          feeAmountValid = true;
+        }
+      }
+    });
+
+    if (feeEnabled && !feeAmountValid) {
+      feeEnabled = false;
+      feeAmount = 0;
+    }
+
+    const convenienceFee = feeEnabled ? feeAmount : 0;
+    const totalPayable = Number((calculatedTotal + convenienceFee).toFixed(2));
+
+    // 8. Version updates & fallback recovery
+    const newVersion = dbVersion + 1;
+    const actor = {
+      userId: req.user.id,
+      name: req.user.name,
+      email: req.user.email,
+      role: req.user.role || 'ADMIN'
+    };
+
+    const newOrderState = {
+      table: targetTableName,
+      location: targetLocationName,
+      tableId: targetTableId,
+      locationId: targetLocationId,
+      items: verifiedItems,
+      total: Number(calculatedTotal.toFixed(2)),
+      convenienceFee: Number(convenienceFee),
+      totalPayable: Number(totalPayable),
+      version: newVersion,
+      isUpdated: true,
+      updatedAt: new Date(),
+      lastAmendedBy: actor
+    };
+
+    const revisionDoc = {
+      _id: new ObjectId(),
+      orderId: order._id,
+      newVersion,
+      prevVersion: dbVersion,
+      actor,
+      reason: normalizedReason,
+      diff,
+      snapshot: newOrderState,
+      status: 'PENDING',
+      timestamp: new Date()
+    };
+
+    // Insert pending revision
+    await db.collection('order_revisions').insertOne(revisionDoc);
+
+    // Optimistic Concurrency Update filter matching legacyness
+    const updateFilter = dbVersion === 1 ? {
+      _id: order._id,
+      $or: [
+        { version: 1 },
+        { version: { $exists: false } }
+      ]
+    } : {
+      _id: order._id,
+      version: dbVersion
+    };
+
+    const updateResult = await db.collection('orders').updateOne(
+      updateFilter,
+      {
+        $set: {
+          table: newOrderState.table,
+          location: newOrderState.location,
+          tableId: newOrderState.tableId,
+          locationId: newOrderState.locationId,
+          items: newOrderState.items,
+          total: newOrderState.total,
+          convenienceFee: newOrderState.convenienceFee,
+          totalPayable: newOrderState.totalPayable,
+          version: newVersion,
+          isUpdated: true,
+          updatedAt: newOrderState.updatedAt,
+          lastAmendedBy: newOrderState.lastAmendedBy
+        }
+      }
+    );
+
+    if (updateResult.modifiedCount === 1) {
+      // Commit the revision status
+      await db.collection('order_revisions').updateOne(
+        { _id: revisionDoc._id },
+        { $set: { status: 'COMMITTED' } }
+      );
+
+      const completeOrderDoc = {
+        ...order,
+        ...newOrderState
+      };
+      const responseDto = getAllowlistedResponse(completeOrderDoc);
+
+      // WebSocket broadcast - standardized type schema
+      broadcast('ORDER_UPDATED', {
+        type: 'ORDER_UPDATED',
+        orderId: order._id.toString(),
+        version: newVersion,
+        order: responseDto
+      });
+
+      // Employee audit trail - single emission post-persistence
+      await recordEmployeeActivity(
+        actor,
+        'ORDER_AMENDED',
+        {
+          type: 'ORDER',
+          id: order._id.toString(),
+          displayLabel: `Order amended for Table ${completeOrderDoc.table} (v${newVersion})`
+        },
+        {
+          reason: normalizedReason,
+          prevVersion: dbVersion,
+          newVersion
+        }
+      );
+
+      return res.json(responseDto);
+    } else {
+      // Rollback revision record
+      await db.collection('order_revisions').updateOne(
+        { _id: revisionDoc._id },
+        { $set: { status: 'FAILED' } }
+      );
+      return res.status(409).json({ error: 'Concurrency conflict: The order was updated by another terminal. Please reload.' });
+    }
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({ error: 'Concurrency conflict: The order was updated by another terminal. Please reload.' });
+    }
+    console.error('Failed to amend order:', error);
+    res.status(500).json({ error: 'Failed to amend order.' });
+  }
+});
+
+// Fetch paginated revision history for an order
+router.get('/:id/revisions', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    if (!id || !ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Valid order ID is required.' });
+    }
+
+    const db = await getDB();
+    const order = await db.collection('orders').findOne({ _id: new ObjectId(id) });
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    let page = parseInt(req.query.page, 10);
+    let limit = parseInt(req.query.limit, 10);
+
+    if (isNaN(page) || page <= 0) page = 1;
+    if (isNaN(limit) || limit <= 0) limit = 10;
+    if (limit > 100) limit = 100;
+
+    const skip = (page - 1) * limit;
+
+    const query = {
+      orderId: new ObjectId(id),
+      status: 'COMMITTED'
+    };
+
+    const total = await db.collection('order_revisions').countDocuments(query);
+    const revisions = await db.collection('order_revisions')
+      .find(query)
+      .project({ status: 0 }) // Exclude internal status field
+      .sort({ newVersion: -1 })
+      .skip(skip)
+      .limit(limit)
+      .toArray();
+
+    res.json({
+      revisions,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Failed to fetch revisions:', error);
+    res.status(500).json({ error: 'Failed to fetch revisions.' });
   }
 });
 

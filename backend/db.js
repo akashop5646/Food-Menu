@@ -43,6 +43,8 @@ export async function connectDB() {
     await db.collection('employee_activity_events').createIndex({ 'actor.userId': 1, createdAt: -1, _id: -1 });
     await db.collection('employee_activity_events').createIndex({ createdAt: -1, _id: -1 });
     await db.collection('employee_audit_failures').createIndex({ occurredAt: -1 });
+    await db.collection('order_revisions').createIndex({ orderId: 1, newVersion: 1 }, { unique: true });
+    await db.collection('order_revisions').createIndex({ timestamp: -1 });
 
     // Pre-audit duplicate checkoutSessionId and idempotencyKey values
     const dupSessions = await db.collection('orders').aggregate([
