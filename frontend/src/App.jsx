@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import { API_BASE } from './config';
+import { buildPaidReceiptData, generateReceiptHtml } from './utils/receiptHelper';
 
 function MenuPage() {
   const [searchParams] = useSearchParams();
@@ -218,6 +219,7 @@ function MenuPage() {
   const [restaurantHours, setRestaurantHours] = useState('Monday - Sunday, 11:00 AM - 11:00 PM IST');
   const [restaurantMapLink, setRestaurantMapLink] = useState('');
   const [paidOrderDetails, setPaidOrderDetails] = useState(null);
+  const [isGeneratingReceipt, setIsGeneratingReceipt] = useState(false);
   const [isOrderVerified, setIsOrderVerified] = useState(false);
   const [deviceId, setDeviceId] = useState('');
   const [customerIp, setCustomerIp] = useState('');
@@ -652,6 +654,51 @@ function MenuPage() {
       localStorage.removeItem('aurum_cart');
     }
     showNotification('Thank you! Your order has been placed. You can pay later at the counter.');
+  };
+
+  const handleDownloadReceipt = () => {
+    if (isGeneratingReceipt) return;
+    setIsGeneratingReceipt(true);
+
+    try {
+      const receiptData = buildPaidReceiptData(ordersList);
+      if (!receiptData) {
+        showNotification('Unable to generate the receipt. Please try again.');
+        setIsGeneratingReceipt(false);
+        return;
+      }
+
+      const htmlContent = generateReceiptHtml(receiptData, restaurantName);
+      if (!htmlContent) {
+        showNotification('Unable to generate the receipt. Please try again.');
+        setIsGeneratingReceipt(false);
+        return;
+      }
+
+      const reference = (checkoutSessionId || (ordersList[0] ? String(ordersList[0]._id).substring(Math.max(0, String(ordersList[0]._id).length - 6)) : 'session'))
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+      const dateStr = new Date().toISOString().split('T')[0];
+      const filename = `aurum-table-receipt-${reference}-${dateStr}.html`;
+
+      const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+
+      // Clean up
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to generate receipt:', err.message);
+      showNotification('Unable to generate the receipt. Please try again.');
+    } finally {
+      setIsGeneratingReceipt(false);
+    }
   };
 
   return (
@@ -1481,12 +1528,33 @@ function MenuPage() {
                     </div>
                   </>
                 ) : (
-                  <button 
-                    onClick={() => setIsCheckoutOpen(false)}
-                    className="w-full bg-primary text-on-primary py-3 rounded font-label-caps text-label-caps uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all"
-                  >
-                    Close Receipt
-                  </button>
+                  <div className="flex flex-col gap-3 w-full">
+                    <button
+                      type="button"
+                      onClick={handleDownloadReceipt}
+                      disabled={isGeneratingReceipt}
+                      aria-label="Download paid order receipt"
+                      className="w-full bg-gold-metallic text-on-primary-fixed h-12 py-0 rounded font-label-caps text-label-caps uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50"
+                    >
+                      {isGeneratingReceipt ? (
+                        <>
+                          <span className="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
+                          Downloading...
+                        </>
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined text-[18px]">download</span>
+                          Download Receipt
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setIsCheckoutOpen(false)}
+                      className="w-full bg-primary text-on-primary h-12 py-0 rounded font-label-caps text-label-caps uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all"
+                    >
+                      Close Receipt
+                    </button>
+                  </div>
                 )}
               </div>
             </div>

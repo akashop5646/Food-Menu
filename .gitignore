@@ -1,7 +1,36 @@
+# Dependencies
 node_modules/
 **/node_modules/
+
+# Build outputs
 **/dist/
+**/build/
+**/.vite/
+
+# Environment & secrets
 **/.env
 **/.env.local
+**/.env.production
+**/.env.*.local
+
+# Logs
 **/*.log
+npm-debug.log*
+
+# OS artifacts
+.DS_Store
+**/Thumbs.db
+**/.DS_Store
+Desktop.ini
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# Graphify knowledge graph output
 graphify-out/
