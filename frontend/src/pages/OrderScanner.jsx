@@ -24,23 +24,21 @@ const getTableDisplayLabel = (table) => {
   return table.name || (table.number ? `Table ${table.number}` : 'Table');
 };
 
-const getTableSortValue = (table) => {
-  if (!table) return null;
-  const candidates = [
-    table.tableNumber,
-    table.number,
-    table.displayOrder
-  ];
+const getTableSortKey = (table) => {
+  const candidate =
+    table.tableNumber ??
+    table.number ??
+    table.displayOrder ??
+    null;
 
-  const numeric = candidates.find(
-    (value) => value !== undefined && value !== null && Number.isFinite(Number(value))
-  );
-
-  if (numeric !== undefined) {
-    return Number(numeric);
+  const numeric = Number(candidate);
+  if (Number.isFinite(numeric)) {
+    return numeric;
   }
 
-  return null;
+  const label = String(getTableDisplayLabel(table) || '');
+  const match = label.match(/(\d+)/);
+  return match ? Number(match[1]) : Number.POSITIVE_INFINITY;
 };
 
 export default function OrderScanner() {
@@ -92,22 +90,17 @@ export default function OrderScanner() {
       : [...tables];
 
     return [...matchingTables].sort((a, b) => {
-      const aSortVal = getTableSortValue(a);
-      const bSortVal = getTableSortValue(b);
+      const aKey = getTableSortKey(a);
+      const bKey = getTableSortKey(b);
 
-      if (aSortVal !== null && bSortVal !== null) {
-        if (aSortVal !== bSortVal) {
-          return aSortVal - bSortVal;
-        }
+      if (aKey !== bKey) {
+        return aKey - bKey;
       }
 
       return getTableDisplayLabel(a).localeCompare(
         getTableDisplayLabel(b),
         undefined,
-        {
-          numeric: true,
-          sensitivity: 'base'
-        }
+        { numeric: true, sensitivity: 'base' }
       );
     });
   }, [tables, selectedLocationId]);
