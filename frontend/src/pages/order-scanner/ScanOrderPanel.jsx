@@ -265,11 +265,11 @@ export default function ScanOrderPanel({
                     </div>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row gap-3 pt-3">
+                  <div className="flex flex-col md:flex-row gap-3 pt-4 pb-1 md:pb-0">
                     <button
                       type="button"
                       onClick={onCancel}
-                      className="flex-1 bg-surface-container-high border border-outline-variant/50 text-on-surface hover:text-error hover:border-error/50 h-12 py-0 rounded-xl font-label-caps text-[13px] uppercase tracking-widest transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                      className="w-full md:flex-1 bg-surface-container-high/40 border border-outline-variant/30 text-on-surface-variant hover:text-error hover:border-error/50 h-12 py-0 rounded-xl font-label-caps text-[12px] md:text-[13px] uppercase tracking-wide md:tracking-widest transition-colors flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <span className="material-symbols-outlined text-[18px]">close</span>
                       Cancel / Reset
@@ -278,7 +278,7 @@ export default function ScanOrderPanel({
                       type="button"
                       onClick={onReview}
                       disabled={isSubmitting}
-                      className="flex-[2] bg-gold-metallic text-on-primary-fixed h-12 py-0 rounded-xl font-label-caps text-[13px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
+                      className="w-full md:flex-[2] bg-gold-metallic text-on-primary-fixed h-12 py-0 rounded-xl font-label-caps text-[12px] md:text-[13px] uppercase tracking-wide md:tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
                     >
                       <span className="material-symbols-outlined text-[18px]">visibility</span>
                       Review & Confirm Order
