@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 
 export default function ManualOrderBuilder({
   tables,
@@ -11,8 +11,26 @@ export default function ManualOrderBuilder({
   selectTable,
   setSelectedLocationId,
   clearManualOrder,
-  getTableDisplayLabel
+  getTableDisplayLabel,
+  getTableSortKey
 }) {
+  const sortedTables = useMemo(() => {
+    return [...tables].sort((a, b) => {
+      const aKey = getTableSortKey(a);
+      const bKey = getTableSortKey(b);
+
+      if (aKey !== bKey) {
+        return aKey - bKey;
+      }
+
+      return getTableDisplayLabel(a).localeCompare(
+        getTableDisplayLabel(b),
+        undefined,
+        { numeric: true, sensitivity: 'base' }
+      );
+    });
+  }, [tables, getTableSortKey, getTableDisplayLabel]);
+
   return (
     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 md:gap-4">
       <div className="flex-1 min-w-0">
@@ -49,7 +67,7 @@ export default function ManualOrderBuilder({
               ) : (
                 <>
                   <option value="" disabled>Select a table</option>
-                  {tables.map(table => (
+                  {sortedTables.map(table => (
                     <option key={table._id} value={table._id}>
                       {getTableDisplayLabel(table)}
                     </option>

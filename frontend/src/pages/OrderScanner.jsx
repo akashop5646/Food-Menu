@@ -552,6 +552,7 @@ export default function OrderScanner() {
                     setSelectedLocationId={setSelectedLocationId}
                     clearManualOrder={clearManualOrder}
                     getTableDisplayLabel={getTableDisplayLabel}
+                    getTableSortKey={getTableSortKey}
                   />
 
                   <div className="border-t border-outline-variant/15 pt-5">
