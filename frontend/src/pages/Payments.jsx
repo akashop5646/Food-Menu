@@ -183,6 +183,7 @@ export default function Payments({ refreshKey }) {
   const [copyStatus, setCopyStatus] = useState({});
   const [isGeneratingReceipt, setIsGeneratingReceipt] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [restaurantName, setRestaurantName] = useState(''); // ponytail: fetched once from settings
 
   const paymentsRequestIdRef = useRef(0);
   const paymentsInFlightRef = useRef(false);
@@ -250,6 +251,14 @@ export default function Payments({ refreshKey }) {
   useEffect(() => {
     fetchAllOrders(false);
   }, [refreshKey, fetchAllOrders]);
+
+  // ponytail: fetch restaurant name once for print headers
+  useEffect(() => {
+    fetch(API_BASE + '/api/settings/restaurant-profile')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.restaurantName) setRestaurantName(d.restaurantName); })
+      .catch(() => {});
+  }, []);
 
   // Cleanup payment requests on unmount
   useEffect(() => {
@@ -461,7 +470,7 @@ export default function Payments({ refreshKey }) {
         alert('Unable to generate the report. Please try again.');
         return;
       }
-      const html = generatePaymentReportHtml(reportData);
+      const html = generatePaymentReportHtml(reportData, restaurantName || undefined);
       printWindow.document.open();
       printWindow.document.write(html);
       printWindow.document.close();
@@ -477,7 +486,7 @@ export default function Payments({ refreshKey }) {
     } finally {
       setIsGeneratingReport(false);
     }
-  }, [isGeneratingReport, filteredPaymentOrders, paymentsTimeRange, paymentsCustomStartDate, paymentsCustomEndDate, paymentsStatusFilter, paymentsTypeFilter, paymentsSearch]);
+  }, [isGeneratingReport, filteredPaymentOrders, paymentsTimeRange, paymentsCustomStartDate, paymentsCustomEndDate, paymentsStatusFilter, paymentsTypeFilter, paymentsSearch, restaurantName]);
 
   // Pagination states
   const ITEMS_PER_PAGE = 25;
