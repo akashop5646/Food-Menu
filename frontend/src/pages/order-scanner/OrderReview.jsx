@@ -115,12 +115,12 @@ export default function OrderReview({
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3 pt-3 border-t border-outline-variant/10">
+      <div className="flex flex-col gap-3 pt-4 pb-1 border-t border-outline-variant/10 md:flex-row md:gap-3 md:pb-0">
         <button
           type="button"
           onClick={onBack}
           disabled={isSubmitting}
-          className="flex-1 bg-surface-container-high border border-outline-variant/50 text-on-surface hover:text-error hover:border-error/50 h-12 py-0 rounded-xl font-label-caps text-[13px] uppercase tracking-widest transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          className="w-full md:flex-1 bg-surface-container-high/40 border border-outline-variant/30 text-on-surface-variant hover:text-error hover:border-error/50 h-12 py-0 rounded-xl font-label-caps text-[12px] md:text-[13px] uppercase tracking-wide md:tracking-widest transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
         >
           <span className="material-symbols-outlined text-[18px]">arrow_back</span>
           Back to Edit
@@ -129,7 +129,7 @@ export default function OrderReview({
           type="button"
           onClick={onConfirm}
           disabled={isSubmitting}
-          className="flex-[2] bg-gold-metallic text-on-primary-fixed h-12 py-0 rounded-xl font-label-caps text-[13px] uppercase tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
+          className="w-full md:flex-[2] bg-gold-metallic text-on-primary-fixed h-12 py-0 rounded-xl font-label-caps text-[12px] md:text-[13px] uppercase tracking-wide md:tracking-widest gold-glow flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
         >
           {isSubmitting ? (
             <>
