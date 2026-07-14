@@ -20,19 +20,27 @@ const getTableLocationId = (table) =>
   null;
 
 const getTableDisplayLabel = (table) => {
-  const value =
-    table.tableNumber ??
-    table.number ??
-    table.name ??
-    '';
+  if (!table) return '';
+  return table.name || (table.number ? `Table ${table.number}` : 'Table');
+};
 
-  const normalizedValue = String(value).trim();
+const getTableSortValue = (table) => {
+  if (!table) return null;
+  const candidates = [
+    table.tableNumber,
+    table.number,
+    table.displayOrder
+  ];
 
-  if (/^table\s+/i.test(normalizedValue)) {
-    return normalizedValue;
+  const numeric = candidates.find(
+    (value) => value !== undefined && value !== null && Number.isFinite(Number(value))
+  );
+
+  if (numeric !== undefined) {
+    return Number(numeric);
   }
 
-  return `Table ${normalizedValue}`;
+  return null;
 };
 
 export default function OrderScanner() {
@@ -83,16 +91,25 @@ export default function OrderScanner() {
         )
       : [...tables];
 
-    return [...matchingTables].sort((a, b) =>
-      getTableDisplayLabel(a).localeCompare(
+    return [...matchingTables].sort((a, b) => {
+      const aSortVal = getTableSortValue(a);
+      const bSortVal = getTableSortValue(b);
+
+      if (aSortVal !== null && bSortVal !== null) {
+        if (aSortVal !== bSortVal) {
+          return aSortVal - bSortVal;
+        }
+      }
+
+      return getTableDisplayLabel(a).localeCompare(
         getTableDisplayLabel(b),
         undefined,
         {
           numeric: true,
           sensitivity: 'base'
         }
-      )
-    );
+      );
+    });
   }, [tables, selectedLocationId]);
 
   // Clear selected table if it is no longer valid in the newly selected location
