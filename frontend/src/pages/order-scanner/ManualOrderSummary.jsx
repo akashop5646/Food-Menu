@@ -15,13 +15,13 @@ export default function ManualOrderSummary({
   isSubmitting
 }) {
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-3 md:gap-5">
       <div>
-        <h3 className="font-headline-sm text-xl text-on-surface">Order summary</h3>
-        <p className="text-sm text-on-surface-variant mt-1">Review the ticket before sending it to Live KDS.</p>
+        <h3 className="font-headline-sm text-lg md:text-xl text-on-surface">Order summary</h3>
+        <p className="text-xs md:text-sm text-on-surface-variant mt-0.5 md:mt-1">Review the ticket before sending it to Live KDS.</p>
       </div>
 
-      <div className="rounded-2xl border border-outline-variant/15 bg-surface-container-high p-4 space-y-3">
+      <div className="rounded-2xl border border-outline-variant/15 bg-surface-container-high p-3 md:p-4 space-y-2 md:space-y-3">
         <div className="flex justify-between items-center text-sm">
           <span className="text-on-surface-variant">Table</span>
           <span className="font-semibold text-on-surface">{selectedTable ? (selectedTable.name || `Table ${selectedTable.number}`) : 'None selected'}</span>
@@ -51,9 +51,9 @@ export default function ManualOrderSummary({
       </button>
 
       {manualLineItems.length > 0 && (
-        <div className="rounded-2xl border border-outline-variant/15 bg-surface-container-high p-4">
-          <h4 className="font-label-caps text-[11px] text-on-surface-variant uppercase tracking-widest mb-3">Selected Items</h4>
-          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+        <div className="rounded-2xl border border-outline-variant/15 bg-surface-container-high p-3 md:p-4">
+          <h4 className="font-label-caps text-[11px] text-on-surface-variant uppercase tracking-widest mb-2 md:mb-3">Selected Items</h4>
+          <div className="space-y-2 max-h-48 md:max-h-64 overflow-y-auto pr-1">
             {manualLineItems.map(item => (
               <div key={item._id} className="flex justify-between items-center text-sm">
                 <div className="min-w-0">

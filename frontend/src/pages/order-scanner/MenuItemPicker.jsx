@@ -16,14 +16,14 @@ export default function MenuItemPicker({
   onRetryCatalog
 }) {
   return (
-    <div>
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+    <div className="space-y-2.5 md:space-y-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:mb-3">
         <div>
           <h4 className="font-label-caps text-[11px] text-on-surface-variant uppercase tracking-widest">Menu Items</h4>
-          <p className="text-sm text-on-surface-variant/70 mt-1">Search and add directly from the current catalog.</p>
+          <p className="text-xs md:text-sm text-on-surface-variant/70 mt-0.5 md:mt-1">Search and add directly from the current catalog.</p>
         </div>
-        <div className="relative w-full sm:w-72">
-          <span className="material-symbols-outlined absolute left-3 top-3 text-on-surface-variant text-[18px]">search</span>
+        <div className="w-full md:w-72 sticky top-0 md:relative z-20 bg-surface-container-lowest/95 backdrop-blur-sm py-2 px-1 -mx-1 border-b border-outline-variant/10 md:border-none shadow-sm md:shadow-none">
+          <span className="material-symbols-outlined absolute left-3 top-5 md:top-3 text-on-surface-variant text-[18px]">search</span>
           <input
             type="text"
             value={manualSearch}
@@ -61,7 +61,54 @@ export default function MenuItemPicker({
             const qty = manualOrderItems[item._id] ? manualOrderItems[item._id].quantity : 0;
             return (
               <div key={item._id} className="rounded-2xl border border-outline-variant/20 bg-surface-container-high overflow-hidden shadow-sm">
-                <div className="p-4 flex gap-4 items-start">
+                {/* Mobile denser horizontal card */}
+                <div className="md:hidden p-2.5 flex gap-3 items-center">
+                  <div className="w-14 h-14 rounded-lg bg-surface-container-low overflow-hidden border border-outline-variant/10 shrink-0 flex items-center justify-center">
+                    {item.image ? (
+                      <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="material-symbols-outlined text-primary/40 text-xl">restaurant</span>
+                    )}
+                  </div>
+
+                  <div className="flex-1 min-w-0 flex flex-col gap-1">
+                    <div className="flex justify-between items-start gap-2">
+                      <h5 className="font-semibold text-on-surface text-sm truncate">{item.name}</h5>
+                      <div className="font-price-display text-primary font-semibold text-sm shrink-0">{formatMoney(item.price)}</div>
+                    </div>
+
+                    <p className="text-[11px] text-on-surface-variant line-clamp-1">{item.description || 'No description available.'}</p>
+
+                    <div className="flex items-center justify-between gap-2 mt-1">
+                      <div className="text-[9px] uppercase tracking-widest text-on-surface-variant min-w-0 truncate pr-2">
+                        {item.categories && item.categories.length > 0 ? item.categories.join(' · ') : 'Menu Item'}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setItemQuantity(item, -1)}
+                          className="w-10 h-10 rounded-full border border-outline-variant/30 text-on-surface-variant hover:text-error hover:border-error/40 flex items-center justify-center cursor-pointer shrink-0"
+                          aria-label={`Decrease ${item.name} quantity`}
+                        >
+                          <span className="material-symbols-outlined text-[16px]">remove</span>
+                        </button>
+                        <div className="min-w-[24px] text-center font-semibold text-on-surface text-xs">{qty}</div>
+                        <button
+                          type="button"
+                          onClick={() => setItemQuantity(item, 1)}
+                          className="w-10 h-10 rounded-full bg-primary text-on-primary hover:opacity-90 flex items-center justify-center cursor-pointer shrink-0"
+                          aria-label={`Increase ${item.name} quantity`}
+                        >
+                          <span className="material-symbols-outlined text-[16px]">add</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Desktop menu card */}
+                <div className="hidden md:flex p-4 gap-4 items-start">
                   <div className="w-16 h-16 rounded-xl bg-surface-container-low overflow-hidden border border-outline-variant/10 shrink-0 flex items-center justify-center">
                     {item.image ? (
                       <img src={item.image} alt={item.name} className="w-full h-full object-cover" />

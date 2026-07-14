@@ -13,6 +13,28 @@ import {
   submitOrder
 } from './order-scanner/orderScannerApi';
 
+const getTableLocationId = (table) =>
+  table.locationId?._id ??
+  table.locationId ??
+  table.location?._id ??
+  null;
+
+const getTableDisplayLabel = (table) => {
+  const value =
+    table.tableNumber ??
+    table.number ??
+    table.name ??
+    '';
+
+  const normalizedValue = String(value).trim();
+
+  if (/^table\s+/i.test(normalizedValue)) {
+    return normalizedValue;
+  }
+
+  return `Table ${normalizedValue}`;
+};
+
 export default function OrderScanner() {
   const [mode, setMode] = useState('scan'); // 'scan' or 'manual'
   const [codeInput, setCodeInput] = useState('');
@@ -53,6 +75,38 @@ export default function OrderScanner() {
     () => tables.find(table => String(table._id) === String(selectedTableId)) || null,
     [tables, selectedTableId]
   );
+
+  const filteredTables = useMemo(() => {
+    const matchingTables = selectedLocationId
+      ? tables.filter(
+          table => String(getTableLocationId(table)) === String(selectedLocationId)
+        )
+      : [...tables];
+
+    return [...matchingTables].sort((a, b) =>
+      getTableDisplayLabel(a).localeCompare(
+        getTableDisplayLabel(b),
+        undefined,
+        {
+          numeric: true,
+          sensitivity: 'base'
+        }
+      )
+    );
+  }, [tables, selectedLocationId]);
+
+  // Clear selected table if it is no longer valid in the newly selected location
+  useEffect(() => {
+    if (!selectedLocationId || !selectedTableId) {
+      return;
+    }
+    const isTableValid = filteredTables.some(
+      table => String(table._id) === String(selectedTableId)
+    );
+    if (!isTableValid) {
+      setSelectedTableId('');
+    }
+  }, [selectedLocationId, selectedTableId, filteredTables]);
 
   const selectedLocation = useMemo(() => {
     if (selectedLocationId) {
@@ -363,9 +417,9 @@ export default function OrderScanner() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto py-8 px-4 md:px-0 flex flex-col gap-6">
+    <div className="max-w-6xl mx-auto py-4 md:py-8 px-2 md:px-0 flex flex-col gap-4 md:gap-6">
       <div className="bg-surface-container rounded-2xl border border-outline-variant/20 shadow-lg overflow-hidden">
-        <div className="p-4 md:p-8 border-b border-outline-variant/10 bg-surface-container-low">
+        <div className="p-3.5 md:p-8 border-b border-outline-variant/10 bg-surface-container-low">
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
             <div className="max-w-2xl">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-primary/20 bg-primary/10 text-primary text-[11px] font-label-caps uppercase tracking-widest mb-4">
@@ -420,7 +474,7 @@ export default function OrderScanner() {
           </div>
         </div>
 
-        <div className="p-4 md:p-8 flex flex-col gap-6">
+        <div className="p-3.5 md:p-8 flex flex-col gap-4 md:gap-6">
           <OrderStatusMessage successMsg={successMsg} errorMsg={error || catalogError} />
 
           {/* Simple Statistics Header */}
@@ -475,9 +529,9 @@ export default function OrderScanner() {
               />
             ) : (
               <div key="manual" className="flex flex-col-reverse xl:grid xl:grid-cols-[1.1fr_0.9fr] gap-6">
-                <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-4 md:p-6 flex flex-col gap-5">
+                <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-3.5 md:p-6 flex flex-col gap-3.5 md:gap-5">
                   <ManualOrderBuilder
-                    tables={tables}
+                    tables={filteredTables}
                     locations={locations}
                     selectedTableId={selectedTableId}
                     selectedLocationId={selectedLocationId}
@@ -487,6 +541,7 @@ export default function OrderScanner() {
                     selectTable={selectTable}
                     setSelectedLocationId={setSelectedLocationId}
                     clearManualOrder={clearManualOrder}
+                    getTableDisplayLabel={getTableDisplayLabel}
                   />
 
                   <div className="border-t border-outline-variant/15 pt-5">
@@ -503,7 +558,7 @@ export default function OrderScanner() {
                   </div>
                 </div>
 
-                <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-4 md:p-6">
+                <div className="bg-surface-container-lowest border border-outline-variant/20 rounded-2xl p-3.5 md:p-6">
                   <ManualOrderSummary
                     selectedTable={selectedTable}
                     selectedLocation={selectedLocation}
