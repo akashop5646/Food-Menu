@@ -227,8 +227,8 @@ router.get('/active', async (req, res) => {
       targetOrderVerified = !!targetOrder;
     }
 
-    res.json({ 
-      verified: targetOrderVerified, 
+    res.json({
+      verified: targetOrderVerified,
       order: targetOrder,
       orders: activeOrders
     });
@@ -501,7 +501,7 @@ router.get('/', requireAuth, async (req, res) => {
   try {
     const { active } = req.query;
     const db = await getDB();
-    
+
     let query = {};
     if (active === 'true') {
       // Active orders shown in KDS columns
@@ -569,6 +569,85 @@ router.patch('/:id/status', requireAuth, async (req, res) => {
   }
 });
 
+// Bulk complete all active KDS orders (NEW -> COMPLETED, PREPARING -> COMPLETED, READY -> COMPLETED)
+router.post('/complete-all', requireAuth, async (req, res) => {
+  try {
+    const db = await getDB();
+    const ACTIVE_STATUSES = ['NEW', 'PREPARING', 'READY'];
+
+    // 1. Fetch active orders
+    const activeOrders = await db.collection('orders')
+      .find({ status: { $in: ACTIVE_STATUSES } })
+      .toArray();
+
+    const completedOrderIds = [];
+    const completedOrders = [];
+
+    // 2. Loop through each and perform a guarded atomic update
+    for (const order of activeOrders) {
+      const completedAt = new Date();
+
+      const result = await db.collection('orders').findOneAndUpdate(
+        {
+          _id: order._id,
+          status: { $in: ACTIVE_STATUSES }
+        },
+        {
+          $set: {
+            status: 'COMPLETED',
+            statusUpdatedAt: completedAt
+          }
+        },
+        {
+          returnDocument: 'after'
+        }
+      );
+
+      const updatedOrder = result?.value ?? result;
+      if (!updatedOrder) {
+        continue;
+      }
+
+      completedOrderIds.push(String(updatedOrder._id));
+      completedOrders.push(updatedOrder);
+    }
+
+    // 3. Emit events and log audits only for successfully transitioned orders
+    for (const order of completedOrders) {
+      const id = String(order._id);
+      // Broadcast WebSocket change
+      broadcast('ORDER_STATUS_CHANGED', { id, status: 'COMPLETED' });
+
+      // Record employee audit activity
+      await recordEmployeeActivity(
+        {
+          userId: req.user.id,
+          name: req.user.name,
+          email: req.user.email,
+          role: req.user.role || 'ADMIN'
+        },
+        'ORDER_STATUS_CHANGED',
+        {
+          type: 'ORDER',
+          id: id,
+          displayLabel: `Order status advanced to COMPLETED`
+        },
+        { toStatus: 'COMPLETED' }
+      ).catch(err => console.error(`Failed to record bulk activity for order ${id}:`, err));
+    }
+
+    res.status(200).json({
+      success: true,
+      matchedCount: activeOrders.length,
+      completedCount: completedOrderIds.length,
+      completedOrderIds
+    });
+  } catch (error) {
+    console.error('Failed to bulk complete KDS status:', error);
+    res.status(500).json({ error: 'Failed to bulk complete order status.' });
+  }
+});
+
 // Manually verify payment (PENDING -> PAID)
 router.patch('/:id/payment', requireAuth, async (req, res) => {
   try {
@@ -591,24 +670,24 @@ router.patch('/:id/payment', requireAuth, async (req, res) => {
     }
 
     const result = await db.collection('orders').updateOne(
-      { 
+      {
         _id: new ObjectId(id),
         paymentStatus: { $ne: 'PAID' }
       },
-      { 
-        $set: { 
+      {
+        $set: {
           paymentStatus: 'PAID',
           paymentVerifiedBy: 'ADMIN',
           manuallyVerifiedAt: new Date()
-        } 
+        }
       }
     );
 
     if (result.modifiedCount > 0) {
       // Broadcast payment update
-      broadcast('PAYMENT_UPDATED', { 
-        _id: id, 
-        id, 
+      broadcast('PAYMENT_UPDATED', {
+        _id: id,
+        id,
         paymentStatus: 'PAID',
         table: order.table
       });

@@ -27,6 +27,9 @@ export default function TablesAndQR() {
   const [deleteTargetId, setDeleteTargetId] = useState(null);
   const [selectedTableId, setSelectedTableId] = useState(null);
 
+  const [deleteLocationTarget, setDeleteLocationTarget] = useState(null);
+  const [isDeletingLocation, setIsDeletingLocation] = useState(false);
+
   const [isCreatingTable, setIsCreatingTable] = useState(false);
   const [isSavingTable, setIsSavingTable] = useState(false);
   const [isCreatingLocation, setIsCreatingLocation] = useState(false);
@@ -43,6 +46,7 @@ export default function TablesAndQR() {
   const editInputRef = useRef(null);
   const locationInputRef = useRef(null);
   const deleteCancelButtonRef = useRef(null);
+  const deleteLocationCancelButtonRef = useRef(null);
   const drawerCloseButtonRef = useRef(null);
 
   // Focus management on open
@@ -69,6 +73,12 @@ export default function TablesAndQR() {
       setTimeout(() => deleteCancelButtonRef.current?.focus(), 50);
     }
   }, [deleteTargetId]);
+
+  useEffect(() => {
+    if (deleteLocationTarget) {
+      setTimeout(() => deleteLocationCancelButtonRef.current?.focus(), 50);
+    }
+  }, [deleteLocationTarget]);
 
   useEffect(() => {
     if (selectedTableId) {
@@ -127,7 +137,7 @@ export default function TablesAndQR() {
     [tables, selectedFilter, searchQuery, getLocationIdForTable]
   );
 
-  const hasOpenOverlay = isModalOpen || isLocationModalOpen || !!editingTable || !!deleteTargetId || !!selectedTableId;
+  const hasOpenOverlay = isModalOpen || isLocationModalOpen || !!editingTable || !!deleteTargetId || !!selectedTableId || !!deleteLocationTarget;
 
   useScrollLock(hasOpenOverlay);
 
@@ -137,9 +147,12 @@ export default function TablesAndQR() {
 
     const handleEscape = (e) => {
       if (e.key !== 'Escape') return;
-      
+
       // Do not close multiple overlays at once, prioritize topmost
-      if (deleteTargetId) {
+      if (deleteLocationTarget) {
+        setDeleteLocationTarget(null);
+        restoreFocus();
+      } else if (deleteTargetId) {
         setDeleteTargetId(null);
         restoreFocus();
       } else if (editingTable) {
@@ -161,7 +174,7 @@ export default function TablesAndQR() {
 
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [deleteTargetId, editingTable, isModalOpen, isLocationModalOpen, selectedTableId, openDropdownId, hasOpenOverlay]);
+  }, [deleteTargetId, deleteLocationTarget, editingTable, isModalOpen, isLocationModalOpen, selectedTableId, openDropdownId, hasOpenOverlay]);
 
   // Click outside to close three-dot menu dropdown
   useEffect(() => {
@@ -216,7 +229,7 @@ export default function TablesAndQR() {
 
       setTables(Array.isArray(tablesData) ? tablesData : tablesData.tables || []);
       setLocations(Array.isArray(locsData) ? locsData : []);
-      
+
       if (profileRes && profileRes.ok) {
         const profileData = await profileRes.json();
         if (profileData && profileData.restaurantName) {
@@ -350,6 +363,48 @@ export default function TablesAndQR() {
       showToast('Something went wrong. Please try again.', 'error');
     } finally {
       setIsSavingTable(false);
+    }
+  };
+
+  const handleConfirmDeleteLocation = async () => {
+    if (!deleteLocationTarget || isDeletingLocation) return;
+    setIsDeletingLocation(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/locations/${deleteLocationTarget._id}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setLocations((prev) => prev.filter((loc) => loc._id !== deleteLocationTarget._id));
+
+        // Reset filter if active
+        if (selectedFilter === deleteLocationTarget._id) {
+          setSelectedFilter('All');
+        }
+
+        // Reset location selection in forms if active
+        if (formData.locationId === deleteLocationTarget._id) {
+          setFormData((prev) => ({ ...prev, locationId: '' }));
+        }
+        if (editFormData.locationId === deleteLocationTarget._id) {
+          setEditFormData((prev) => ({ ...prev, locationId: '' }));
+        }
+
+        showToast('Location removed', 'success');
+        setDeleteLocationTarget(null);
+        restoreFocus();
+      } else {
+        if (res.status === 409 && data.assignedTableCount !== undefined) {
+          showToast(`Move or delete the ${data.assignedTableCount} assigned tables before removing this location.`, 'error');
+        } else {
+          showToast(data.error || 'Something went wrong. Please try again.', 'error');
+        }
+      }
+    } catch (err) {
+      showToast('Something went wrong. Please try again.', 'error');
+    } finally {
+      setIsDeletingLocation(false);
     }
   };
 
@@ -632,19 +687,19 @@ export default function TablesAndQR() {
             <h1 class="restaurant-name">${safeRestaurantName}</h1>
             <div class="digital-concierge">Digital Concierge</div>
             <div class="diamond">◆</div>
-            
+
             <h2 class="main-heading">SCAN TO VIEW OUR MENU</h2>
             <p class="sub-heading">Browse, order and enjoy from your table</p>
-            
+
             <div class="qr-container-card">
               <div class="qr-quiet-zone">
                 <img id="print-qr" class="qr-image" src="${table.qrUrl}" alt="QR Code for ${safeName}" />
               </div>
             </div>
-            
+
             <h3 class="table-name">${safeName}</h3>
             <div class="table-location">${safeLocation}</div>
-            
+
             <div class="steps-row">
               <span class="step-text">Scan</span>
               <span class="step-sep">•</span>
@@ -652,16 +707,16 @@ export default function TablesAndQR() {
               <span class="step-sep">•</span>
               <span class="step-text">Order</span>
             </div>
-            
+
             <div class="help-fallback">
               Having trouble scanning? Ask our staff for assistance.
             </div>
-            
+
             <div class="footer-brand">
               Powered by Aurum Table
             </div>
           </div>
-          
+
           <script>
             const qrImage = document.getElementById('print-qr');
             const printPage = () => {
@@ -867,13 +922,13 @@ export default function TablesAndQR() {
               setIsLocationModalOpen(true);
             }}
             className="bg-surface-container-high border border-outline-variant/50 text-on-surface font-title-md text-[14px] sm:text-[16px] font-semibold px-4 py-2.5 rounded-xl hover:border-primary/50 transition-colors flex items-center gap-2 shadow-sm focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
-            aria-label="Create new location"
+            aria-label="Manage locations"
           >
             <span className="material-symbols-outlined text-[18px] hidden sm:block">
-              add_location
+              map
             </span>
-            <span className="hidden sm:block">Create Location</span>
-            <span className="sm:hidden">Location +</span>
+            <span className="hidden sm:block">Manage Locations</span>
+            <span className="sm:hidden">Locations</span>
           </button>
           <button
             type="button"
@@ -1152,14 +1207,14 @@ export default function TablesAndQR() {
               role="dialog"
               aria-modal="true"
               aria-labelledby="location-dialog-title"
-              className="bg-surface-container-low border border-outline-variant/30 rounded-xl w-full max-w-sm p-6 shadow-2xl app-modal-wrapper flex flex-col"
+              className="bg-surface-container-low border border-outline-variant/30 rounded-xl w-full max-w-md p-6 shadow-2xl app-modal-wrapper flex flex-col max-h-[90vh]"
             >
               <header className="app-overlay-header flex justify-between items-center mb-6 shrink-0">
                 <h2
                   id="location-dialog-title"
                   className="font-headline-sm text-primary text-[24px]"
                 >
-                  New Location
+                  Manage Locations
                 </h2>
                 <button
                   type="button"
@@ -1173,52 +1228,154 @@ export default function TablesAndQR() {
                   <span className="material-symbols-outlined" aria-hidden="true">close</span>
                 </button>
               </header>
-              <form onSubmit={submitCreateLocation} className="flex-1 min-h-0 flex flex-col">
-                <div className="app-overlay-scroll-body space-y-4 mb-4 pr-1">
+              <div className="flex-1 overflow-y-auto pr-1 space-y-6 min-h-0">
+                {/* Existing locations list */}
                 <div>
-                  <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">
-                    Location Name
+                  <label className="block font-label-caps text-[12px] text-on-surface-variant mb-3 uppercase tracking-widest">
+                    Existing Locations ({locations.length})
                   </label>
-                  <input
-                    ref={locationInputRef}
-                    required
-                    type="text"
-                    value={newLocationName}
-                    onChange={(e) => setNewLocationName(e.target.value)}
-                    placeholder="e.g. Patio, VIP Lounge"
-                    className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-                  />
+                  {locations.length === 0 ? (
+                    <p className="text-sm text-on-surface-variant/60 italic">No locations created yet.</p>
+                  ) : (
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      {locations.map((loc) => (
+                        <div
+                          key={loc._id}
+                          className="flex items-center justify-between p-3 rounded-lg bg-surface-container-high border border-outline-variant/15"
+                        >
+                          <span className="text-sm text-on-surface font-medium">{loc.name}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              lastFocusedRef.current = e.currentTarget;
+                              setDeleteLocationTarget(loc);
+                            }}
+                            className="text-on-surface-variant hover:text-error hover:bg-error/10 p-1.5 rounded-lg transition-colors flex items-center justify-center cursor-pointer min-w-[36px] min-h-[36px]"
+                            aria-label={`Delete ${loc.name}`}
+                          >
+                            <span className="material-symbols-outlined text-[18px]">delete</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
+
+                {/* Add new location form */}
+                <form onSubmit={submitCreateLocation} className="space-y-4 pt-4 border-t border-outline-variant/10">
+                  <div>
+                    <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1 uppercase tracking-widest">
+                      Create New Location
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        ref={locationInputRef}
+                        required
+                        type="text"
+                        value={newLocationName}
+                        onChange={(e) => setNewLocationName(e.target.value)}
+                        placeholder="e.g. Patio, VIP Lounge"
+                        className="flex-1 bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded px-4 py-2 focus:border-primary focus:ring-1 focus:ring-primary outline-none text-sm"
+                      />
+                      <button
+                        type="submit"
+                        disabled={isCreatingLocation}
+                        className="bg-primary text-on-primary px-4 py-2 rounded font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center gap-2 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
+                      >
+                        {isCreatingLocation ? (
+                          <span className="material-symbols-outlined text-[16px] animate-spin">
+                            progress_activity
+                          </span>
+                        ) : (
+                          'Add'
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+              <footer className="app-overlay-footer pt-4 flex justify-end gap-3 border-t border-outline-variant/10 shrink-0 mt-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsLocationModalOpen(false);
+                    restoreFocus();
+                  }}
+                  className="px-5 py-2 min-h-[44px] text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
+                >
+                  Close
+                </button>
+              </footer>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {deleteLocationTarget && (
+          <motion.div
+            key="delete-location-dialog"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="app-overlay-backdrop bg-black/60 backdrop-blur-sm fixed inset-0 z-[100] flex items-center justify-center p-4"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) return;
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-location-dialog-title"
+              className="bg-surface-container-low border border-outline-variant/30 rounded-xl w-full max-w-sm p-6 shadow-2xl app-modal-wrapper"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-error/10 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-error text-[24px]">delete</span>
                 </div>
-                <footer className="app-overlay-footer pt-4 flex justify-end gap-3 border-t border-outline-variant/10 shrink-0">
-                  <button
-                     type="button"
-                     onClick={() => {
-                       setIsLocationModalOpen(false);
-                       restoreFocus();
-                     }}
-                     className="px-5 py-2 min-h-[44px] text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isCreatingLocation}
-                    className="bg-primary text-on-primary px-6 py-2 min-h-[44px] rounded font-label-caps text-[12px] uppercase tracking-widest gold-glow flex items-center gap-2 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-primary outline-none cursor-pointer"
-                  >
-                    {isCreatingLocation ? (
-                      <>
-                        <span className="material-symbols-outlined text-[16px] animate-spin">
-                          progress_activity
-                        </span>
-                        Creating…
-                      </>
-                    ) : (
-                      'Save Location'
-                    )}
-                  </button>
-                </footer>
-              </form>
+                <h2
+                  id="delete-location-dialog-title"
+                  className="font-headline-sm text-on-surface text-[20px]"
+                >
+                  Delete {deleteLocationTarget.name}?
+                </h2>
+              </div>
+              <p className="font-body-sm text-[14px] text-on-surface-variant/80 mb-6">
+                This action cannot be undone. All QR records and table displays matching this location will be affected.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  ref={deleteLocationCancelButtonRef}
+                  type="button"
+                  onClick={() => {
+                    setDeleteLocationTarget(null);
+                    restoreFocus();
+                  }}
+                  className="px-5 py-2 min-h-[44px] text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDeleteLocation}
+                  disabled={isDeletingLocation}
+                  className="bg-error text-on-error px-6 py-2 min-h-[44px] rounded-lg font-label-caps text-[12px] uppercase tracking-widest flex items-center gap-2 disabled:opacity-60 outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
+                >
+                  {isDeletingLocation ? (
+                    <>
+                      <span className="material-symbols-outlined text-[16px] animate-spin">
+                        progress_activity
+                      </span>
+                      Removing…
+                    </>
+                  ) : (
+                    'Remove Location'
+                  )}
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}

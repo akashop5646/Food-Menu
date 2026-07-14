@@ -44,7 +44,16 @@ export function initWebSocket(server) {
   return wss;
 }
 
+let mockBroadcastFn = null;
+export function setMockBroadcast(fn) {
+  mockBroadcastFn = fn;
+}
+
 export function broadcast(type, payload) {
+  if (mockBroadcastFn) {
+    mockBroadcastFn(type, payload);
+    return;
+  }
   if (!wss) {
     console.warn('⚠️ WebSocket server not initialized yet');
     return;

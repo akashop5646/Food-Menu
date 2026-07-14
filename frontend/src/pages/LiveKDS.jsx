@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE } from '../config';
 
@@ -51,6 +52,64 @@ export default function LiveKDS({
   const [editSuccessMsg, setEditSuccessMsg] = useState('');
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editTab, setEditTab] = useState('edit'); // 'edit' or 'history'
+
+  // KDS bulk complete states
+  const [showCompleteAllConfirm, setShowCompleteAllConfirm] = useState(false);
+  const [isCompletingAll, setIsCompletingAll] = useState(false);
+  const [toast, setToast] = useState(null);
+  const toastTimeoutRef = useRef(null);
+
+  const showToast = useCallback((message, type) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToast({ message, type });
+    toastTimeoutRef.current = setTimeout(() => setToast(null), 2500);
+  }, []);
+
+  const completableOrders = useMemo(() => {
+    return orders.filter(order => ['NEW', 'PREPARING', 'READY'].includes(order.status));
+  }, [orders]);
+
+  const handleConfirmCompleteAll = async () => {
+    if (isCompletingAll || completableOrders.length === 0) return;
+    setIsCompletingAll(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/orders/complete-all`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include'
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const { completedOrderIds, completedCount, matchedCount } = data;
+
+        // Remove only IDs returned by completedOrderIds
+        if (completedOrderIds && completedOrderIds.length > 0) {
+          setOrders(prev => prev.filter(o => !completedOrderIds.includes(String(o._id))));
+        }
+
+        // Run authoritative fetchActiveOrders reconciliation
+        await fetchActiveOrders();
+
+        setShowCompleteAllConfirm(false);
+
+        // Result-aware success messages
+        if (completedCount > 0 && matchedCount === completedCount) {
+          showToast(`${completedCount} orders completed`, 'success');
+        } else if (completedCount === 0) {
+          showToast('No active orders remained to complete', 'success');
+        } else if (matchedCount > completedCount) {
+          showToast(`${completedCount} orders completed. KDS refreshed because another terminal updated the remaining order.`, 'success');
+        }
+      } else {
+        showToast(data.error || 'Failed to complete all orders.', 'error');
+      }
+    } catch (e) {
+      console.error(e);
+      showToast('Failed to complete all orders.', 'error');
+    } finally {
+      setIsCompletingAll(false);
+    }
+  };
 
   // Search & menu items
   const [editMenuSearch, setEditMenuSearch] = useState('');
@@ -663,6 +722,17 @@ export default function LiveKDS({
             <span className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-error animate-pulse'}`} title={wsConnected ? 'Live' : 'Disconnected'} />
           </div>
           <div className="flex items-center gap-2">
+            {completableOrders.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowCompleteAllConfirm(true)}
+                aria-label="Complete all active orders"
+                className="flex items-center justify-center gap-1.5 bg-error/10 hover:bg-error text-error hover:text-on-error border border-error/30 h-10 px-3.5 rounded-xl font-label-caps text-[10px] sm:text-[11px] uppercase tracking-wider font-bold transition-all cursor-pointer min-h-[44px]"
+              >
+                <span className="material-symbols-outlined text-[16px]">done_all</span>
+                <span className="hidden sm:inline">Complete All</span>
+              </button>
+            )}
             <button
               onClick={toggleKdsSound}
               aria-label={kdsSoundEnabled ? 'Disable KDS sound' : 'Enable KDS sound'}
@@ -699,6 +769,28 @@ export default function LiveKDS({
             </button>
           </div>
         </header>
+      )}
+
+      {!isKitchenMode && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 md:px-0 md:py-0 md:pb-5 shrink-0 select-none animate-[fadeUp_0.6s_ease-out_forwards]">
+          <div className="hidden md:block">
+            <h2 className="font-headline-md text-xl md:text-2xl text-primary font-bold">Kitchen Display</h2>
+            <p className="text-xs text-on-surface-variant/80 mt-0.5">Manage and track active orders on the kitchen floor.</p>
+          </div>
+          <div className="flex items-center gap-3 w-full sm:w-auto sm:ml-auto">
+            {completableOrders.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowCompleteAllConfirm(true)}
+                aria-label="Complete all active orders"
+                className="w-full sm:w-auto bg-error/10 hover:bg-error text-error hover:text-on-error border border-error/20 h-11 px-4 rounded-xl font-label-caps text-[11px] uppercase tracking-wider font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 min-h-[44px]"
+              >
+                <span className="material-symbols-outlined text-[18px]">done_all</span>
+                <span>Complete All</span>
+              </button>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Mobile Stage Switcher */}
@@ -1266,6 +1358,95 @@ export default function LiveKDS({
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showCompleteAllConfirm && (
+          <motion.div
+            key="complete-all-confirm-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="app-overlay-backdrop bg-black/60 backdrop-blur-sm fixed inset-0 z-[100] flex items-center justify-center p-4"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowCompleteAllConfirm(false);
+              }
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="complete-all-dialog-title"
+              className="bg-surface-container-low border border-outline-variant/30 rounded-xl w-full max-w-sm p-6 shadow-2xl app-modal-wrapper"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-error/10 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-error text-[24px]">done_all</span>
+                </div>
+                <h2
+                  id="complete-all-dialog-title"
+                  className="font-headline-sm text-on-surface text-[20px]"
+                >
+                  Complete all {completableOrders.length} active orders?
+                </h2>
+              </div>
+              <p className="font-body-sm text-[14px] text-on-surface-variant/80 mb-6">
+                This action will mark all active orders as completed and remove them from the Live KDS view.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCompleteAllConfirm(false)}
+                  className="px-5 py-2 min-h-[44px] text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmCompleteAll}
+                  disabled={isCompletingAll}
+                  className="bg-error text-on-error px-6 py-2 min-h-[44px] rounded-lg font-label-caps text-[12px] uppercase tracking-widest flex items-center gap-2 disabled:opacity-60 outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
+                >
+                  {isCompletingAll ? (
+                    <>
+                      <span className="material-symbols-outlined text-[16px] animate-spin">
+                        progress_activity
+                      </span>
+                      Completing...
+                    </>
+                  ) : (
+                    'Complete All Orders'
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            key="toast"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2 px-4 py-3 rounded-xl border text-[13px] font-bold shadow-lg ${
+              toast.type === 'success'
+                ? 'bg-green-500/10 border-green-500/30 text-green-600 dark:text-green-400'
+                : 'bg-error/10 border-error/30 text-error'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[18px]">
+              {toast.type === 'success' ? 'check_circle' : 'error'}
+            </span>
+            {toast.message}
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
