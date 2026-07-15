@@ -9,6 +9,10 @@ import { recordEmployeeActivity } from '../services/employeeAudit.js';
 
 const router = Router();
 
+const CHECKOUT_CODE_EXPIRY_MINUTES = 10;
+const CHECKOUT_CODE_EXPIRY_MS = CHECKOUT_CODE_EXPIRY_MINUTES * 60 * 1000;
+const MAX_CODE_GENERATION_ATTEMPTS = 25;
+
 const MAX_UNIQUE_ITEMS = 50;
 const MAX_ITEM_QUANTITY = 99;
 const MAX_TOTAL_QUANTITY = 500;
@@ -78,20 +82,6 @@ function getAllowlistedResponse(order) {
   };
 }
 
-// Drop TTL index on checkout_codes collection to remove code expiration
-(async () => {
-  try {
-    const db = await getDB();
-    await db.collection('checkout_codes').dropIndex('createdAt_1');
-    console.log('Successfully dropped TTL index on checkout_codes');
-  } catch (err) {
-    // If the index doesn't exist, MongoDB returns an IndexNotFound error, which we can ignore
-    if (err.codeName !== 'IndexNotFound') {
-      console.error('Failed to drop TTL index on checkout_codes:', err);
-    }
-  }
-})();
-
 // Generate a unique 4-digit code for a checkout session (Public endpoint)
 router.post('/checkout-code', async (req, res) => {
   try {
@@ -106,43 +96,67 @@ router.post('/checkout-code', async (req, res) => {
     }
 
     const db = await getDB();
+    const now = new Date();
 
     // If this checkoutSessionId already has an active code, return it
     if (checkoutSessionId) {
       const existing = await db.collection('checkout_codes').findOne({
         checkoutSessionId,
-        used: false
+        expiresAt: { $gt: now }
       });
       if (existing) {
-        return res.json({ code: existing.code });
+        return res.json({ code: existing.code, orderId: existing.orderPayload?._id, expiresAt: existing.expiresAt });
       }
     }
 
     // Generate a unique 4-digit code (retry on collision)
-    let code;
+    let generatedCode = null;
     let attempts = 0;
-    while (attempts < 20) {
-      code = String(Math.floor(1000 + Math.random() * 9000)); // 1000-9999
-      const collision = await db.collection('checkout_codes').findOne({ code, used: false });
-      if (!collision) break;
+    const expiresAt = new Date(now.getTime() + CHECKOUT_CODE_EXPIRY_MS);
+    const orderId = new ObjectId();
+
+    while (attempts < MAX_CODE_GENERATION_ATTEMPTS) {
+      const candidateCode = String(Math.floor(1000 + Math.random() * 9000)); // 1000-9999
+
+      const activeCollision = await db.collection('checkout_codes').findOne({
+        code: candidateCode,
+        expiresAt: { $gt: now }
+      });
+
+      if (!activeCollision) {
+        // Delete stale/legacy same-code records
+        await db.collection('checkout_codes').deleteMany({
+          code: candidateCode,
+          $or: [
+            { expiresAt: { $lte: now } },
+            { expiresAt: { $exists: false } }
+          ]
+        });
+
+        // Insert new active code
+        await db.collection('checkout_codes').insertOne({
+          code: candidateCode,
+          orderPayload: { _id: orderId, table, location, items, total, deviceId, customerIp, checkoutSessionId },
+          checkoutSessionId: checkoutSessionId || null,
+          used: false,
+          createdAt: now,
+          expiresAt
+        });
+
+        generatedCode = candidateCode;
+        break;
+      }
       attempts++;
     }
 
-    if (attempts >= 20) {
-      return res.status(503).json({ error: 'Could not generate a unique code. Please try again.' });
+    if (!generatedCode) {
+      return res.status(503).json({
+        error: 'Unable to generate a checkout code. Please try again.',
+        code: 'CHECKOUT_CODE_GENERATION_UNAVAILABLE'
+      });
     }
 
-    const orderId = new ObjectId();
-
-    await db.collection('checkout_codes').insertOne({
-      code,
-      orderPayload: { _id: orderId, table, location, items, total, deviceId, customerIp, checkoutSessionId },
-      checkoutSessionId: checkoutSessionId || null,
-      used: false,
-      createdAt: new Date()
-    });
-
-    res.json({ code, orderId });
+    res.json({ code: generatedCode, orderId, expiresAt });
   } catch (error) {
     console.error('Failed to generate checkout code:', error);
     res.status(500).json({ error: 'Failed to generate checkout code.' });
@@ -159,14 +173,19 @@ router.post('/verify-code', requireAuth, async (req, res) => {
     }
 
     const db = await getDB();
-    const entry = await db.collection('checkout_codes').findOne({ code: String(code), used: false });
+    const result = await db.collection('checkout_codes').findOneAndDelete({
+      code: String(code),
+      expiresAt: { $gt: new Date() }
+    });
+
+    const entry = result?.value ?? result ?? null;
 
     if (!entry) {
-      return res.status(404).json({ error: 'Invalid or already used code. Please check and try again.' });
+      return res.status(404).json({
+        error: 'Checkout code is invalid, expired, or has already been used.',
+        code: 'CHECKOUT_CODE_INVALID'
+      });
     }
-
-    // Delete the verified code document immediately so it doesn't pile up in the database
-    await db.collection('checkout_codes').deleteOne({ _id: entry._id });
 
     res.json({ orderPayload: entry.orderPayload });
   } catch (error) {
@@ -174,6 +193,7 @@ router.post('/verify-code', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Failed to verify code.' });
   }
 });
+
 
 // Check if table has an active verified order (Public endpoint)
 router.get('/active', async (req, res) => {

@@ -1351,7 +1351,7 @@ function MenuPage() {
                 </>
               ) : (
                 <>
-                  <p className="font-body-md text-body-md text-on-surface-variant mb-6">Show this code to your waiter to confirm your order.</p>
+                  <p className="font-body-md text-body-md text-on-surface-variant mb-6">Show this code to your waiter to confirm your order. This code expires in 10 minutes.</p>
                    
                    {/* 4-Digit Verification Code */}
                    <div className="relative bg-surface-container-high rounded-2xl mb-6 border-2 border-primary/30 gold-glow shrink-0 overflow-hidden px-8 py-6 flex flex-col items-center gap-3">
