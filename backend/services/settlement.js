@@ -52,6 +52,7 @@ export function buildSettlementSnapshot(order, activeConfiguration) {
       linkedAccountId: recipient.linkedAccountId,
       allocationBasisPoints: recipient.allocationBasisPoints,
       amountPaise: recipient.amountPaise,
+      recipientType: recipient.recipientType || 'OTHER',
       status: recipient.amountPaise === 0 ? 'SKIPPED_ZERO_AMOUNT' : recipient.amountPaise < MINIMUM_TRANSFER_PAISE ? 'SKIPPED_MINIMUM_AMOUNT' : 'PENDING',
       transferId: null,
       transferStatus: null,

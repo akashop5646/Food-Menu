@@ -9,6 +9,7 @@ import {
   generatePaymentReportHtml,
   openPrintableDocument
 } from '../utils/paymentDocumentHelper';
+import { calculateSettlementSummary, getOrderSettlementBreakdown } from '../utils/settlementHelper';
 
 // Money formatting and numeric extraction helpers
 const getFoodSubtotal = (order) => {
@@ -164,7 +165,7 @@ const getItemSummary = (items) => {
   return formatted;
 };
 
-export default function Payments({ refreshKey }) {
+export default function Payments({ refreshKey, user }) {
   const [paymentOrders, setPaymentOrders] = useState([]);
   const [paymentsLoading, setPaymentsLoading] = useState(true);
   const [paymentsSearch, setPaymentsSearch] = useState('');
@@ -446,6 +447,12 @@ export default function Payments({ refreshKey }) {
     });
   }, [paymentOrders, dateBounds, paymentsStatusFilter, paymentsTypeFilter, paymentsSearch, paymentsTimeRange, paymentsCustomStartDate, paymentsCustomEndDate]);
 
+  const settlementSummary = useMemo(() => {
+    return calculateSettlementSummary(filteredPaymentOrders);
+  }, [filteredPaymentOrders]);
+
+  const showSettlementDetails = user?.role === 'MASTER_ADMIN' || user?.role === 'ADMIN';
+
   const handlePrintReport = useCallback(() => {
     if (isGeneratingReport) return;
     // ponytail: open window synchronously before data work
@@ -464,7 +471,7 @@ export default function Payments({ refreshKey }) {
         typeFilter: paymentsTypeFilter,
         search: paymentsSearch
       };
-      const reportData = buildFilteredPaymentReportData(filteredPaymentOrders, activeFilters);
+      const reportData = buildFilteredPaymentReportData(filteredPaymentOrders, activeFilters, { showSettlementDetails });
       if (!reportData) {
         printWindow.close();
         alert('Unable to generate the report. Please try again.');
@@ -731,6 +738,63 @@ export default function Payments({ refreshKey }) {
             </div>
           </div>
         </div>
+
+        {/* Settlement Summary Cards */}
+        {showSettlementDetails && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 px-6 md:px-8 pt-2 pb-4">
+            {/* Card 1: Owner Allocated */}
+            <div className="bg-surface-container-low border border-outline-variant/10 rounded-2xl p-4 flex flex-col justify-between shadow-sm border-l-4 border-l-primary">
+              <div>
+                <span className="text-[11px] font-label-caps text-on-surface-variant/70 uppercase tracking-widest block font-semibold">Owner Allocated</span>
+                <span className="font-price-display text-primary font-bold text-2xl mt-1 block">
+                  ₹{settlementSummary.ownerAllocatedTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="text-xs text-on-surface-variant/60 mt-2 font-medium">
+                Split share allocation
+              </div>
+            </div>
+
+            {/* Card 2: Owner Transferred */}
+            <div className="bg-surface-container-low border border-outline-variant/10 rounded-2xl p-4 flex flex-col justify-between shadow-sm border-l-4 border-l-green-500">
+              <div>
+                <span className="text-[11px] font-label-caps text-on-surface-variant/70 uppercase tracking-widest block font-semibold">Owner Transferred</span>
+                <span className="text-green-600 dark:text-green-400 font-bold text-2xl mt-1 block">
+                  ₹{settlementSummary.ownerTransferredTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="text-xs text-on-surface-variant/60 mt-2 font-medium">
+                Route transfers processed
+              </div>
+            </div>
+
+            {/* Card 3: Platform Retained */}
+            <div className="bg-surface-container-low border border-outline-variant/10 rounded-2xl p-4 flex flex-col justify-between shadow-sm">
+              <div>
+                <span className="text-[11px] font-label-caps text-on-surface-variant/70 uppercase tracking-widest block font-semibold">Platform Retained</span>
+                <span className="text-on-surface font-bold text-2xl mt-1 block">
+                  ₹{settlementSummary.platformRetainedTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="text-xs text-on-surface-variant/60 mt-2 font-medium">
+                Aurum retained share
+              </div>
+            </div>
+
+            {/* Card 4: Other External Allocation */}
+            <div className="bg-surface-container-low border border-outline-variant/10 rounded-2xl p-4 flex flex-col justify-between shadow-sm">
+              <div>
+                <span className="text-[11px] font-label-caps text-on-surface-variant/70 uppercase tracking-widest block font-semibold">Other External Allocation</span>
+                <span className="text-on-surface font-bold text-2xl mt-1 block">
+                  ₹{settlementSummary.otherExternalTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="text-xs text-on-surface-variant/60 mt-2 font-medium">
+                Other recipients share
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Search and Filters Toolbar */}
         <div className="px-6 md:px-8 py-4 bg-surface-container-low border-b border-t border-outline-variant/10 flex flex-wrap gap-4 items-center mt-4">
@@ -1247,6 +1311,68 @@ export default function Payments({ refreshKey }) {
                     </div>
                   </div>
                 </div>
+
+                {/* Settlement Breakdown */}
+                {showSettlementDetails && (
+                  <div className="space-y-3 bg-surface-container-lowest p-4 rounded-xl border border-outline-variant/10">
+                    <h4 className="text-[11px] font-label-caps text-on-surface-variant/70 uppercase tracking-widest font-semibold border-b border-outline-variant/10 pb-1">Settlement Breakdown</h4>
+                    {(() => {
+                      const breakdown = getOrderSettlementBreakdown(selectedOrder);
+                      if (!breakdown.isEligible) {
+                        return (
+                          <div className="text-xs text-on-surface-variant/70 italic">
+                            Settlement snapshot unavailable for this order.
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between text-on-surface-variant">
+                            <span>Food Subtotal</span>
+                            <span className="font-mono">₹{breakdown.foodSubtotal.toFixed(2)}</span>
+                          </div>
+
+                          {/* Recipients shares */}
+                          <div className="space-y-1.5 pl-3 border-l-2 border-outline-variant/20">
+                            <div className="text-[10px] font-label-caps text-on-surface-variant/70 uppercase tracking-wider block font-semibold mb-1">
+                              External Recipient Transfers
+                            </div>
+                            {(selectedOrder.splitSettlement?.recipients || []).map((recipient) => {
+                              const isOwner = recipient.recipientType === 'RESTAURANT_OWNER';
+                              const badge = isOwner ? ' (Owner)' : '';
+                              const transferLabel = `${recipient.label}${badge}`;
+
+                              return (
+                                <div key={recipient.recipientId} className="flex justify-between text-xs text-on-surface-variant">
+                                  <div className="flex flex-col">
+                                    <span className={isOwner ? "font-semibold text-primary" : ""}>
+                                      {transferLabel}
+                                    </span>
+                                    <span className="text-[10px] text-on-surface-variant/60">
+                                      {(recipient.allocationBasisPoints / 100).toFixed(2)}% · {recipient.status}
+                                    </span>
+                                  </div>
+                                  <span className="font-mono">₹{((recipient.amountPaise || 0) / 100).toFixed(2)}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          <div className="flex justify-between text-on-surface-variant">
+                            <span>Platform Retained</span>
+                            <span className="font-mono">₹{breakdown.platformRetained.toFixed(2)}</span>
+                          </div>
+
+                          <div className="flex justify-between text-on-surface-variant pt-1.5 border-t border-outline-variant/15 text-xs italic">
+                            <span>Convenience Fee (Excluded)</span>
+                            <span className="font-mono">₹{breakdown.convenienceFee.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
 
                 {/* Razorpay Details */}
                 <div className="space-y-4 pt-2">

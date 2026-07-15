@@ -1,5 +1,6 @@
 // ponytail: reuses escapeHtml and getFiniteNumber from existing customer receipt helper
 import { escapeHtml, getFiniteNumber } from './receiptHelper.js';
+import { calculateSettlementSummary, getOrderSettlementBreakdown } from './settlementHelper.js';
 
 // Re-export for test access
 export { escapeHtml, getFiniteNumber };
@@ -198,8 +199,13 @@ export function generateSinglePaymentReceiptHtml(receiptData, restaurantName = '
 /**
  * Build report data from the full filtered payment collection.
  */
-export function buildFilteredPaymentReportData(filteredOrders, activeFilters = {}) {
+export function buildFilteredPaymentReportData(filteredOrders, activeFilters = {}, options = {}) {
   if (!Array.isArray(filteredOrders)) return null;
+
+  const showSettlementDetails = !!options.showSettlementDetails;
+  const settlementSummary = showSettlementDetails
+    ? calculateSettlementSummary(filteredOrders)
+    : null;
 
   let foodSubtotalTotal = 0;
   let convenienceFeeTotal = 0;
@@ -237,6 +243,10 @@ export function buildFilteredPaymentReportData(filteredOrders, activeFilters = {
       : items.slice(0, 2).map(i => `${i.quantity}× ${i.name || 'Item'}`).join(', ') +
         (items.length > 2 ? ` +${items.length - 2} more` : '');
 
+    const settlementInfo = showSettlementDetails
+      ? getOrderSettlementBreakdown(order)
+      : null;
+
     return {
       serial: index + 1,
       orderId,
@@ -249,7 +259,8 @@ export function buildFilteredPaymentReportData(filteredOrders, activeFilters = {
       convenienceFee,
       finalAmount,
       method: String(order.paymentType || 'UNKNOWN'),
-      status: String(order.paymentStatus || 'PENDING')
+      status: String(order.paymentStatus || 'PENDING'),
+      settlementInfo
     };
   });
 
@@ -282,8 +293,10 @@ export function buildFilteredPaymentReportData(filteredOrders, activeFilters = {
       pendingCount,
       foodSubtotalTotal,
       convenienceFeeTotal,
-      customerPaidTotal
+      customerPaidTotal,
+      settlementSummary
     },
+    showSettlementDetails,
     rows
   };
 }
@@ -314,21 +327,41 @@ export function generatePaymentReportHtml(reportData, restaurantName = 'Aurum Ta
   if (filters.search) addFilter('Search', filters.search);
   if (!filtersHtml) filtersHtml = '<span class="filter-tag">No filters applied</span>';
 
-  // Determine total label based on whether mixed statuses
   const totalLabel = (summary.paidCount > 0 && summary.pendingCount > 0)
     ? 'Total Recorded Amount'
     : (summary.paidCount > 0 ? 'Total Collected' : 'Total Recorded Amount');
 
-  // Build table rows
+  let settlementSummaryHtml = '';
+  if (reportData.showSettlementDetails && summary.settlementSummary) {
+    const ss = summary.settlementSummary;
+    settlementSummaryHtml = `
+    <div class="summary-cards" style="margin-top: -8px; border-top: 1px solid #e5e2db; padding-top: 12px; margin-bottom: 20px;">
+      <div class="summary-card" style="border-left: 4px solid #8b6914;"><span class="label">Owner Allocated</span><span class="value gold">₹${ss.ownerAllocatedTotal.toFixed(2)}</span></div>
+      <div class="summary-card" style="border-left: 4px solid #16a34a;"><span class="label">Owner Transferred</span><span class="value" style="color:#16a34a">₹${ss.ownerTransferredTotal.toFixed(2)}</span></div>
+      <div class="summary-card"><span class="label">Platform Retained</span><span class="value">₹${ss.platformRetainedTotal.toFixed(2)}</span></div>
+      <div class="summary-card"><span class="label">Other External</span><span class="value">₹${ss.otherExternalTotal.toFixed(2)}</span></div>
+    </div>`;
+  }
+
   let rowsHtml = '';
   reportData.rows.forEach(row => {
     const statusColor = row.status === 'PAID' ? '#16a34a' : '#d97706';
     const feeCell = row.convenienceFee > 0 ? `₹${row.convenienceFee.toFixed(2)}` : '—';
+
+    let settlementInfoHtml = '';
+    if (reportData.showSettlementDetails && row.settlementInfo && row.settlementInfo.isEligible) {
+      settlementInfoHtml = `
+      <div style="font-size: 9px; color: #7d7057; margin-top: 4px; line-height: 1.2;">
+        Owner: ₹${row.settlementInfo.ownerAllocated.toFixed(2)} (${row.settlementInfo.ownerTransferred > 0 ? 'Processed' : 'Pending'})<br>
+        Platform: ₹${row.settlementInfo.platformRetained.toFixed(2)}
+      </div>`;
+    }
+
     rowsHtml += `
       <tr>
         <td>${row.serial}</td>
         <td class="nowrap">${esc(row.date)}</td>
-        <td class="mono">#${esc(row.shortId)}</td>
+        <td class="mono">#${esc(row.shortId)}${settlementInfoHtml}</td>
         <td>${esc(row.table)}${row.location ? `<br><span class="loc">${esc(row.location)}</span>` : ''}</td>
         <td class="items-col">${esc(row.itemSummary)}</td>
         <td class="num">₹${row.foodSubtotal.toFixed(2)}</td>
@@ -463,6 +496,7 @@ export function generatePaymentReportHtml(reportData, restaurantName = 'Aurum Ta
       <div class="summary-card"><span class="label">Convenience Fees</span><span class="value">₹${summary.convenienceFeeTotal.toFixed(2)}</span></div>
       <div class="summary-card"><span class="label">${esc(totalLabel)}</span><span class="value gold">₹${summary.customerPaidTotal.toFixed(2)}</span></div>
     </div>
+    ${settlementSummaryHtml}
     <table>
       <thead>
         <tr>

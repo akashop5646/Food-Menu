@@ -14,6 +14,11 @@ const TOTAL_BASIS_POINTS = 10000;
 const LINKED_ACCOUNT_ID_PATTERN = /^acc_[A-Za-z0-9_]{3,100}$/;
 const RECIPIENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,100}$/;
 
+const SETTLEMENT_RECIPIENT_TYPES = Object.freeze({
+  RESTAURANT_OWNER: 'RESTAURANT_OWNER',
+  OTHER: 'OTHER'
+});
+
 class SettlementValidationError extends Error {}
 
 const createEmptyDraft = () => ({
@@ -77,7 +82,7 @@ function normalizeRecipients(recipients) {
   const seenIds = new Set();
   const seenEnabledAccountIds = new Set();
 
-  return recipients.map((recipient) => {
+  const normalized = recipients.map((recipient) => {
     if (!recipient || typeof recipient !== 'object') {
       throw new SettlementValidationError('Each recipient must be an object');
     }
@@ -106,6 +111,11 @@ function normalizeRecipients(recipients) {
       throw new SettlementValidationError('Recipient allocation must be an integer between 0 and 10000 basis points');
     }
 
+    const recipientType = recipient.recipientType || 'OTHER';
+    if (!Object.values(SETTLEMENT_RECIPIENT_TYPES).includes(recipientType)) {
+      throw new SettlementValidationError('Invalid recipient type');
+    }
+
     if (recipient.enabled) {
       if (!LINKED_ACCOUNT_ID_PATTERN.test(linkedAccountId)) {
         throw new SettlementValidationError('Each enabled recipient requires a valid Razorpay linked account ID');
@@ -119,8 +129,17 @@ function normalizeRecipients(recipients) {
       seenEnabledAccountIds.add(linkedAccountId);
     }
 
-    return { id, label, linkedAccountId, allocationBasisPoints, enabled: recipient.enabled };
+    return { id, label, linkedAccountId, allocationBasisPoints, enabled: recipient.enabled, recipientType };
   });
+
+  const enabledOwnerCount = normalized.filter(
+    r => r.enabled && r.recipientType === SETTLEMENT_RECIPIENT_TYPES.RESTAURANT_OWNER
+  ).length;
+  if (enabledOwnerCount > 1) {
+    throw new SettlementValidationError('Only one enabled settlement recipient can be designated as the Restaurant Owner.');
+  }
+
+  return normalized;
 }
 
 export function validateDraftRecipients(recipients) {
@@ -139,6 +158,13 @@ export function validateDraftForActivation(draft) {
 
   if (totalBasisPoints <= 0 || totalBasisPoints > TOTAL_BASIS_POINTS) {
     throw new SettlementValidationError('Enabled external recipients must receive more than 0% and no more than 100%');
+  }
+
+  const enabledOwnerCount = recipients.filter(
+    r => r.enabled && r.recipientType === SETTLEMENT_RECIPIENT_TYPES.RESTAURANT_OWNER
+  ).length;
+  if (enabledOwnerCount !== 1) {
+    throw new SettlementValidationError('Select one enabled recipient as the Restaurant Owner before activating the configuration.');
   }
 
   return { recipients, totalBasisPoints };
@@ -167,7 +193,10 @@ function presentSettlementConfig(config) {
     updatedAt: config.updatedAt || null,
     active: config.active ? {
       version: config.active.version,
-      recipients: config.active.recipients,
+      recipients: (config.active.recipients || []).map(r => ({
+        ...r,
+        recipientType: r.recipientType || 'OTHER'
+      })),
       totalBasisPoints: config.active.totalBasisPoints,
       externalAllocationBasisPoints: activeSummary.externalAllocationBasisPoints,
       platformRetainedBasisPoints: activeSummary.platformRetainedBasisPoints,
@@ -177,7 +206,10 @@ function presentSettlementConfig(config) {
       disabledBy: config.disabledBy || null,
     } : null,
     draft: {
-      recipients: draft.recipients || [],
+      recipients: (draft.recipients || []).map(r => ({
+        ...r,
+        recipientType: r.recipientType || 'OTHER'
+      })),
       totalBasisPoints: draftTotal,
       externalAllocationBasisPoints: draftSummary.externalAllocationBasisPoints,
       platformRetainedBasisPoints: draftSummary.platformRetainedBasisPoints,

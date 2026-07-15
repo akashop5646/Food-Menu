@@ -107,6 +107,7 @@ export default function Settings({ user }) {
     setSettlementConfig(config);
     setSettlementRecipients((config.draft?.recipients || []).map((recipient) => ({
       ...recipient,
+      recipientType: recipient.recipientType || 'OTHER',
       percentageInput: formatSettlementPercentage(recipient.allocationBasisPoints),
     })));
     setSettlementDirty(false);
@@ -295,6 +296,21 @@ export default function Settings({ user }) {
     setSettlementError('');
   };
 
+  const handleUpdateRecipientType = (index, value) => {
+    setSettlementRecipients((current) => current.map((recipient, recipientIndex) => {
+      if (recipientIndex === index) {
+        return { ...recipient, recipientType: value };
+      }
+      if (value === 'RESTAURANT_OWNER') {
+        return { ...recipient, recipientType: 'OTHER' };
+      }
+      return recipient;
+    }));
+    setSettlementDirty(true);
+    setSettlementSuccess('');
+    setSettlementError('');
+  };
+
   const addSettlementRecipient = () => {
     if (settlementRecipients.length >= MAX_SETTLEMENT_RECIPIENTS) return;
     setSettlementRecipients((current) => [...current, {
@@ -303,6 +319,7 @@ export default function Settings({ user }) {
       allocationBasisPoints: 0,
       percentageInput: '0',
       enabled: true,
+      recipientType: 'OTHER',
     }]);
     setSettlementDirty(true);
     setSettlementSuccess('');
@@ -1037,7 +1054,14 @@ export default function Settings({ user }) {
                     <div className="flex flex-col gap-2">
                       {settlementConfig.active.recipients.map((recipient) => (
                         <div key={recipient.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-sm text-on-surface-variant">
-                          <span>{recipient.label}{!recipient.enabled ? ' (disabled)' : ''}</span>
+                          <div className="flex items-center gap-2">
+                            <span>{recipient.label}{!recipient.enabled ? ' (disabled)' : ''}</span>
+                            {recipient.recipientType === 'RESTAURANT_OWNER' && (
+                              <span className="px-2 py-0.5 rounded-md bg-primary/10 text-primary font-label-caps text-[9px] uppercase tracking-widest font-semibold border border-primary/20">
+                                Restaurant Owner
+                              </span>
+                            )}
+                          </div>
                           <span className="font-mono text-xs">{formatSettlementPercentage(recipient.allocationBasisPoints)}% · {recipient.linkedAccountId || 'No linked account ID'}</span>
                         </div>
                       ))}
@@ -1047,7 +1071,12 @@ export default function Settings({ user }) {
 
                 <div className="flex flex-col gap-4">
                   {settlementRecipients.map((recipient, index) => (
-                    <div key={recipient.id || `new-recipient-${index}`} className="p-4 md:p-5 rounded-xl bg-surface-container-highest/40 border border-outline-variant/20 flex flex-col gap-4">
+                    <div key={recipient.id || `new-recipient-${index}`} className="p-4 md:p-5 rounded-xl bg-surface-container-highest/40 border border-outline-variant/20 flex flex-col gap-4 relative">
+                      {recipient.recipientType === 'RESTAURANT_OWNER' && (
+                        <div className="self-start px-2 py-0.5 rounded-md bg-primary/10 text-primary font-label-caps text-[9px] uppercase tracking-widest font-semibold border border-primary/20">
+                          Restaurant Owner
+                        </div>
+                      )}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <label className="block font-label-caps text-[11px] text-on-surface-variant mb-1.5 uppercase tracking-widest">Recipient name</label>
@@ -1093,6 +1122,17 @@ export default function Settings({ user }) {
                             })}
                             className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors"
                           />
+                        </div>
+                        <div className="w-full sm:w-52">
+                          <label className="block font-label-caps text-[11px] text-on-surface-variant mb-1.5 uppercase tracking-widest">Recipient Role</label>
+                          <select
+                            value={recipient.recipientType || 'OTHER'}
+                            onChange={(e) => handleUpdateRecipientType(index, e.target.value)}
+                            className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors text-sm cursor-pointer"
+                          >
+                            <option value="OTHER">Other Recipient</option>
+                            <option value="RESTAURANT_OWNER">Restaurant Owner</option>
+                          </select>
                         </div>
                         <div className="w-full sm:w-auto flex items-center gap-2">
                           <button

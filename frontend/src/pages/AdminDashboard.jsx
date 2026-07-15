@@ -723,7 +723,7 @@ export default function AdminDashboard() {
           {activeTab === 'scanner' && <OrderScanner />}
           {activeTab === 'tables' && <TablesAndQR />}
           {activeTab === 'settings' && <Settings user={user} />}
-          {activeTab === 'payments' && <Payments refreshKey={refreshKey} />}
+          {activeTab === 'payments' && <Payments refreshKey={refreshKey} user={user} />}
           {activeTab === 'analytics' && <Analytics />}
           {activeTab === 'settlements' && user?.role === 'MASTER_ADMIN' && <SettlementMonitor />}
           {activeTab === 'employees' && (user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN') && <Employees user={user} />}
