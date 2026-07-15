@@ -1815,123 +1815,456 @@ function MenuPage() {
               <div className="p-6 md:p-8 flex-1 overflow-y-auto hide-scrollbar text-on-surface-variant/90 space-y-4 font-body-md text-sm md:text-[15px] leading-relaxed text-left">
                 {activePolicy === 'privacy' && (
                   <>
-                    <p><strong>Effective Date:</strong> June 15, 2026</p>
-                    <p>Welcome to {restaurantName} (accessible via https://food-menu-pb17.vercel.app). We respect your privacy and are committed to protecting your personal data. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website and use our food ordering services.</p>
-                    <p>Please read this privacy policy carefully. If you do not agree with the terms of this privacy policy, please do not access the site.</p>
-                    
+                    <p><strong>Effective Date:</strong> July 15, 2026</p>
+                    <p>Welcome to {restaurantName}. This Privacy Policy explains how information is collected, used, stored, and protected when you access our digital menu, place a restaurant order, use a table QR code, generate a checkout code, make an online payment, or otherwise interact with our ordering services.</p>
+                    <p>By using this service, you acknowledge the practices described in this Privacy Policy. If you do not agree with this policy, please discontinue use of the service.</p>
+
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">1. Information We Collect</h3>
-                    <p>We collect information that you provide directly to us when you place an order, create an account, or interact with our platform. This includes:</p>
+                    <p>Depending on how you use the service, we may collect the following categories of information:</p>
+                    <h4 className="font-semibold text-[14px] mt-2">Order and Restaurant-Service Information</h4>
+                    <p>We may process:</p>
                     <ul className="list-disc pl-5 space-y-1">
-                      <li><strong>Personal Identifiable Information (PII):</strong> Name, delivery address, email address, and phone number.</li>
-                      <li><strong>Order Details:</strong> Information about the food items you order, special instructions, and transaction history.</li>
-                      <li><strong>Device and Usage Data:</strong> IP address, browser type, operating system, and your behavior on our website (collected via cookies).</li>
+                      <li>Selected food and beverage items</li>
+                      <li>Item quantities</li>
+                      <li>Order amounts</li>
+                      <li>Special instructions or customer notes</li>
+                      <li>Assigned table information</li>
+                      <li>Restaurant location or dining-area information</li>
+                      <li>Order status and preparation status</li>
+                      <li>Order timestamps</li>
+                      <li>Payment and transaction status</li>
+                      <li>Receipt and order-reference information</li>
+                    </ul>
+                    <p className="mt-2">This information is used to prepare, manage, fulfill, verify, and maintain restaurant orders.</p>
+
+                    <h4 className="font-semibold text-[14px] mt-2">Information You Provide</h4>
+                    <p>If you voluntarily provide contact or identifying information during an order, payment, support request, or other interaction, we may process information such as:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Name</li>
+                      <li>Email address</li>
+                      <li>Phone number</li>
+                      <li>Billing or contact information</li>
+                      <li>Information included in support requests</li>
+                    </ul>
+                    <p className="mt-2">The information collected may vary depending on the restaurant's configuration and the services you choose to use.</p>
+
+                    <h4 className="font-semibold text-[14px] mt-2">Device, Browser, and Technical Information</h4>
+                    <p>To operate, secure, and improve the service, we may process limited technical information, including:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Internet Protocol (IP) address</li>
+                      <li>Browser and device information</li>
+                      <li>Device or browser identifier</li>
+                      <li>Operating-system information</li>
+                      <li>Session information</li>
+                      <li>Request timestamps</li>
+                      <li>Security and diagnostic information</li>
+                    </ul>
+                    <p className="mt-2">A randomly generated browser identifier may be stored locally on your device to support session continuity, order verification, fraud prevention, and service security.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">2. Browser Storage and Similar Technologies</h3>
+                    <p>The service may use browser-based storage technologies, including local storage, to maintain necessary preferences and functionality.</p>
+                    <p>Browser storage may be used for purposes such as:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Remembering light or dark theme preferences</li>
+                      <li>Preserving cart contents during a browsing session</li>
+                      <li>Maintaining a browser or device identifier</li>
+                      <li>Supporting ordering and checkout continuity</li>
+                    </ul>
+                    <p className="mt-2">These technologies are used to provide application functionality and improve reliability. Clearing your browser data may remove saved preferences, cart information, or locally stored identifiers.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">3. Temporary Checkout Codes</h3>
+                    <p>When an order is submitted through the manual verification flow, the service may generate a temporary four-digit checkout code.</p>
+                    <p>Checkout codes:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Are used to allow authorized restaurant staff to retrieve and verify the pending order</li>
+                      <li>Expire approximately 10 minutes after generation</li>
+                      <li>Are intended for one-time use</li>
+                      <li>Become invalid after successful verification</li>
+                      <li>Are automatically removed after expiry through database-cleanup mechanisms</li>
+                    </ul>
+                    <p className="mt-2">Expired, previously used, or invalid checkout codes cannot be used to retrieve an order.</p>
+                    <p>The temporary code record may contain the pending order information required to complete the verification process. Order records created after successful confirmation may be retained separately for restaurant operations, accounting, payment reconciliation, customer support, security, and legal obligations.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">4. Payment Information</h3>
+                    <p>Online payments are processed through Razorpay. Payment information entered into Razorpay’s payment interface is processed according to Razorpay’s applicable terms and privacy practices.</p>
+                    <p>The application does not directly collect or store complete card numbers, card CVV values, UPI PINs, net-banking passwords, or similar sensitive payment credentials entered through Razorpay’s payment interface.</p>
+                    <p>Payment providers may process information such as:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Payment amount</li>
+                      <li>Transaction identifier</li>
+                      <li>Payment method</li>
+                      <li>Payment status</li>
+                      <li>Billing or contact information supplied during payment</li>
+                      <li>Information required for fraud prevention, payment processing, refunds, and regulatory compliance</li>
+                    </ul>
+                    <p className="mt-2">The application may retain non-sensitive payment references, transaction status, payment identifiers, order-payment associations, receipt information, refund information, and settlement records where required for restaurant operations, accounting, dispute handling, reconciliation, security, and legal compliance.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">5. How We Use Information</h3>
+                    <p>Information may be used to:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Display the restaurant menu</li>
+                      <li>Maintain cart and ordering functionality</li>
+                      <li>Create, verify, process, and fulfill orders</li>
+                      <li>Associate orders with the correct table or restaurant location</li>
+                      <li>Send orders to authorized restaurant staff and kitchen systems</li>
+                      <li>Display preparation and order status</li>
+                      <li>Process and reconcile online payments</li>
+                      <li>Generate payment receipts</li>
+                      <li>Handle cancellations, refunds, disputes, and customer-support requests</li>
+                      <li>Maintain operational, accounting, security, and audit records</li>
+                      <li>Detect and prevent misuse, fraud, unauthorized access, and security incidents</li>
+                      <li>Diagnose errors and improve service reliability</li>
+                      <li>Comply with applicable legal, tax, accounting, and regulatory obligations</li>
                     </ul>
 
-                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">2. Payment Data and Security</h3>
-                    <p>To process payments, we use a secure third-party payment gateway: Razorpay.</p>
-                    <p>We do not store your credit/debit card numbers, CVV, UPI IDs, or net banking passwords on our servers.</p>
-                    <p>All payment processing is handled securely by Razorpay in compliance with the Payment Card Industry Data Security Standard (PCI-DSS). Razorpay's use of your personal information is governed by their respective Privacy Policy.</p>
-
-                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">3. How We Use Your Information</h3>
-                    <p>We use the collected information to:</p>
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">6. How Information Is Shared</h3>
+                    <p>Information is shared only where reasonably necessary to operate the ordering service, fulfill orders, process payments, provide support, or comply with applicable law.</p>
+                    <p>Information may be shared with:</p>
                     <ul className="list-disc pl-5 space-y-1">
-                      <li>Process, fulfill, and deliver your food orders.</li>
-                      <li>Manage your account and provide customer support.</li>
-                      <li>Send transaction receipts, order updates, and administrative messages.</li>
-                      <li>Detect, prevent, and mitigate fraudulent or illegal activities.</li>
+                      <li><strong>Restaurant Personnel:</strong> Order information may be made available to authorized restaurant personnel, including administrators, service staff, cashiers, kitchen staff, and other employees who require access to prepare, verify, fulfill, manage, or support orders.</li>
+                      <li><strong>Payment Service Providers:</strong> Payment and transaction information may be processed by Razorpay and relevant banking, payment, settlement, or financial-service providers.</li>
+                      <li><strong>Infrastructure and Technology Providers:</strong> Information may be processed through service providers used for application hosting, database storage, cloud services, media storage, authentication, monitoring, and technical operations. These providers process information only as required to provide their respective services and are subject to their own terms and privacy practices.</li>
+                      <li><strong>Legal and Security Requirements:</strong> Information may be disclosed when reasonably necessary to comply with applicable laws or legal obligations; respond to valid requests from courts, regulators, law-enforcement agencies, or public authorities; investigate fraud, security incidents, abuse, or unlawful activity; or protect the rights, safety, security, and property of customers, restaurant personnel, the restaurant, or others.</li>
                     </ul>
 
-                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">4. Data Sharing and Split Settlements (Third Parties)</h3>
-                    <p>Because our platform coordinates food preparation and delivery, we must share certain information with third parties to fulfill your request:</p>
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">7. Data Retention</h3>
+                    <p>Information is retained only for as long as reasonably necessary for the purposes described in this policy, including restaurant operations, order fulfillment, payment reconciliation, accounting, tax requirements, dispute resolution, fraud prevention, security, audit obligations, and legal compliance.</p>
+                    <p>Temporary checkout-code records expire after approximately 10 minutes and are automatically removed after expiry. Successfully verified checkout-code records are consumed and removed as part of the verification process.</p>
+                    <p>Confirmed orders, transaction references, receipts, payment records, employee activity records, audit information, and other operational records may be retained for longer periods where reasonably required for business or legal purposes.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">8. Data Security</h3>
+                    <p>Reasonable administrative, organizational, and technical safeguards are used to protect information against unauthorized access, loss, misuse, alteration, or disclosure.</p>
+                    <p>These safeguards may include:</p>
                     <ul className="list-disc pl-5 space-y-1">
-                      <li><strong>Merchants/Restaurants:</strong> We share your order details and name with the respective food vendors so they can prepare your meals.</li>
-                      <li><strong>Delivery Partners:</strong> We share your delivery address and phone number with delivery personnel so they can transport your order.</li>
-                      <li><strong>Financial Sub-agents (Razorpay Route):</strong> To facilitate automated split settlements between our platform and our registered food vendors, transaction and billing data is processed via Razorpay's routing architecture.</li>
-                      <li><strong>Legal Requirements:</strong> We may disclose your information if required to do so by law or in response to valid requests by public authorities.</li>
+                      <li>Authentication and authorization controls</li>
+                      <li>Restricted administrative access</li>
+                      <li>Secure payment-provider integration</li>
+                      <li>Expiring and one-time checkout codes</li>
+                      <li>Server-side validation</li>
+                      <li>Security logging and audit records</li>
+                      <li>Database and infrastructure security controls</li>
                     </ul>
+                    <p className="mt-2">However, no internet transmission, electronic storage system, or security measure can be guaranteed to be completely secure.</p>
 
-                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">5. Cookies</h3>
-                    <p>We use cookies and similar tracking technologies to track activity on our website and hold certain information to improve your browsing experience. You can instruct your browser to refuse all cookies, but doing so may prevent you from using some parts of our platform.</p>
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">9. Your Privacy Rights</h3>
+                    <p>Subject to applicable law, you may request:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Access to personal information associated with you</li>
+                      <li>Correction of inaccurate information</li>
+                      <li>Deletion of eligible personal information</li>
+                      <li>Information about how your personal data is processed</li>
+                      <li>Withdrawal of consent where processing is based on consent</li>
+                      <li>Review of a privacy-related concern or complaint</li>
+                    </ul>
+                    <p className="mt-2">Some information may need to be retained where required for payment reconciliation, accounting, tax, fraud prevention, dispute resolution, security, audit, or legal obligations.</p>
+                    <p>To submit a request, contact the restaurant using the information provided below.</p>
 
-                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">6. Data Retention and Security</h3>
-                    <p>We retain your personal information only for as long as necessary to fulfill the purposes outlined in this policy and to comply with legal/accounting requirements. We implement industry-standard administrative, technical, and physical security measures to protect your data, though no method of transmission over the internet is 100% secure.</p>
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">10. Children's Privacy</h3>
+                    <p>The service is intended for restaurant customers and is not designed to knowingly collect personal information directly from children without appropriate authorization.</p>
+                    <p>If you believe that information relating to a child has been collected improperly, contact the restaurant so the matter can be reviewed.</p>
 
-                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">7. Your Rights</h3>
-                    <p>Depending on your location, you may have the right to access, correct, or delete the personal information we hold about you. To exercise these rights, please contact us using the information below.</p>
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">11. Third-Party Services</h3>
+                    <p>The service may rely on third-party providers for payment processing, hosting, database infrastructure, media storage, authentication, and other technical functions. Those providers may process information under their own privacy policies and terms. This Privacy Policy does not control the independent privacy practices of third-party providers.</p>
 
-                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">8. Changes to This Policy</h3>
-                    <p>We reserve the right to modify this Privacy Policy at any time. Any changes will be posted on this page with an updated "Effective Date."</p>
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">12. Changes to This Privacy Policy</h3>
+                    <p>This Privacy Policy may be updated periodically to reflect changes in application functionality, restaurant operations, service providers, legal requirements, or data-processing practices.</p>
+                    <p>Material changes will be reflected by updating the effective date displayed in this policy.</p>
 
-                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">9. Contact Us</h3>
-                    <p>If you have questions or comments about this Privacy Policy, please contact us at:</p>
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">13. Contact Us</h3>
+                    <p>For privacy questions, requests, or concerns, contact:</p>
                     <ul className="list-none space-y-1">
-                      <li><strong>Business Name:</strong> {restaurantName}</li>
-                      <li><strong>Email:</strong> {restaurantEmail}</li>
-                      <li><strong>Phone:</strong> {restaurantPhone}</li>
-                      <li><strong>Physical Address:</strong> {restaurantAddress}</li>
+                      <li><strong>Business/Restaurant Name:</strong> {restaurantName}</li>
+                      <li><strong>Email:</strong> {restaurantEmail || 'Contact the restaurant directly'}</li>
+                      <li><strong>Phone:</strong> {restaurantPhone || 'Contact the restaurant directly'}</li>
+                      <li><strong>Physical Address:</strong> {restaurantAddress || 'Contact the restaurant directly'}</li>
                     </ul>
                   </>
                 )}
                 {activePolicy === 'terms' && (
                   <>
-                    <p><strong>Effective Date:</strong> June 15, 2026</p>
-                    <p>Welcome to {restaurantName}. By accessing our website (https://food-menu-pb17.vercel.app) and placing food orders, you agree to comply with and be bound by the following Terms & Conditions. Please read them carefully.</p>
-                    
-                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">1. Services Provided</h3>
-                    <p>{restaurantName} operates a digital table ordering platform connecting customers with authorized food merchants. The restaurant is the actual seller and fulfiller of food orders, and is solely responsible for preparing and delivering meals. Payments are processed securely through Razorpay.</p>
+                    <p><strong>Effective Date:</strong> July 15, 2026</p>
+                    <p>Welcome to {restaurantName}. These Terms & Conditions govern your access to and use of the restaurant's digital menu, table-ordering features, checkout-code system, online-payment functionality, and related ordering services.</p>
+                    <p>By accessing the service, scanning a table QR code, submitting an order, generating a checkout code, or making a payment, you agree to these Terms & Conditions.</p>
 
-                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">2. User Accounts & Responsibilities</h3>
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">1. Restaurant Ordering Service</h3>
+                    <p>The service allows customers to perform functions that may include:</p>
                     <ul className="list-disc pl-5 space-y-1">
-                      <li>You must provide accurate and complete information when placing orders (Table number, contact details, payment information).</li>
-                      <li>You agree not to misuse our platform, disrupt servers, or initiate fraudulent transactions.</li>
+                      <li>Viewing restaurant menu items</li>
+                      <li>Reviewing item descriptions and displayed prices</li>
+                      <li>Adding or removing items from a cart</li>
+                      <li>Associating an order with a table or restaurant location</li>
+                      <li>Submitting an order for staff verification</li>
+                      <li>Generating a temporary checkout code</li>
+                      <li>Making an online payment where available</li>
+                      <li>Receiving or downloading a payment receipt</li>
+                      <li>Viewing relevant order information</li>
                     </ul>
+                    <p className="mt-2">Available features may vary according to restaurant configuration.</p>
 
-                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">3. Placing Orders & Pricing</h3>
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">2. Customer Responsibilities</h3>
+                    <p>When using the service, you agree to:</p>
                     <ul className="list-disc pl-5 space-y-1">
-                      <li>All orders placed through the platform are subject to availability and merchant confirmation.</li>
-                      <li>Prices are shown in INR (₹) and include applicable taxes unless specified otherwise.</li>
-                      <li>We reserve the right to refuse service or cancel orders at our sole discretion.</li>
+                      <li>Use the QR code associated with the correct restaurant, table, or location</li>
+                      <li>Review selected items, quantities, prices, fees, and order information before submission</li>
+                      <li>Provide accurate information when information is requested</li>
+                      <li>Inform restaurant staff promptly if the displayed table or location is incorrect</li>
+                      <li>Keep temporary checkout codes private except when presenting them to authorized restaurant personnel</li>
+                      <li>Avoid submitting fraudulent, unauthorized, abusive, or intentionally misleading orders</li>
+                      <li>Avoid attempting to disrupt, reverse engineer, bypass, overload, or gain unauthorized access to the service</li>
+                      <li>Avoid interfering with payment, authentication, checkout-code, administrative, or restaurant systems</li>
                     </ul>
+                    <p className="mt-2">You are responsible for reviewing your order before confirmation or payment.</p>
 
-                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">4. Payments & Razorpay</h3>
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">3. Menu Information, Availability, and Pricing</h3>
+                    <p>Menu items, descriptions, images, prices, taxes, fees, availability, dietary indicators, and other information are maintained by the restaurant.</p>
+                    <p>The restaurant may:</p>
                     <ul className="list-disc pl-5 space-y-1">
-                      <li>Payments are processed securely via Razorpay. By choosing online payment, you agree to be bound by Razorpay's Terms of Service.</li>
-                      <li>Any transaction fees or credit card charges applied by banks are the user's responsibility.</li>
+                      <li>Change menu items or prices</li>
+                      <li>Mark products as unavailable</li>
+                      <li>Correct display, pricing, or description errors</li>
+                      <li>Refuse or cancel an order that cannot be fulfilled</li>
+                      <li>Substitute an item only with customer approval where appropriate</li>
                     </ul>
+                    <p className="mt-2">Displayed food images may be illustrative. Actual appearance, presentation, ingredients, portion size, or packaging may vary.</p>
+                    <p>Prices are displayed in Indian Rupees unless otherwise stated.</p>
+                    <p>Applicable taxes, convenience fees, service charges, or other permitted charges should be displayed before final payment or confirmation where applicable.</p>
 
-                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">5. Limitation of Liability</h3>
-                    <p>{restaurantName} is not liable for indirect, incidental, or consequential damages resulting from the use or inability to use our services, food preparation delays, or errors by third-party delivery partners.</p>
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">4. Allergies and Dietary Information</h3>
+                    <p>Menu descriptions, dietary indicators, ingredient information, and category labels are provided for general guidance.</p>
+                    <p>Customers with allergies, intolerances, dietary restrictions, or other food-related concerns should speak directly with restaurant staff before ordering.</p>
+                    <p>The presence of a vegetarian, vegan, gluten-free, spicy, or similar label does not guarantee the absence of allergens or cross-contact unless explicitly confirmed by the restaurant.</p>
 
-                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">6. Governing Law</h3>
-                    <p>These Terms & Conditions are governed by and construed in accordance with the laws of India. Any disputes shall be subject to the exclusive jurisdiction of the courts in Bangalore, India.</p>
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">5. Order Submission and Acceptance</h3>
+                    <p>Submitting an order, generating a checkout code, or initiating payment does not necessarily guarantee acceptance or fulfillment.</p>
+                    <p>An order may be subject to:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Successful staff verification</li>
+                      <li>Menu-item availability</li>
+                      <li>Restaurant operating capacity</li>
+                      <li>Correct table and location information</li>
+                      <li>Successful payment authorization where applicable</li>
+                      <li>Restaurant confirmation</li>
+                    </ul>
+                    <p className="mt-2">The restaurant may reject, modify with customer approval, or cancel an order where reasonably necessary due to item unavailability, incorrect information, technical issues, suspected misuse, payment issues, operational limitations, or other legitimate reasons.</p>
 
-                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">7. Contact Us</h3>
-                    <p>If you have questions regarding these Terms & Conditions, contact us at {restaurantEmail}.</p>
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">6. Temporary Checkout Codes</h3>
+                    <p>Manual-verification orders may use a temporary four-digit checkout code.</p>
+                    <p>Checkout codes:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Expire approximately 10 minutes after generation</li>
+                      <li>Are intended for one-time verification</li>
+                      <li>Become invalid after successful use</li>
+                      <li>May be rejected if expired, previously used, incorrect, or unavailable</li>
+                    </ul>
+                    <p className="mt-2">Customers should present the checkout code only to authorized restaurant personnel.</p>
+                    <p>If a code expires before verification, the customer may need to return to the ordering flow and generate a new code.</p>
+                    <p>A generated checkout code does not by itself guarantee order acceptance or preparation.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">7. Online Payments</h3>
+                    <p>Online payments are processed through Razorpay. Payment information entered into Razorpay’s payment interface is processed according to Razorpay’s applicable terms and privacy practices.</p>
+                    <p>By choosing online payment, you also agree to the applicable payment provider's terms and policies.</p>
+                    <p>Payment may be considered successful only after confirmation is received from the payment provider and verified by the application.</p>
+                    <p>The restaurant and service may retain non-sensitive transaction references, payment status, receipt information, and order-payment associations for reconciliation, support, refunds, accounting, fraud prevention, and legal compliance.</p>
+                    <p>The application does not directly collect or store complete card numbers, card CVV values, UPI PINs, net-banking passwords, or similar sensitive payment credentials entered through Razorpay’s payment interface.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">8. Payment Failures and Duplicate Charges</h3>
+                    <p>If payment is interrupted, delayed, unsuccessful, or displayed inconsistently:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Do not repeatedly submit payment without checking the transaction status</li>
+                      <li>Contact restaurant staff if the order or payment status is unclear</li>
+                      <li>Retain any available payment reference or receipt</li>
+                      <li>Allow the payment provider or bank reasonable time to reconcile pending transactions</li>
+                    </ul>
+                    <p className="mt-2">Duplicate deductions, failed-payment reversals, and payment-provider processing issues may be subject to the timelines and procedures of the relevant bank or payment provider.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">9. Order Preparation and Fulfillment</h3>
+                    <p>Preparation estimates are informational and may vary due to:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Order volume</li>
+                      <li>Item complexity</li>
+                      <li>Ingredient availability</li>
+                      <li>Kitchen capacity</li>
+                      <li>Operational delays</li>
+                      <li>Technical interruptions</li>
+                    </ul>
+                    <p className="mt-2">The restaurant is responsible for preparing and serving accepted orders.</p>
+                    <p>Customers should promptly notify restaurant staff regarding missing items, incorrect items, quality concerns, or other fulfillment issues.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">10. Receipts</h3>
+                    <p>Where available, customers may view, print, or download an electronic receipt.</p>
+                    <p>Customers are responsible for verifying the information displayed on the receipt and informing restaurant staff promptly if a correction is required.</p>
+                    <p>Temporary inability to generate, download, or print a receipt does not invalidate an otherwise successfully verified payment or completed order.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">11. Prohibited Use</h3>
+                    <p>You must not:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Submit fraudulent or intentionally false orders</li>
+                      <li>Attempt unauthorized access to customer, employee, administrative, payment, or restaurant systems</li>
+                      <li>Attempt to reuse, guess, automate, intercept, or misuse checkout codes</li>
+                      <li>Manipulate prices, quantities, payment requests, table identifiers, location identifiers, or order data</li>
+                      <li>Interfere with service availability or security</li>
+                      <li>Introduce malicious software or automated abuse</li>
+                      <li>Use the service in violation of applicable law</li>
+                    </ul>
+                    <p className="mt-2">Access may be restricted where misuse, fraud, security threats, or unlawful activity is reasonably suspected.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">12. Service Availability</h3>
+                    <p>The service may occasionally be unavailable or experience delays due to:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Maintenance</li>
+                      <li>Internet or network failures</li>
+                      <li>Hosting or infrastructure issues</li>
+                      <li>Payment-provider interruptions</li>
+                      <li>Database or third-party-service interruptions</li>
+                      <li>Security incidents</li>
+                      <li>Events outside reasonable control</li>
+                    </ul>
+                    <p className="mt-2">Continuous, uninterrupted, or error-free availability is not guaranteed.</p>
+                    <p>Restaurant staff may use alternative ordering or payment procedures when the digital service is unavailable.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">13. Limitation of Liability</h3>
+                    <p>To the maximum extent permitted by applicable law, neither the restaurant nor its technology providers will be liable for indirect, incidental, special, or consequential losses arising solely from temporary service unavailability, third-party payment interruptions, unauthorized misuse, or circumstances outside reasonable control.</p>
+                    <p>Nothing in these Terms excludes or limits rights or remedies that cannot legally be excluded under applicable consumer-protection law.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">14. Privacy</h3>
+                    <p>Use of personal, order, device, technical, and payment-related information is governed by the Privacy Policy available through the application.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">15. Changes to These Terms</h3>
+                    <p>These Terms may be updated to reflect changes in restaurant operations, application functionality, payment providers, legal requirements, or available services.</p>
+                    <p>The effective date should be updated when material changes are made.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">16. Governing Law and Dispute Resolution</h3>
+                    <p>These Terms are governed by the applicable laws of India.</p>
+                    <p>Any dispute should first be raised directly with the restaurant using the contact information below. If it cannot be resolved informally, applicable jurisdiction and consumer-protection laws will govern the available remedies.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">17. Contact Information</h3>
+                    <p>For questions regarding orders, payments, these Terms, or the service, contact:</p>
+                    <ul className="list-none space-y-1">
+                      <li><strong>Business/Restaurant Name:</strong> {restaurantName}</li>
+                      <li><strong>Email:</strong> {restaurantEmail || 'Contact the restaurant directly'}</li>
+                      <li><strong>Phone:</strong> {restaurantPhone || 'Contact the restaurant directly'}</li>
+                      <li><strong>Physical Address:</strong> {restaurantAddress || 'Contact the restaurant directly'}</li>
+                    </ul>
                   </>
                 )}
                 {activePolicy === 'refund' && (
                   <>
-                    <p><strong>Effective Date:</strong> June 15, 2026</p>
-                    <p>{restaurantName} is a digital ordering technology provider. The restaurant is the actual seller of the food orders and holds sole responsibility for food preparation, fulfillment, order cancellations, and processing refunds. Online payments and refund settlements are processed securely via Razorpay.</p>
-                    
-                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">1. Order Cancellation</h3>
+                    <p><strong>Effective Date:</strong> July 15, 2026</p>
+                    <p>This Cancellation & Refund Policy explains how cancellation requests, payment failures, duplicate charges, refunds, and restaurant-order concerns are handled by {restaurantName}.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">1. Order Cancellation Requests</h3>
+                    <p>Customers should review all items, quantities, table information, location information, prices, taxes, and applicable fees before submitting or paying for an order.</p>
+                    <p>If you need to cancel or change an order, contact restaurant staff immediately.</p>
+                    <p>Cancellation requests may be accepted when:</p>
                     <ul className="list-disc pl-5 space-y-1">
-                      <li><strong>Before Preparation:</strong> Customers can request order cancellations before the kitchen begins preparing the food. Please coordinate immediately with your server.</li>
-                      <li><strong>After Preparation Begins:</strong> Food orders cannot be cancelled once food preparation has commenced. No refunds will be provided for cancellations requested after this point.</li>
+                      <li>The order has not yet been accepted or verified</li>
+                      <li>Food preparation has not started</li>
+                      <li>Ingredients have not been committed specifically to the order</li>
+                      <li>The restaurant determines that cancellation remains operationally possible</li>
+                    </ul>
+                    <p className="mt-2">A cancellation request is not guaranteed merely because it was submitted.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">2. Orders Already in Preparation</h3>
+                    <p>Once preparation has begun, an order may no longer be eligible for cancellation or a full refund because ingredients, staff time, and kitchen resources may already have been committed.</p>
+                    <p>The restaurant may review exceptional circumstances individually.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">3. Restaurant-Initiated Cancellation</h3>
+                    <p>The restaurant may cancel all or part of an order because of:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Item unavailability</li>
+                      <li>Pricing or menu errors</li>
+                      <li>Kitchen or operational limitations</li>
+                      <li>Incorrect table or location information</li>
+                      <li>Technical problems</li>
+                      <li>Payment-verification issues</li>
+                      <li>Suspected fraud or misuse</li>
+                      <li>Other circumstances preventing fulfillment</li>
+                    </ul>
+                    <p className="mt-2">If payment was successfully collected for an item or order that the restaurant cannot fulfill, the restaurant will review the transaction and initiate an appropriate full or partial refund where applicable.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">4. Failed, Pending, or Interrupted Payments</h3>
+                    <p>A payment attempt may appear pending or unsuccessful because of network interruption, bank processing, payment-provider delay, application interruption, or other technical conditions.</p>
+                    <p>If money was debited but payment was not confirmed:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Do not immediately repeat the payment without checking its status</li>
+                      <li>Keep the payment reference, bank message, or transaction information</li>
+                      <li>Inform restaurant staff</li>
+                      <li>Allow the bank and payment provider reasonable time to reconcile the transaction</li>
+                    </ul>
+                    <p className="mt-2">Some unsuccessful payment deductions may be reversed automatically by the bank or payment provider without requiring a manual restaurant refund.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">5. Duplicate Payments</h3>
+                    <p>If you believe you were charged more than once for the same order:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Contact the restaurant promptly</li>
+                      <li>Provide the relevant payment references</li>
+                      <li>Provide the approximate payment time and amount</li>
+                      <li>Provide the associated order or receipt information where available</li>
+                    </ul>
+                    <p className="mt-2">The restaurant will review its order and payment records. A verified duplicate successful payment will be handled through the applicable payment provider and refund process.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">6. Missing, Incorrect, or Unavailable Items</h3>
+                    <p>Notify restaurant staff as soon as possible if:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>An item is missing</li>
+                      <li>An incorrect item was served</li>
+                      <li>An accepted item becomes unavailable</li>
+                      <li>The order differs materially from the confirmed order</li>
+                    </ul>
+                    <p className="mt-2">Depending on the circumstances, the restaurant may provide:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>The correct item</li>
+                      <li>A replacement</li>
+                      <li>An agreed alternative</li>
+                      <li>A partial refund</li>
+                      <li>A full refund for the affected item</li>
+                    </ul>
+                    <p className="mt-2">The appropriate resolution will depend on the order status and the circumstances.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">7. Food Quality and Customer Concerns</h3>
+                    <p>Food-quality, preparation, or service concerns should be reported to restaurant staff as soon as reasonably possible, preferably while the customer is still at the restaurant.</p>
+                    <p>The restaurant may inspect the issue and determine an appropriate resolution according to the circumstances and applicable consumer law.</p>
+                    <p>Refund eligibility is not automatic solely because of a subjective preference regarding taste, spice level, portion expectation, or presentation where the item was prepared substantially as described.</p>
+                    <p>This does not limit rights available under applicable consumer-protection law.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">8. Refund Method</h3>
+                    <p>Approved online-payment refunds will generally be returned to the original payment method through Razorpay or the applicable payment provider.</p>
+                    <p>Cash refunds, credits, replacements, or other resolutions may be handled according to the original payment method, restaurant policy, and applicable law.</p>
+                    <p>Customers may be asked to provide an order reference, receipt, payment reference, transaction amount, or other information required to locate and verify the transaction.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">9. Partial Refunds</h3>
+                    <p>A partial refund may be issued where only part of an order is affected.</p>
+                    <p>Examples may include:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>One unavailable item in a larger order</li>
+                      <li>One missing or incorrect item</li>
+                      <li>A verified pricing adjustment</li>
+                      <li>An approved partial cancellation</li>
+                    </ul>
+                    <p className="mt-2">Any applicable refund amount will be based on the affected item or approved adjustment.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">10. Refund Processing Time</h3>
+                    <p>After a refund is approved and initiated, it may take approximately 5–10 business days to appear, depending on Razorpay, the customer’s bank, card network, UPI provider, or other financial institution. Actual processing time may vary.</p>
+
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">11. Non-Refundable Situations</h3>
+                    <p>Subject to applicable consumer law, a refund may be declined when:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>The order was prepared and fulfilled correctly</li>
+                      <li>The cancellation request was made after preparation had substantially begun</li>
+                      <li>Incorrect table, location, item, or quantity information was submitted by the customer and the order was prepared accordingly</li>
+                      <li>The concern is based only on a change of mind after preparation</li>
+                      <li>There is insufficient information to identify or verify the transaction</li>
+                      <li>Fraudulent, abusive, or misleading activity is reasonably suspected</li>
                     </ul>
 
-                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">2. Refund Eligibility & Process</h3>
-                    <ul className="list-disc pl-5 space-y-1">
-                      <li><strong>Merchant Refusal:</strong> If a restaurant or merchant is unable to fulfill your order due to item unavailability or other operational challenges, you will receive a full refund.</li>
-                      <li><strong>Payment Failure:</strong> In case of double-deduction or transaction failure where money was debited but the order failed verification, the amount will be automatically credited back by Razorpay.</li>
-                      <li><strong>Quality Issues:</strong> If you experience issues with food quality or order completeness, please notify staff immediately at the venue. Online refund adjustments will be assessed case-by-case.</li>
+                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">12. Contact for Cancellation or Refund Support</h3>
+                    <p>For cancellation, payment, or refund assistance, contact:</p>
+                    <ul className="list-none space-y-1">
+                      <li><strong>Business/Restaurant Name:</strong> {restaurantName}</li>
+                      <li><strong>Email:</strong> {restaurantEmail || 'Contact the restaurant directly'}</li>
+                      <li><strong>Phone:</strong> {restaurantPhone || 'Contact the restaurant directly'}</li>
+                      <li><strong>Physical Address:</strong> {restaurantAddress || 'Contact the restaurant directly'}</li>
                     </ul>
-
-                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">3. Refund Timelines</h3>
-                    <p>Approved online refunds will be processed via Razorpay to the original payment source (Credit/Debit Card, Net Banking, or UPI) within <strong>5 to 7 business days</strong> in compliance with standard bank processing times.</p>
-
-                    <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">4. Contact Us</h3>
-                    <p>For cancellation or refund assistance, please email {restaurantEmail} or speak directly with the table captain/staff.</p>
                   </>
                 )}
                 {activePolicy === 'contact' && (
