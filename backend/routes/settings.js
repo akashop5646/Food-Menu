@@ -1077,4 +1077,155 @@ router.post('/split-settlement/disable', requireMasterAdmin, async (req, res) =>
   }
 });
 
+// Get Legal & Compliance Settings (Public)
+router.get('/legal', async (req, res) => {
+  try {
+    const db = await getDB();
+    const configs = await db.collection('configs').find({
+      key: { $in: [
+        'legal_effective_date',
+        'legal_grievance_officer_name',
+        'legal_grievance_officer_email',
+        'legal_data_hosting_location',
+        'legal_grievance_response_days',
+        'legal_policy_version'
+      ] }
+    }).toArray();
+
+    const result = {
+      effectiveDate: '',
+      grievanceOfficerName: '',
+      grievanceOfficerEmail: '',
+      dataHostingLocation: 'India',
+      grievanceResponseDays: '',
+      policyVersion: 1
+    };
+
+    configs.forEach(config => {
+      if (config.key === 'legal_effective_date') result.effectiveDate = config.value;
+      if (config.key === 'legal_grievance_officer_name') result.grievanceOfficerName = config.value;
+      if (config.key === 'legal_grievance_officer_email') result.grievanceOfficerEmail = config.value;
+      if (config.key === 'legal_data_hosting_location') result.dataHostingLocation = config.value || 'India';
+      if (config.key === 'legal_grievance_response_days') result.grievanceResponseDays = config.value !== '' ? Number(config.value) : '';
+      if (config.key === 'legal_policy_version') result.policyVersion = Number(config.value) || 1;
+    });
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch legal settings' });
+  }
+});
+
+// Update Legal & Compliance Settings (Master Admin only)
+router.post('/legal', requireMasterAdmin, async (req, res) => {
+  try {
+    const {
+      effectiveDate,
+      grievanceOfficerName,
+      grievanceOfficerEmail,
+      dataHostingLocation,
+      grievanceResponseDays
+    } = req.body;
+
+    // 1. Validate effective date
+    if (effectiveDate) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) || isNaN(Date.parse(effectiveDate))) {
+        return res.status(400).json({ error: 'Effective date must be in YYYY-MM-DD format.' });
+      }
+    }
+
+    // 2. Validate email
+    if (grievanceOfficerEmail) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(grievanceOfficerEmail)) {
+        return res.status(400).json({ error: 'Invalid grievance officer email format.' });
+      }
+    }
+
+    // 3. Validate hosting location
+    if (dataHostingLocation !== undefined && dataHostingLocation !== 'India') {
+      return res.status(400).json({ error: 'Data hosting location must be India.' });
+    }
+
+    // 4. Validate response days
+    let parsedResponseDays = '';
+    if (grievanceResponseDays !== undefined && grievanceResponseDays !== null && grievanceResponseDays !== '') {
+      const days = Number(grievanceResponseDays);
+      if (!Number.isInteger(days) || days < 1 || days > 90) {
+        return res.status(400).json({ error: 'Grievance response days must be a positive integer between 1 and 90.' });
+      }
+      parsedResponseDays = days;
+    }
+
+    // 5. Validate Grievance Officer Name conditional requirement
+    const hasOtherGrievanceDetails = grievanceOfficerEmail || parsedResponseDays;
+    if (hasOtherGrievanceDetails && (!grievanceOfficerName || String(grievanceOfficerName).trim() === '')) {
+      return res.status(400).json({ error: 'Grievance officer name is required when other grievance details are provided.' });
+    }
+
+    const db = await getDB();
+
+    // 6. Get and increment policy version
+    const versionConfig = await db.collection('configs').findOne({ key: 'legal_policy_version' });
+    const currentVersion = versionConfig ? Number(versionConfig.value) : 1;
+    const nextVersion = currentVersion + 1;
+
+    const updates = [
+      { key: 'legal_effective_date', value: effectiveDate || '' },
+      { key: 'legal_grievance_officer_name', value: grievanceOfficerName || '' },
+      { key: 'legal_grievance_officer_email', value: grievanceOfficerEmail || '' },
+      { key: 'legal_data_hosting_location', value: dataHostingLocation || 'India' },
+      { key: 'legal_grievance_response_days', value: parsedResponseDays !== '' ? String(parsedResponseDays) : '' },
+      { key: 'legal_policy_version', value: String(nextVersion) }
+    ];
+
+    for (const update of updates) {
+      await db.collection('configs').updateOne(
+        { key: update.key },
+        { $set: { value: update.value } },
+        { upsert: true }
+      );
+    }
+
+    const actor = {
+      userId: req.user.id,
+      name: req.user.name,
+      email: req.user.email,
+      role: req.user.role || 'ADMIN'
+    };
+
+    // Record employee activity
+    await recordEmployeeActivity(
+      actor,
+      'LEGAL_SETTINGS_UPDATED',
+      {
+        type: 'CONFIGURATION',
+        id: 'legal_settings',
+        displayLabel: 'Legal & Compliance settings updated'
+      },
+      {
+        effectiveDate: effectiveDate || '',
+        grievanceOfficerName: grievanceOfficerName || '',
+        grievanceOfficerEmail: grievanceOfficerEmail || '',
+        dataHostingLocation: dataHostingLocation || 'India',
+        grievanceResponseDays: parsedResponseDays !== '' ? Number(parsedResponseDays) : 0
+      }
+    );
+
+    res.json({
+      success: true,
+      legal: {
+        effectiveDate,
+        grievanceOfficerName,
+        grievanceOfficerEmail,
+        dataHostingLocation: dataHostingLocation || 'India',
+        grievanceResponseDays: parsedResponseDays,
+        policyVersion: nextVersion
+      }
+    });
+  } catch (error) {
+    console.error('Failed to update legal settings:', error);
+    res.status(500).json({ error: 'Failed to update legal settings' });
+  }
+});
+
 export default router;

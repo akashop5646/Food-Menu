@@ -7,6 +7,17 @@ import AdminDashboard from './pages/AdminDashboard';
 import { API_BASE } from './config';
 import { buildPaidReceiptData, generateReceiptHtml } from './utils/receiptHelper';
 
+const formatDateForDisplay = (isoString) => {
+  if (!isoString) return '';
+  const date = new Date(isoString);
+  if (isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric'
+  });
+};
+
 function MenuPage() {
   const [searchParams] = useSearchParams();
   const tableParam = searchParams.get('table') || 'Walk-in';
@@ -226,6 +237,13 @@ function MenuPage() {
   const [checkoutSessionId, setCheckoutSessionId] = useState('');
   const [activePolicy, setActivePolicy] = useState(null);
 
+  // Legal settings states
+  const [legalEffectiveDate, setLegalEffectiveDate] = useState('');
+  const [legalGrievanceOfficerName, setLegalGrievanceOfficerName] = useState('');
+  const [legalGrievanceOfficerEmail, setLegalGrievanceOfficerEmail] = useState('');
+  const [legalDataHostingLocation, setLegalDataHostingLocation] = useState('India');
+  const [legalGrievanceResponseDays, setLegalGrievanceResponseDays] = useState('');
+
   // Convenience Fee states
   const [globalConvenienceFeeEnabled, setGlobalConvenienceFeeEnabled] = useState(false);
   const [globalConvenienceFeeType, setGlobalConvenienceFeeType] = useState('PERCENTAGE');
@@ -255,12 +273,13 @@ function MenuPage() {
 
     const fetchInitialData = async () => {
       try {
-        const [catsRes, razorpayRes, ipRes, profileRes, feeRes] = await Promise.all([
+        const [catsRes, razorpayRes, ipRes, profileRes, feeRes, legalRes] = await Promise.all([
           fetch(API_BASE + '/api/categories'),
           fetch(API_BASE + '/api/settings/razorpay'),
           fetch(API_BASE + '/api/auth/ip').catch(() => null),
           fetch(API_BASE + '/api/settings/restaurant-profile').catch(() => null),
-          fetch(API_BASE + '/api/settings/convenience-fee').catch(() => null)
+          fetch(API_BASE + '/api/settings/convenience-fee').catch(() => null),
+          fetch(API_BASE + '/api/settings/legal').catch(() => null)
         ]);
 
         const cats = await catsRes.json();
@@ -290,6 +309,15 @@ function MenuPage() {
           setGlobalConvenienceFeeType(feeData.type || 'PERCENTAGE');
           setGlobalConvenienceFeePercentage(Number(feeData.percentage) || 0);
           setGlobalConvenienceFeeAmount(Number(feeData.amount) || 0);
+        }
+
+        if (legalRes && legalRes.ok) {
+          const legalData = await legalRes.json();
+          setLegalEffectiveDate(legalData.effectiveDate || '');
+          setLegalGrievanceOfficerName(legalData.grievanceOfficerName || '');
+          setLegalGrievanceOfficerEmail(legalData.grievanceOfficerEmail || '');
+          setLegalDataHostingLocation(legalData.dataHostingLocation || 'India');
+          setLegalGrievanceResponseDays(legalData.grievanceResponseDays || '');
         }
 
         if (ipRes && ipRes.ok) {
@@ -1834,8 +1862,8 @@ function MenuPage() {
               <div className="p-6 md:p-8 flex-1 overflow-y-auto hide-scrollbar text-on-surface-variant/90 space-y-4 font-body-md text-sm md:text-[15px] leading-relaxed text-left">
                 {activePolicy === 'privacy' && (
                   <>
-                    <p><strong>Effective Date:</strong> July 15, 2026</p>
-                    <p>Welcome to {restaurantName}. This Privacy Policy explains how information is collected, used, stored, and protected when you access our digital menu, place a restaurant order, use a table QR code, generate a checkout code, make an online payment, or otherwise interact with our ordering services.</p>
+                    {legalEffectiveDate && <p><strong>Effective Date:</strong> {formatDateForDisplay(legalEffectiveDate)}</p>}
+                    <p>Welcome to {restaurantName || 'the restaurant'}. This Privacy Policy explains how information is collected, used, stored, and protected when you access our digital menu, place a restaurant order, use a table QR code, generate a checkout code, make an online payment, or otherwise interact with our ordering services.</p>
                     <p>By using this service, you acknowledge the practices described in this Privacy Policy. If you do not agree with this policy, please discontinue use of the service.</p>
 
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">1. Information We Collect</h3>
@@ -1951,6 +1979,13 @@ function MenuPage() {
                     <p>Temporary checkout-code records expire after approximately 10 minutes and are automatically removed after expiry. Successfully verified checkout-code records are consumed and removed as part of the verification process.</p>
                     <p>Confirmed orders, transaction references, receipts, payment records, employee activity records, audit information, and other operational records may be retained for longer periods where reasonably required for business or legal purposes.</p>
 
+                    {legalDataHostingLocation && (
+                      <>
+                        <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">7.5. Data Hosting and Storage Location</h3>
+                        <p>Our database and application servers are hosted and maintained in the following location(s): <strong>{legalDataHostingLocation}</strong>.</p>
+                      </>
+                    )}
+
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">8. Data Security</h3>
                     <p>Reasonable administrative, organizational, and technical safeguards are used to protect information against unauthorized access, loss, misuse, alteration, or disclosure.</p>
                     <p>These safeguards may include:</p>
@@ -1992,17 +2027,32 @@ function MenuPage() {
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">13. Contact Us</h3>
                     <p>For privacy questions, requests, or concerns, contact:</p>
                     <ul className="list-none space-y-1">
-                      <li><strong>Business/Restaurant Name:</strong> {restaurantName}</li>
-                      <li><strong>Email:</strong> {restaurantEmail || 'Contact the restaurant directly'}</li>
-                      <li><strong>Phone:</strong> {restaurantPhone || 'Contact the restaurant directly'}</li>
-                      <li><strong>Physical Address:</strong> {restaurantAddress || 'Contact the restaurant directly'}</li>
+                      <li><strong>Business/Restaurant Name:</strong> {restaurantName || 'Please contact the restaurant.'}</li>
+                      <li><strong>Email:</strong> {restaurantEmail ? <a href={`mailto:${restaurantEmail}`} className="text-primary hover:underline">{restaurantEmail}</a> : 'Please contact the restaurant.'}</li>
+                      <li><strong>Phone:</strong> {restaurantPhone ? <a href={`tel:${restaurantPhone}`} className="text-primary hover:underline">{restaurantPhone}</a> : 'Please contact the restaurant.'}</li>
+                      <li><strong>Physical Address:</strong> {restaurantAddress || 'Please contact the restaurant.'}</li>
                     </ul>
+
+                    {legalGrievanceOfficerName && (
+                      <div className="mt-4 pt-4 border-t border-outline-variant/10">
+                        <h4 className="font-semibold text-[14px] text-on-surface">Grievance Officer:</h4>
+                        <ul className="list-none space-y-1 mt-1">
+                          <li><strong>Name:</strong> {legalGrievanceOfficerName}</li>
+                          {legalGrievanceOfficerEmail && (
+                            <li><strong>Email:</strong> <a href={`mailto:${legalGrievanceOfficerEmail}`} className="text-primary hover:underline">{legalGrievanceOfficerEmail}</a></li>
+                          )}
+                          {legalGrievanceResponseDays && (
+                            <li><strong>Response Commitment:</strong> {legalGrievanceResponseDays} days</li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
                   </>
                 )}
                 {activePolicy === 'terms' && (
                   <>
-                    <p><strong>Effective Date:</strong> July 15, 2026</p>
-                    <p>Welcome to {restaurantName}. These Terms & Conditions govern your access to and use of the restaurant's digital menu, table-ordering features, checkout-code system, online-payment functionality, and related ordering services.</p>
+                    {legalEffectiveDate && <p><strong>Effective Date:</strong> {formatDateForDisplay(legalEffectiveDate)}</p>}
+                    <p>Welcome to {restaurantName || 'the restaurant'}. These Terms & Conditions govern your access to and use of the restaurant's digital menu, table-ordering features, checkout-code system, online-payment functionality, and related ordering services.</p>
                     <p>By accessing the service, scanning a table QR code, submitting an order, generating a checkout code, or making a payment, you agree to these Terms & Conditions.</p>
 
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">1. Restaurant Ordering Service</h3>
@@ -2159,17 +2209,32 @@ function MenuPage() {
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">17. Contact Information</h3>
                     <p>For questions regarding orders, payments, these Terms, or the service, contact:</p>
                     <ul className="list-none space-y-1">
-                      <li><strong>Business/Restaurant Name:</strong> {restaurantName}</li>
-                      <li><strong>Email:</strong> {restaurantEmail || 'Contact the restaurant directly'}</li>
-                      <li><strong>Phone:</strong> {restaurantPhone || 'Contact the restaurant directly'}</li>
-                      <li><strong>Physical Address:</strong> {restaurantAddress || 'Contact the restaurant directly'}</li>
+                      <li><strong>Business/Restaurant Name:</strong> {restaurantName || 'Please contact the restaurant.'}</li>
+                      <li><strong>Email:</strong> {restaurantEmail ? <a href={`mailto:${restaurantEmail}`} className="text-primary hover:underline">{restaurantEmail}</a> : 'Please contact the restaurant.'}</li>
+                      <li><strong>Phone:</strong> {restaurantPhone ? <a href={`tel:${restaurantPhone}`} className="text-primary hover:underline">{restaurantPhone}</a> : 'Please contact the restaurant.'}</li>
+                      <li><strong>Physical Address:</strong> {restaurantAddress || 'Please contact the restaurant.'}</li>
                     </ul>
+
+                    {legalGrievanceOfficerName && (
+                      <div className="mt-4 pt-4 border-t border-outline-variant/10">
+                        <h4 className="font-semibold text-[14px] text-on-surface">Grievance Officer:</h4>
+                        <ul className="list-none space-y-1 mt-1">
+                          <li><strong>Name:</strong> {legalGrievanceOfficerName}</li>
+                          {legalGrievanceOfficerEmail && (
+                            <li><strong>Email:</strong> <a href={`mailto:${legalGrievanceOfficerEmail}`} className="text-primary hover:underline">{legalGrievanceOfficerEmail}</a></li>
+                          )}
+                          {legalGrievanceResponseDays && (
+                            <li><strong>Response Commitment:</strong> {legalGrievanceResponseDays} days</li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
                   </>
                 )}
                 {activePolicy === 'refund' && (
                   <>
-                    <p><strong>Effective Date:</strong> July 15, 2026</p>
-                    <p>This Cancellation & Refund Policy explains how cancellation requests, payment failures, duplicate charges, refunds, and restaurant-order concerns are handled by {restaurantName}.</p>
+                    {legalEffectiveDate && <p><strong>Effective Date:</strong> {formatDateForDisplay(legalEffectiveDate)}</p>}
+                    <p>This Cancellation & Refund Policy explains how cancellation requests, payment failures, duplicate charges, refunds, and restaurant-order concerns are handled by {restaurantName || 'the restaurant'}.</p>
 
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">1. Order Cancellation Requests</h3>
                     <p>Customers should review all items, quantities, table information, location information, prices, taxes, and applicable fees before submitting or paying for an order.</p>
@@ -2279,11 +2344,23 @@ function MenuPage() {
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">12. Contact for Cancellation or Refund Support</h3>
                     <p>For cancellation, payment, or refund assistance, contact:</p>
                     <ul className="list-none space-y-1">
-                      <li><strong>Business/Restaurant Name:</strong> {restaurantName}</li>
-                      <li><strong>Email:</strong> {restaurantEmail || 'Contact the restaurant directly'}</li>
-                      <li><strong>Phone:</strong> {restaurantPhone || 'Contact the restaurant directly'}</li>
-                      <li><strong>Physical Address:</strong> {restaurantAddress || 'Contact the restaurant directly'}</li>
+                      <li><strong>Business/Restaurant Name:</strong> {restaurantName || 'Please contact the restaurant.'}</li>
+                      <li><strong>Email:</strong> {restaurantEmail ? <a href={`mailto:${restaurantEmail}`} className="text-primary hover:underline">{restaurantEmail}</a> : 'Please contact the restaurant.'}</li>
+                      <li><strong>Phone:</strong> {restaurantPhone ? <a href={`tel:${restaurantPhone}`} className="text-primary hover:underline">{restaurantPhone}</a> : 'Please contact the restaurant.'}</li>
+                      <li><strong>Physical Address:</strong> {restaurantAddress || 'Please contact the restaurant.'}</li>
                     </ul>
+
+                    {legalGrievanceOfficerName && (
+                      <div className="mt-4 pt-4 border-t border-outline-variant/10">
+                        <h4 className="font-semibold text-[14px] text-on-surface">Grievance Officer:</h4>
+                        <ul className="list-none space-y-1 mt-1">
+                          <li><strong>Name:</strong> {legalGrievanceOfficerName}</li>
+                          {legalGrievanceOfficerEmail && (
+                            <li><strong>Email:</strong> <a href={`mailto:${legalGrievanceOfficerEmail}`} className="text-primary hover:underline">{legalGrievanceOfficerEmail}</a></li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
                   </>
                 )}
                 {activePolicy === 'contact' && (
@@ -2292,11 +2369,11 @@ function MenuPage() {
                     
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">📍 General Inquiries & Customer Support</h3>
                     <ul className="list-none space-y-2">
-                      <li><strong>Registered Business/Legal Name:</strong> {restaurantName}</li>
-                      <li><strong>Support Email:</strong> {restaurantEmail}</li>
-                      <li><strong>Customer Support Phone:</strong> {restaurantPhone}</li>
+                      <li><strong>Registered Business/Legal Name:</strong> {restaurantName || 'Please contact the restaurant.'}</li>
+                      <li><strong>Support Email:</strong> {restaurantEmail ? <a href={`mailto:${restaurantEmail}`} className="text-primary hover:underline">{restaurantEmail}</a> : 'Please contact the restaurant.'}</li>
+                      <li><strong>Customer Support Phone:</strong> {restaurantPhone ? <a href={`tel:${restaurantPhone}`} className="text-primary hover:underline">{restaurantPhone}</a> : 'Please contact the restaurant.'}</li>
                       <li>
-                        <strong>Physical Address:</strong> {restaurantAddress}
+                        <strong>Physical Address:</strong> {restaurantAddress || 'Please contact the restaurant.'}
                         {restaurantMapLink && (
                           <a 
                             href={restaurantMapLink} 
@@ -2319,18 +2396,18 @@ function MenuPage() {
                 {activePolicy === 'restaurant-info' && (
                   <>
                     <p className="text-body-md text-on-surface-variant mb-6">
-                      Official trade, licensing, and compliance information for {restaurantName}.
+                      Official trade, licensing, and compliance information for {restaurantName || 'the restaurant'}.
                     </p>
                     
                     <div className="bg-surface-container-high/40 border border-outline-variant/10 rounded-2xl p-5 flex flex-col gap-4 text-sm">
                       <div className="flex justify-between items-start pb-3 border-b border-outline-variant/10">
                         <span className="text-on-surface-variant font-medium">Restaurant Name</span>
-                        <span className="text-on-surface font-semibold text-right max-w-xs">{restaurantName}</span>
+                        <span className="text-on-surface font-semibold text-right max-w-xs">{restaurantName || 'Please contact the restaurant.'}</span>
                       </div>
                       <div className="flex justify-between items-start pb-3 border-b border-outline-variant/10">
                         <span className="text-on-surface-variant font-medium">Address</span>
                         <div className="flex flex-col items-end gap-1 max-w-xs">
-                          <span className="text-on-surface font-semibold text-right whitespace-pre-line">{restaurantAddress || 'Not Configured'}</span>
+                          <span className="text-on-surface font-semibold text-right whitespace-pre-line">{restaurantAddress || 'Please contact the restaurant.'}</span>
                           {restaurantMapLink && (
                             <a 
                               href={restaurantMapLink} 
@@ -2346,7 +2423,9 @@ function MenuPage() {
                       </div>
                       <div className="flex justify-between items-start pb-3 border-b border-outline-variant/10">
                         <span className="text-on-surface-variant font-medium">Contact</span>
-                        <span className="text-on-surface font-semibold text-right">{restaurantPhone || 'Not Configured'}</span>
+                        <span className="text-on-surface font-semibold text-right">
+                          {restaurantPhone ? <a href={`tel:${restaurantPhone}`} className="text-primary hover:underline">{restaurantPhone}</a> : 'Please contact the restaurant.'}
+                        </span>
                       </div>
                       <div className="flex justify-between items-start">
                         <span className="text-on-surface-variant font-medium">FSSAI Licence No.</span>

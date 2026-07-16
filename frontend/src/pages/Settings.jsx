@@ -44,6 +44,18 @@ export default function Settings({ user }) {
   const [configSuccess, setConfigSuccess] = useState(false);
   const [configError, setConfigError] = useState('');
 
+  // Legal & Compliance states
+  const [legalEffectiveDateInput, setLegalEffectiveDateInput] = useState('');
+  const [legalGrievanceOfficerNameInput, setLegalGrievanceOfficerNameInput] = useState('');
+  const [legalGrievanceOfficerEmailInput, setLegalGrievanceOfficerEmailInput] = useState('');
+  const [legalDataHostingLocationInput, setLegalDataHostingLocationInput] = useState('India');
+  const [legalGrievanceResponseDaysInput, setLegalGrievanceResponseDaysInput] = useState('');
+  const [isSavingLegal, setIsSavingLegal] = useState(false);
+  const [legalSuccess, setLegalSuccess] = useState(false);
+  const [legalError, setLegalError] = useState('');
+  const [legalPolicyVersion, setLegalPolicyVersion] = useState(1);
+  const canModifyLegalSettings = user?.role === 'MASTER_ADMIN';
+
   // Convenience Fee states
   const [convenienceFeeEnabled, setConvenienceFeeEnabled] = useState(false);
   const [convenienceFeePercentage, setConvenienceFeePercentage] = useState(0);
@@ -77,9 +89,10 @@ export default function Settings({ user }) {
 
   const fetchConfigs = async () => {
     try {
-      const [profileRes, feeRes] = await Promise.all([
+      const [profileRes, feeRes, legalRes] = await Promise.all([
         fetch(API_BASE + '/api/settings/restaurant-profile', { credentials: 'include' }),
-        fetch(API_BASE + '/api/settings/convenience-fee', { credentials: 'include' })
+        fetch(API_BASE + '/api/settings/convenience-fee', { credentials: 'include' }),
+        fetch(API_BASE + '/api/settings/legal', { credentials: 'include' })
       ]);
 
       if (profileRes.ok) {
@@ -97,6 +110,16 @@ export default function Settings({ user }) {
         const feeData = await feeRes.json();
         setConvenienceFeeEnabled(!!feeData.enabled);
         setConvenienceFeePercentage(Number(feeData.percentage) || 0);
+      }
+
+      if (legalRes.ok) {
+        const legalData = await legalRes.json();
+        setLegalEffectiveDateInput(legalData.effectiveDate || '');
+        setLegalGrievanceOfficerNameInput(legalData.grievanceOfficerName || '');
+        setLegalGrievanceOfficerEmailInput(legalData.grievanceOfficerEmail || '');
+        setLegalDataHostingLocationInput(legalData.dataHostingLocation || 'India');
+        setLegalGrievanceResponseDaysInput(legalData.grievanceResponseDays || '');
+        setLegalPolicyVersion(legalData.policyVersion || 1);
       }
     } catch (err) {
       console.error('Failed to load settings configs:', err);
@@ -285,6 +308,43 @@ export default function Settings({ user }) {
       setFeeError(err.message);
     } finally {
       setIsSavingFee(false);
+    }
+  };
+
+  const handleLegalSubmit = async (e) => {
+    e.preventDefault();
+    if (!canModifyLegalSettings) {
+      setLegalError('Only Master Admins can modify legal settings.');
+      return;
+    }
+    setIsSavingLegal(true);
+    setLegalError('');
+    setLegalSuccess(false);
+
+    try {
+      const res = await fetch(API_BASE + '/api/settings/legal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          effectiveDate: legalEffectiveDateInput || '',
+          grievanceOfficerName: legalGrievanceOfficerNameInput || '',
+          grievanceOfficerEmail: legalGrievanceOfficerEmailInput || '',
+          dataHostingLocation: legalDataHostingLocationInput || 'India',
+          grievanceResponseDays: legalGrievanceResponseDaysInput || ''
+        }),
+        credentials: 'include'
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save legal settings');
+
+      setLegalSuccess(true);
+      setLegalPolicyVersion(data.legal?.policyVersion || (legalPolicyVersion + 1));
+      setTimeout(() => setLegalSuccess(false), 3000);
+    } catch (err) {
+      setLegalError(err.message);
+    } finally {
+      setIsSavingLegal(false);
     }
   };
 
@@ -990,6 +1050,135 @@ export default function Settings({ user }) {
           </div>
         </form>
       </div>
+
+      {/* Legal & Compliance Card */}
+      {(user?.role === 'MASTER_ADMIN' || user?.role === 'ADMIN') && (
+        <div className="bg-surface-container rounded-2xl border border-outline-variant/20 shadow-lg overflow-hidden">
+          {/* Header */}
+          <div className="p-6 md:p-8 border-b border-outline-variant/10 flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+            <div>
+              <h2 className="font-headline-md text-2xl text-on-surface flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary">gavel</span>
+                Legal & Compliance
+              </h2>
+              <p className="font-body-md text-on-surface-variant mt-1">Configure policy effective dates and legal grievance officer contact details (Version: {legalPolicyVersion})</p>
+            </div>
+            {user?.role === 'MASTER_ADMIN' ? (
+              <span className="self-start px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary font-label-caps text-[10px] uppercase tracking-widest">Master Admin only</span>
+            ) : (
+              <span className="self-start px-3 py-1 rounded-full bg-outline-variant/20 text-on-surface-variant font-label-caps text-[10px] uppercase tracking-widest">Read Only</span>
+            )}
+          </div>
+
+          {/* Content */}
+          <form onSubmit={handleLegalSubmit} className="p-6 md:p-8 flex flex-col gap-6">
+            {legalSuccess && (
+              <div className="bg-primary/10 text-primary px-4 py-3 rounded-lg border border-primary/20 text-sm font-medium">
+                Legal & Compliance settings saved successfully!
+              </div>
+            )}
+            {legalError && (
+              <div className="bg-error/10 text-error px-4 py-3 rounded-lg border border-error/20 text-sm font-medium">
+                {legalError}
+              </div>
+            )}
+
+            <div>
+              <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1.5 uppercase tracking-widest">Effective Date *</label>
+              <input 
+                required 
+                type="date" 
+                disabled={!canModifyLegalSettings}
+                value={legalEffectiveDateInput} 
+                onChange={e => setLegalEffectiveDateInput(e.target.value)} 
+                className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
+              />
+              <p className="font-body-sm text-[11px] text-on-surface-variant opacity-70 mt-2 leading-relaxed">
+                The date when the customer-facing policies take effect.
+              </p>
+            </div>
+
+            <div>
+              <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1.5 uppercase tracking-widest">Grievance Officer Name</label>
+              <input 
+                type="text" 
+                disabled={!canModifyLegalSettings}
+                value={legalGrievanceOfficerNameInput} 
+                onChange={e => setLegalGrievanceOfficerNameInput(e.target.value)} 
+                className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
+                placeholder="e.g. Raman Dev"
+              />
+              <p className="font-body-sm text-[11px] text-on-surface-variant opacity-70 mt-2 leading-relaxed">
+                The name of the designated Grievance Officer for consumer complaints. Required if other Grievance Officer details are provided.
+              </p>
+            </div>
+
+            <div>
+              <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1.5 uppercase tracking-widest">Grievance Officer Email</label>
+              <input 
+                type="email" 
+                disabled={!canModifyLegalSettings}
+                value={legalGrievanceOfficerEmailInput} 
+                onChange={e => setLegalGrievanceOfficerEmailInput(e.target.value)} 
+                className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
+                placeholder="e.g. grievance@aurum.com"
+              />
+              <p className="font-body-sm text-[11px] text-on-surface-variant opacity-70 mt-2 leading-relaxed">
+                The official email address where users can submit privacy or service grievances.
+              </p>
+            </div>
+
+            <div>
+              <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1.5 uppercase tracking-widest">Data Hosting Location</label>
+              <select
+                disabled={!canModifyLegalSettings}
+                value={legalDataHostingLocationInput}
+                onChange={e => setLegalDataHostingLocationInput(e.target.value)}
+                className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              >
+                <option value="India">India</option>
+              </select>
+              <p className="font-body-sm text-[11px] text-on-surface-variant opacity-70 mt-2 leading-relaxed">
+                The geographic region where customer order data and profile information are hosted.
+              </p>
+            </div>
+
+            <div>
+              <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1.5 uppercase tracking-widest">Grievance Response Commitment (Days)</label>
+              <input 
+                type="number" 
+                min={1}
+                max={90}
+                disabled={!canModifyLegalSettings}
+                value={legalGrievanceResponseDaysInput} 
+                onChange={e => setLegalGrievanceResponseDaysInput(e.target.value === '' ? '' : Math.max(1, Math.min(90, parseInt(e.target.value) || 1)))} 
+                className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-mono" 
+                placeholder="e.g. 30"
+              />
+              <p className="font-body-sm text-[11px] text-on-surface-variant opacity-70 mt-2 leading-relaxed">
+                The number of days within which the restaurant commits to resolve customer grievances (1 to 90 days).
+              </p>
+            </div>
+
+            <div className="flex justify-end pt-4 border-t border-outline-variant/10">
+              {canModifyLegalSettings ? (
+                <button 
+                  type="submit" 
+                  disabled={isSavingLegal}
+                  className="bg-primary text-on-primary px-6 py-2.5 rounded-lg font-label-caps text-[12px] uppercase tracking-widest gold-glow disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isSavingLegal ? <span className="material-symbols-outlined animate-spin text-[16px]">progress_activity</span> : null}
+                  Save Legal Settings
+                </button>
+              ) : (
+                <p className="text-xs text-on-surface-variant italic font-medium">
+                  Only Master Admins can modify legal & compliance settings.
+                </p>
+              )}
+            </div>
+          </form>
+        </div>
+      )}
 
       {user?.role === 'MASTER_ADMIN' && (
         <div className="bg-surface-container rounded-2xl border border-outline-variant/20 shadow-lg overflow-hidden">

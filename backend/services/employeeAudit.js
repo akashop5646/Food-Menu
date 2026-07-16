@@ -22,6 +22,7 @@ const ACTION_TAXONOMY = [
   'STAFF_ACCOUNT_DELETED',
   'SETTLEMENT_CONFIGURATION_UPDATED',
   'CONVENIENCE_FEE_UPDATED',
+  'LEGAL_SETTINGS_UPDATED',
 ];
 
 const ENTITY_TAXONOMY = [
@@ -94,6 +95,13 @@ const CONTEXT_SCHEMAS = {
     type: (v) => v === undefined || ['PERCENTAGE', 'FIXED'].includes(v),
     percentage: (v) => v === undefined || (typeof v === 'number' && v >= 0 && v <= 20),
     amount: (v) => v === undefined || (typeof v === 'number' && v >= 0 && v <= 20),
+  },
+  LEGAL_SETTINGS_UPDATED: {
+    effectiveDate: (v) => typeof v === 'string',
+    grievanceOfficerName: (v) => typeof v === 'string',
+    grievanceOfficerEmail: (v) => typeof v === 'string',
+    dataHostingLocation: (v) => typeof v === 'string',
+    grievanceResponseDays: (v) => typeof v === 'number',
   },
 };
 
