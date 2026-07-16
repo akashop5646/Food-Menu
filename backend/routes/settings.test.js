@@ -137,6 +137,8 @@ test('Convenience Fee Authorization Tests', async (t) => {
     const res = await simulateRequest('/convenience-fee', 'GET', req);
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.enabled, true);
+    assert.equal(res.body.type, 'FIXED');
+    assert.equal(res.body.percentage, 0);
     assert.equal(res.body.amount, 10);
   });
 
@@ -144,22 +146,26 @@ test('Convenience Fee Authorization Tests', async (t) => {
     // Reset to baseline first
     mockConfigs.docs = [
       { key: 'convenience_fee_enabled', value: true },
+      { key: 'convenience_fee_type', value: 'PERCENTAGE' },
+      { key: 'convenience_fee_percentage', value: 2 },
       { key: 'convenience_fee_amount', value: 10 }
     ];
 
     const req = {
       user: { id: '60c72b2f9b1d8e23f0c3d9a1', name: 'Master', email: 'master@test.com', role: 'MASTER_ADMIN' },
       cookies: { token: masterAdminToken },
-      body: { enabled: false, amount: 15 }
+      body: { enabled: false, type: 'PERCENTAGE', percentage: 1.5 }
     };
     const res = await simulateRequest('/convenience-fee', 'POST', req);
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.success, true);
     assert.equal(res.body.enabled, false);
-    assert.equal(res.body.amount, 15);
+    assert.equal(res.body.type, 'PERCENTAGE');
+    assert.equal(res.body.percentage, 1.5);
     
     assert.equal(mockConfigs.docs.find(d => d.key === 'convenience_fee_enabled').value, false);
-    assert.equal(mockConfigs.docs.find(d => d.key === 'convenience_fee_amount').value, 15);
+    assert.equal(mockConfigs.docs.find(d => d.key === 'convenience_fee_type').value, 'PERCENTAGE');
+    assert.equal(mockConfigs.docs.find(d => d.key === 'convenience_fee_percentage').value, 1.5);
 
     // Verify audit event was logged
     assert.equal(mockEvents.inserted.length, 1);
@@ -167,25 +173,26 @@ test('Convenience Fee Authorization Tests', async (t) => {
     assert.equal(mockEvents.inserted[0].actor.userId, '60c72b2f9b1d8e23f0c3d9a1');
     assert.equal(mockEvents.inserted[0].actor.role, 'MASTER_ADMIN');
     assert.equal(mockEvents.inserted[0].context.enabled, false);
-    assert.equal(mockEvents.inserted[0].context.amount, 15);
+    assert.equal(mockEvents.inserted[0].context.type, 'PERCENTAGE');
+    assert.equal(mockEvents.inserted[0].context.percentage, 1.5);
   });
 
-  await t.test('POST /convenience-fee: Invalid fee values are rejected for MASTER_ADMIN (amount > 20)', async () => {
+  await t.test('POST /convenience-fee: Invalid fee values are rejected for MASTER_ADMIN (percentage > 20)', async () => {
     const req = {
       user: { id: '60c72b2f9b1d8e23f0c3d9a1', name: 'Master', email: 'master@test.com', role: 'MASTER_ADMIN' },
       cookies: { token: masterAdminToken },
-      body: { enabled: true, amount: 25 }
+      body: { enabled: true, type: 'PERCENTAGE', percentage: 25 }
     };
     const res = await simulateRequest('/convenience-fee', 'POST', req);
     assert.equal(res.statusCode, 400);
     assert.ok(res.body.error.includes('between 0 and 20'));
   });
 
-  await t.test('POST /convenience-fee: Invalid fee values are rejected for MASTER_ADMIN (amount < 0)', async () => {
+  await t.test('POST /convenience-fee: Invalid fee values are rejected for MASTER_ADMIN (percentage < 0)', async () => {
     const req = {
       user: { id: '60c72b2f9b1d8e23f0c3d9a1', name: 'Master', email: 'master@test.com', role: 'MASTER_ADMIN' },
       cookies: { token: masterAdminToken },
-      body: { enabled: true, amount: -5 }
+      body: { enabled: true, type: 'PERCENTAGE', percentage: -5 }
     };
     const res = await simulateRequest('/convenience-fee', 'POST', req);
     assert.equal(res.statusCode, 400);
@@ -195,7 +202,7 @@ test('Convenience Fee Authorization Tests', async (t) => {
     const req = {
       user: { id: '60c72b2f9b1d8e23f0c3d9a1', name: 'Master', email: 'master@test.com', role: 'MASTER_ADMIN' },
       cookies: { token: masterAdminToken },
-      body: { enabled: 'true', amount: 10 }
+      body: { enabled: 'true', type: 'PERCENTAGE', percentage: 2 }
     };
     const res = await simulateRequest('/convenience-fee', 'POST', req);
     assert.equal(res.statusCode, 400);
@@ -204,7 +211,7 @@ test('Convenience Fee Authorization Tests', async (t) => {
   await t.test('POST /convenience-fee: ADMIN receives 403 Forbidden', async () => {
     const req = {
       cookies: { token: adminToken },
-      body: { enabled: true, amount: 5 }
+      body: { enabled: true, type: 'PERCENTAGE', percentage: 2 }
     };
     const res = await simulateRequest('/convenience-fee', 'POST', req);
     assert.equal(res.statusCode, 403);
@@ -213,7 +220,7 @@ test('Convenience Fee Authorization Tests', async (t) => {
   await t.test('POST /convenience-fee: STAFF receives 403 Forbidden', async () => {
     const req = {
       cookies: { token: staffToken },
-      body: { enabled: true, amount: 5 }
+      body: { enabled: true, type: 'PERCENTAGE', percentage: 2 }
     };
     const res = await simulateRequest('/convenience-fee', 'POST', req);
     assert.equal(res.statusCode, 403);
@@ -222,7 +229,7 @@ test('Convenience Fee Authorization Tests', async (t) => {
   await t.test('POST /convenience-fee: Unauthenticated request receives 401 Unauthorized', async () => {
     const req = {
       cookies: {},
-      body: { enabled: true, amount: 5 }
+      body: { enabled: true, type: 'PERCENTAGE', percentage: 2 }
     };
     const res = await simulateRequest('/convenience-fee', 'POST', req);
     assert.equal(res.statusCode, 401);

@@ -228,6 +228,8 @@ function MenuPage() {
 
   // Convenience Fee states
   const [globalConvenienceFeeEnabled, setGlobalConvenienceFeeEnabled] = useState(false);
+  const [globalConvenienceFeeType, setGlobalConvenienceFeeType] = useState('PERCENTAGE');
+  const [globalConvenienceFeePercentage, setGlobalConvenienceFeePercentage] = useState(0);
   const [globalConvenienceFeeAmount, setGlobalConvenienceFeeAmount] = useState(0);
 
   // Pagination and lazy loading states
@@ -285,6 +287,8 @@ function MenuPage() {
         if (feeRes && feeRes.ok) {
           const feeData = await feeRes.json();
           setGlobalConvenienceFeeEnabled(!!feeData.enabled);
+          setGlobalConvenienceFeeType(feeData.type || 'PERCENTAGE');
+          setGlobalConvenienceFeePercentage(Number(feeData.percentage) || 0);
           setGlobalConvenienceFeeAmount(Number(feeData.amount) || 0);
         }
 
@@ -414,6 +418,14 @@ function MenuPage() {
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+  const calculatedConvenienceFee = useMemo(() => {
+    if (!globalConvenienceFeeEnabled) return 0;
+    if (globalConvenienceFeeType === 'PERCENTAGE') {
+      return Number((cartTotal * globalConvenienceFeePercentage / 100).toFixed(2));
+    }
+    return globalConvenienceFeeAmount;
+  }, [globalConvenienceFeeEnabled, globalConvenienceFeeType, globalConvenienceFeePercentage, globalConvenienceFeeAmount, cartTotal]);
 
   const ordersList = activeOrders.length > 0 ? activeOrders : (activeOrder ? [activeOrder] : []);
   const sessionTotal = ordersList.reduce((sum, o) => sum + o.total, 0);
@@ -625,7 +637,7 @@ function MenuPage() {
             setPaidOrderDetails({ 
               orderId: targetOrderId || 'session_order', 
               subtotal: activeOrder ? activeOrder.total : cartTotal,
-              convenienceFee: activeOrder ? (activeOrder.convenienceFee ?? 0) : (globalConvenienceFeeEnabled ? globalConvenienceFeeAmount : 0),
+              convenienceFee: activeOrder ? (activeOrder.convenienceFee ?? 0) : calculatedConvenienceFee,
               amount: orderData.amount / 100
             });
             setIsCheckoutOpen(false);
@@ -1328,7 +1340,7 @@ function MenuPage() {
                   <strong className="font-price-display text-price-display text-primary">
                     ₹{(activeOrder 
                       ? ordersList.reduce((sum, o) => sum + (o.totalPayable ?? o.total), 0) 
-                      : (cartTotal + (globalConvenienceFeeEnabled ? globalConvenienceFeeAmount : 0))
+                      : (cartTotal + calculatedConvenienceFee)
                     ).toFixed(2)}
                   </strong>
                 </div>
@@ -1481,18 +1493,25 @@ function MenuPage() {
                         <span>Food Subtotal</span>
                         <span className="font-mono">₹{(unpaidTotal > 0 ? unpaidTotal : cartTotal).toFixed(2)}</span>
                       </div>
-                      {(unpaidTotal > 0 ? unpaidConvenienceFee > 0 : globalConvenienceFeeEnabled) && (
+                      {(unpaidTotal > 0 ? unpaidConvenienceFee > 0 : calculatedConvenienceFee > 0) && (
                         <div className="flex justify-between">
-                          <span>Convenience Fee</span>
+                          <span>
+                            Convenience Fee
+                            {unpaidTotal > 0 ? (
+                              activeOrder?.convenienceFeePercentage !== undefined && activeOrder.convenienceFeePercentage !== null && ` (${activeOrder.convenienceFeePercentage}%)`
+                            ) : (
+                              globalConvenienceFeeEnabled && globalConvenienceFeeType === 'PERCENTAGE' && ` (${globalConvenienceFeePercentage}%)`
+                            )}
+                          </span>
                           <span className="font-mono">
-                            ₹{(unpaidTotal > 0 ? unpaidConvenienceFee : (globalConvenienceFeeEnabled ? globalConvenienceFeeAmount : 0)).toFixed(2)}
+                            ₹{(unpaidTotal > 0 ? unpaidConvenienceFee : calculatedConvenienceFee).toFixed(2)}
                           </span>
                         </div>
                       )}
                       <div className="flex justify-between font-semibold text-on-surface border-t border-outline-variant/10 pt-2 text-sm">
                         <span>Total Payable</span>
                         <span className="font-mono text-primary">
-                          ₹{(unpaidTotal > 0 ? unpaidTotalPayable : (cartTotal + (globalConvenienceFeeEnabled ? globalConvenienceFeeAmount : 0))).toFixed(2)}
+                          ₹{(unpaidTotal > 0 ? unpaidTotalPayable : (cartTotal + calculatedConvenienceFee)).toFixed(2)}
                         </span>
                       </div>
                     </div>
@@ -1513,7 +1532,7 @@ function MenuPage() {
                           : 'bg-surface-container-high border border-outline-variant/30 text-on-surface-variant/40 cursor-not-allowed'
                       }`}
                     >
-                      <span className="material-symbols-outlined">credit_card</span> Pay Now (₹{(unpaidTotal > 0 ? unpaidTotalPayable : (cartTotal + (globalConvenienceFeeEnabled ? globalConvenienceFeeAmount : 0))).toFixed(2)})
+                      <span className="material-symbols-outlined">credit_card</span> Pay Now (₹{(unpaidTotal > 0 ? unpaidTotalPayable : (cartTotal + calculatedConvenienceFee)).toFixed(2)})
                     </button>
                     <button 
                       onClick={handlePayLater}

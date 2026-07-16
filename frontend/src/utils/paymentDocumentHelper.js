@@ -257,6 +257,7 @@ export function buildFilteredPaymentReportData(filteredOrders, activeFilters = {
       itemSummary,
       foodSubtotal,
       convenienceFee,
+      convenienceFeePercentage: order.convenienceFeePercentage,
       finalAmount,
       method: String(order.paymentType || 'UNKNOWN'),
       status: String(order.paymentStatus || 'PENDING'),
@@ -346,7 +347,10 @@ export function generatePaymentReportHtml(reportData, restaurantName = 'Aurum Ta
   let rowsHtml = '';
   reportData.rows.forEach(row => {
     const statusColor = row.status === 'PAID' ? '#16a34a' : '#d97706';
-    const feeCell = row.convenienceFee > 0 ? `₹${row.convenienceFee.toFixed(2)}` : '—';
+    const pctLabel = row.convenienceFeePercentage !== undefined && row.convenienceFeePercentage !== null
+      ? ` (${row.convenienceFeePercentage}%)`
+      : '';
+    const feeCell = row.convenienceFee > 0 ? `₹${row.convenienceFee.toFixed(2)}${pctLabel}` : '—';
 
     let settlementInfoHtml = '';
     if (reportData.showSettlementDetails && row.settlementInfo && row.settlementInfo.isEligible) {

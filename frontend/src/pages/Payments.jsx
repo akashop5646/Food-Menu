@@ -1302,7 +1302,10 @@ export default function Payments({ refreshKey, user }) {
                       <span>₹{getFoodSubtotal(selectedOrder).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-on-surface-variant">
-                      <span>Convenience Fee</span>
+                      <span>
+                        Convenience Fee
+                        {selectedOrder.convenienceFeePercentage !== undefined && selectedOrder.convenienceFeePercentage !== null && ` (${selectedOrder.convenienceFeePercentage}%)`}
+                      </span>
                       <span>₹{getConvenienceFee(selectedOrder).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-on-surface font-semibold pt-2 border-t border-outline-variant/15 text-base">
@@ -1365,7 +1368,10 @@ export default function Payments({ refreshKey, user }) {
                           </div>
 
                           <div className="flex justify-between text-on-surface-variant pt-1.5 border-t border-outline-variant/15 text-xs italic">
-                            <span>Convenience Fee (Excluded)</span>
+                            <span>
+                              Convenience Fee (Excluded)
+                              {selectedOrder.convenienceFeePercentage !== undefined && selectedOrder.convenienceFeePercentage !== null && ` (${selectedOrder.convenienceFeePercentage}%)`}
+                            </span>
                             <span className="font-mono">₹{breakdown.convenienceFee.toFixed(2)}</span>
                           </div>
                         </div>

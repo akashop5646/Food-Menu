@@ -50,6 +50,7 @@ export function buildPaidReceiptData(ordersList) {
       items,
       subtotal: orderSubtotal,
       convenienceFee: orderFee,
+      convenienceFeePercentage: order.convenienceFeePercentage,
       total: orderTotal,
       paymentType: String(order.paymentType || 'ONLINE'),
       paymentStatus: String(order.paymentStatus || 'PAID')
@@ -105,7 +106,7 @@ export function generateReceiptHtml(receiptData, restaurantName = 'Aurum Table')
 
     const orderTime = new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const feeRow = order.convenienceFee > 0 
-      ? `<div class="sub-breakdown"><span>Convenience Fee</span><span>₹${order.convenienceFee.toFixed(2)}</span></div>`
+      ? `<div class="sub-breakdown"><span>Convenience Fee${order.convenienceFeePercentage !== undefined && order.convenienceFeePercentage !== null ? ` (${order.convenienceFeePercentage}%)` : ''}</span><span>₹${order.convenienceFee.toFixed(2)}</span></div>`
       : '';
 
     ordersHtml += `

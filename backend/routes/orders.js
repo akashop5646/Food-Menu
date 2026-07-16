@@ -6,6 +6,7 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { broadcast } from '../websocket.js';
 import { initializeAndProcessSettlementForPaidOrder } from '../services/settlement.js';
 import { recordEmployeeActivity } from '../services/employeeAudit.js';
+import { calculateOrderConvenienceFee } from '../services/convenienceFee.js';
 
 const router = Router();
 
@@ -391,34 +392,8 @@ router.post('/', requireAuth, async (req, res) => {
       });
     }
 
-    // Fetch convenience fee configuration
-    const feeConfigs = await db.collection('configs').find({
-      key: { $in: ['convenience_fee_enabled', 'convenience_fee_amount'] }
-    }).toArray();
-
-    let feeEnabled = false;
-    let feeAmount = 0;
-    let feeAmountValid = false;
-
-    feeConfigs.forEach(c => {
-      if (c.key === 'convenience_fee_enabled') {
-        feeEnabled = typeof c.value === 'boolean' ? c.value : c.value === 'true';
-      }
-      if (c.key === 'convenience_fee_amount') {
-        const val = Number(c.value);
-        if (Number.isFinite(val) && val >= 0 && val <= 20) {
-          feeAmount = val;
-          feeAmountValid = true;
-        }
-      }
-    });
-
-    if (feeEnabled && !feeAmountValid) {
-      feeEnabled = false;
-      feeAmount = 0;
-    }
-
-    const convenienceFee = feeEnabled ? feeAmount : 0;
+    const feeCalc = await calculateOrderConvenienceFee(db, calculatedTotal);
+    const convenienceFee = feeCalc.convenienceFee;
     const totalPayable = Number((calculatedTotal + convenienceFee).toFixed(2));
 
     const orderIdVal = req.body._id;
@@ -431,6 +406,8 @@ router.post('/', requireAuth, async (req, res) => {
       items: verifiedItems,
       total: Number(calculatedTotal.toFixed(2)),
       convenienceFee: Number(convenienceFee),
+      convenienceFeePercentage: feeCalc.percentage,
+      feeCalculationModelVersion: feeCalc.modelVersion,
       totalPayable: Number(totalPayable),
       paymentType: normalizedPaymentType,
       paymentStatus,
@@ -1209,34 +1186,8 @@ router.patch('/:id/amend', requireAdmin, async (req, res) => {
 
     const diff = { added, removed, modified };
 
-    // Recalculate convenience fee config
-    const feeConfigs = await db.collection('configs').find({
-      key: { $in: ['convenience_fee_enabled', 'convenience_fee_amount'] }
-    }).toArray();
-
-    let feeEnabled = false;
-    let feeAmount = 0;
-    let feeAmountValid = false;
-
-    feeConfigs.forEach(c => {
-      if (c.key === 'convenience_fee_enabled') {
-        feeEnabled = typeof c.value === 'boolean' ? c.value : c.value === 'true';
-      }
-      if (c.key === 'convenience_fee_amount') {
-        const val = Number(c.value);
-        if (Number.isFinite(val) && val >= 0 && val <= 20) {
-          feeAmount = val;
-          feeAmountValid = true;
-        }
-      }
-    });
-
-    if (feeEnabled && !feeAmountValid) {
-      feeEnabled = false;
-      feeAmount = 0;
-    }
-
-    const convenienceFee = feeEnabled ? feeAmount : 0;
+    const feeCalc = await calculateOrderConvenienceFee(db, calculatedTotal);
+    const convenienceFee = feeCalc.convenienceFee;
     const totalPayable = Number((calculatedTotal + convenienceFee).toFixed(2));
 
     // 8. Version updates & fallback recovery
@@ -1256,6 +1207,8 @@ router.patch('/:id/amend', requireAdmin, async (req, res) => {
       items: verifiedItems,
       total: Number(calculatedTotal.toFixed(2)),
       convenienceFee: Number(convenienceFee),
+      convenienceFeePercentage: feeCalc.percentage,
+      feeCalculationModelVersion: feeCalc.modelVersion,
       totalPayable: Number(totalPayable),
       version: newVersion,
       isUpdated: true,
@@ -1302,6 +1255,8 @@ router.patch('/:id/amend', requireAdmin, async (req, res) => {
           items: newOrderState.items,
           total: newOrderState.total,
           convenienceFee: newOrderState.convenienceFee,
+          convenienceFeePercentage: newOrderState.convenienceFeePercentage,
+          feeCalculationModelVersion: newOrderState.feeCalculationModelVersion,
           totalPayable: newOrderState.totalPayable,
           version: newVersion,
           isUpdated: true,

@@ -46,7 +46,7 @@ export default function Settings({ user }) {
 
   // Convenience Fee states
   const [convenienceFeeEnabled, setConvenienceFeeEnabled] = useState(false);
-  const [convenienceFeeAmount, setConvenienceFeeAmount] = useState(0);
+  const [convenienceFeePercentage, setConvenienceFeePercentage] = useState(0);
   const [isSavingFee, setIsSavingFee] = useState(false);
   const [feeSuccess, setFeeSuccess] = useState(false);
   const [feeError, setFeeError] = useState('');
@@ -96,7 +96,7 @@ export default function Settings({ user }) {
       if (feeRes.ok) {
         const feeData = await feeRes.json();
         setConvenienceFeeEnabled(!!feeData.enabled);
-        setConvenienceFeeAmount(Number(feeData.amount) || 0);
+        setConvenienceFeePercentage(Number(feeData.percentage) || 0);
       }
     } catch (err) {
       console.error('Failed to load settings configs:', err);
@@ -270,7 +270,8 @@ export default function Settings({ user }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           enabled: convenienceFeeEnabled,
-          amount: Number(convenienceFeeAmount)
+          type: 'PERCENTAGE',
+          percentage: Number(convenienceFeePercentage)
         }),
         credentials: 'include'
       });
@@ -930,22 +931,22 @@ export default function Settings({ user }) {
           {/* Input field */}
           <div>
             <label className="block font-label-caps text-[12px] text-on-surface-variant mb-1.5 uppercase tracking-widest">
-              Convenience Fee Amount (₹0 – ₹20) *
+              Convenience Fee Percentage (0% – 20%) *
             </label>
             <input 
               type="number"
               min={0}
               max={20}
-              step={1}
+              step="any"
               disabled={!canModifyConvenienceFee || !convenienceFeeEnabled}
-              value={convenienceFeeAmount}
-              onChange={e => setConvenienceFeeAmount(e.target.value === '' ? '' : Math.max(0, Math.min(20, parseInt(e.target.value) || 0)))}
+              value={convenienceFeePercentage}
+              onChange={e => setConvenienceFeePercentage(e.target.value === '' ? '' : Math.max(0, Math.min(20, parseFloat(e.target.value) || 0)))}
               className="w-full bg-surface-container-highest border border-outline-variant/50 text-on-surface rounded-lg px-4 py-3 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
-              placeholder="e.g. 10"
+              placeholder="e.g. 2"
               required={convenienceFeeEnabled}
             />
             <p className="font-body-sm text-[11px] text-on-surface-variant opacity-70 mt-2 leading-relaxed">
-              This fee is charged to customers as a separate line item during checkout. Allowed range: ₹0 – ₹20.
+              This fee is charged to customers as a percentage of the food subtotal during checkout. Allowed range: 0% – 20%.
             </p>
           </div>
 
@@ -959,13 +960,13 @@ export default function Settings({ user }) {
               <span className="font-mono">₹500.00</span>
             </div>
             <div className="flex justify-between text-sm text-on-surface-variant">
-              <span>Convenience fee:</span>
-              <span className="font-mono">₹{(convenienceFeeEnabled ? Number(convenienceFeeAmount || 0) : 0).toFixed(2)}</span>
+              <span>Convenience fee ({convenienceFeeEnabled ? convenienceFeePercentage : 0}%):</span>
+              <span className="font-mono">₹{(convenienceFeeEnabled ? (500 * Number(convenienceFeePercentage || 0) / 100) : 0).toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-sm font-semibold text-on-surface border-t border-outline-variant/10 pt-2">
               <span>Customer pays:</span>
               <span className="font-mono text-primary">
-                ₹{(500 + (convenienceFeeEnabled ? Number(convenienceFeeAmount || 0) : 0)).toFixed(2)}
+                ₹{(500 + (convenienceFeeEnabled ? (500 * Number(convenienceFeePercentage || 0) / 100) : 0)).toFixed(2)}
               </span>
             </div>
           </div>

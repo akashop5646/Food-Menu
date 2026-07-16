@@ -521,33 +521,42 @@ router.get('/convenience-fee', async (req, res) => {
   try {
     const db = await getDB();
     const configs = await db.collection('configs').find({
-      key: { $in: ['convenience_fee_enabled', 'convenience_fee_amount'] }
+      key: { $in: ['convenience_fee_enabled', 'convenience_fee_type', 'convenience_fee_percentage', 'convenience_fee_amount'] }
     }).toArray();
 
     let enabled = false;
+    let type = 'PERCENTAGE';
+    let percentage = 0;
     let amount = 0;
-    let amountValid = false;
+    let percentageExists = false;
 
     configs.forEach(config => {
       if (config.key === 'convenience_fee_enabled') {
         enabled = typeof config.value === 'boolean' ? config.value : config.value === 'true';
       }
+      if (config.key === 'convenience_fee_type') {
+        type = String(config.value);
+      }
+      if (config.key === 'convenience_fee_percentage') {
+        const val = Number(config.value);
+        if (Number.isFinite(val) && val >= 0) {
+          percentage = val;
+          percentageExists = true;
+        }
+      }
       if (config.key === 'convenience_fee_amount') {
         const val = Number(config.value);
-        if (Number.isFinite(val) && val >= 0 && val <= 20) {
+        if (Number.isFinite(val) && val >= 0) {
           amount = val;
-          amountValid = true;
         }
       }
     });
 
-    // Safely normalize malformed stored config to disabled/0
-    if (enabled && !amountValid) {
-      enabled = false;
-      amount = 0;
+    if (!percentageExists) {
+      res.json({ enabled, type: 'FIXED', percentage: 0, amount });
+    } else {
+      res.json({ enabled, type, percentage });
     }
-
-    res.json({ enabled, amount });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch convenience fee configuration' });
   }
@@ -556,15 +565,20 @@ router.get('/convenience-fee', async (req, res) => {
 // Update Convenience Fee Configuration (Master Admin only)
 router.post('/convenience-fee', requireMasterAdmin, async (req, res) => {
   try {
-    const { enabled, amount } = req.body;
+    const { enabled, type, percentage } = req.body;
 
     if (typeof enabled !== 'boolean') {
       return res.status(400).json({ error: 'Enabled status must be a boolean' });
     }
 
-    const numAmount = Number(amount);
-    if (!Number.isFinite(numAmount) || numAmount < 0 || numAmount > 20) {
-      return res.status(400).json({ error: 'Convenience fee amount must be a finite number between 0 and 20' });
+    const activeType = type || 'PERCENTAGE';
+    if (activeType !== 'PERCENTAGE') {
+      return res.status(400).json({ error: 'Invalid convenience fee type' });
+    }
+
+    const numPercentage = Number(percentage);
+    if (!Number.isFinite(numPercentage) || numPercentage < 0 || numPercentage > 20) {
+      return res.status(400).json({ error: 'Convenience fee percentage must be a finite number between 0 and 20' });
     }
 
     const db = await getDB();
@@ -574,12 +588,17 @@ router.post('/convenience-fee', requireMasterAdmin, async (req, res) => {
       { upsert: true }
     );
     await db.collection('configs').updateOne(
-      { key: 'convenience_fee_amount' },
-      { $set: { value: numAmount } },
+      { key: 'convenience_fee_type' },
+      { $set: { value: activeType } },
+      { upsert: true }
+    );
+    await db.collection('configs').updateOne(
+      { key: 'convenience_fee_percentage' },
+      { $set: { value: numPercentage } },
       { upsert: true }
     );
 
-    res.json({ success: true, enabled, amount: numAmount });
+    res.json({ success: true, enabled, type: activeType, percentage: numPercentage });
 
     // Record employee activity
     await recordEmployeeActivity(
@@ -593,11 +612,12 @@ router.post('/convenience-fee', requireMasterAdmin, async (req, res) => {
       {
         type: 'CONFIGURATION',
         id: 'convenience_fee',
-        displayLabel: `Convenience fee updated: ${enabled ? 'enabled' : 'disabled'}, amount: ${numAmount}`
+        displayLabel: `Convenience fee updated: ${enabled ? 'enabled' : 'disabled'}, type: ${activeType}, percentage: ${numPercentage}%`
       },
       {
         enabled: enabled,
-        amount: numAmount
+        type: activeType,
+        percentage: numPercentage
       }
     );
   } catch (error) {

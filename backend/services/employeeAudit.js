@@ -91,7 +91,9 @@ const CONTEXT_SCHEMAS = {
   },
   CONVENIENCE_FEE_UPDATED: {
     enabled: (v) => typeof v === 'boolean',
-    amount: (v) => typeof v === 'number' && v >= 0 && v <= 20,
+    type: (v) => v === undefined || ['PERCENTAGE', 'FIXED'].includes(v),
+    percentage: (v) => v === undefined || (typeof v === 'number' && v >= 0 && v <= 20),
+    amount: (v) => v === undefined || (typeof v === 'number' && v >= 0 && v <= 20),
   },
 };
 
