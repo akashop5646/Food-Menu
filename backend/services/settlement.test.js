@@ -48,17 +48,36 @@ class MockCollection {
     }
     return current;
   }
-  async updateOne(query, update) {
+  async updateOne(query, update, options) {
     const doc = this.docs.find(d => this._match(d, query));
     if (!doc) return { matchedCount: 0, modifiedCount: 0 };
 
     let modified = false;
     if (update.$set) {
       for (const [k, v] of Object.entries(update.$set)) {
-        const oldVal = this._getNested(doc, k);
-        if (JSON.stringify(oldVal) !== JSON.stringify(v)) {
-          this._setNested(doc, k, v);
-          modified = true;
+        if (k.includes('$[elem]')) {
+          const arrayPath = k.split('.$[elem]')[0];
+          const fieldPath = k.split('.$[elem].')[1];
+          const array = this._getNested(doc, arrayPath);
+          if (Array.isArray(array)) {
+            const filter = options?.arrayFilters?.find(f => f['elem.transferId'] || f['elem.id']);
+            const filterVal = filter ? (filter['elem.transferId'] || filter['elem.id']) : null;
+            array.forEach(elem => {
+              if (!filterVal || elem.transferId === filterVal || elem.id === filterVal) {
+                const oldVal = elem[fieldPath];
+                if (JSON.stringify(oldVal) !== JSON.stringify(v)) {
+                  elem[fieldPath] = structuredClone(v);
+                  modified = true;
+                }
+              }
+            });
+          }
+        } else {
+          const oldVal = this._getNested(doc, k);
+          if (JSON.stringify(oldVal) !== JSON.stringify(v)) {
+            this._setNested(doc, k, v);
+            modified = true;
+          }
         }
       }
     }
@@ -157,7 +176,7 @@ const mockDb = {
 setMockDB(mockDb);
 
 // Dynamically import routes and controllers
-const { allocateExternalAmounts, buildSettlementSnapshot, deriveOverallStatus, syncRouteTransferStatus, initializeAndProcessSettlementForPaidOrder } = await import('./settlement.js');
+const { allocateExternalAmounts, buildSettlementSnapshot, deriveOverallStatus, syncRouteTransferStatus, initializeAndProcessSettlementForPaidOrder, persistClaimedSettlement } = await import('./settlement.js');
 const paymentsRouter = (await import('../routes/payments.js')).default;
 const internalRouter = (await import('../routes/internal.js')).default;
 
@@ -1250,3 +1269,127 @@ test('Response Safety: Returns safe 500 without stack trace on unexpected batch 
   assert.equal(res.body.error, 'Internal Server Error');
   assert.ok(!JSON.stringify(res.body).includes('stack trace'));
 });
+
+test('Regression: Concurrent Webhook Delivery for multiple transfers', async () => {
+  const fresh = getFreshOrder();
+  fresh.splitSettlement.revision = 0;
+  fresh.splitSettlement.status = 'PROCESSING';
+  fresh.splitSettlement.recipients = [
+    {
+      recipientId: 'rec_1',
+      linkedAccountId: 'acc_1',
+      amountPaise: 500,
+      status: 'PROCESSING',
+      transferId: 'trf_1'
+    },
+    {
+      recipientId: 'rec_2',
+      linkedAccountId: 'acc_2',
+      amountPaise: 300,
+      status: 'PROCESSING',
+      transferId: 'trf_2'
+    }
+  ];
+  mockOrders.docs = [fresh];
+
+  // Simultaneously process both webhooks
+  const [res1, res2] = await Promise.all([
+    syncRouteTransferStatus({
+      transferId: 'trf_1',
+      recipientAccountId: 'acc_1',
+      amount: 500,
+      currency: 'INR',
+      sourcePaymentId: 'pay_123',
+      orderNote: 'order123',
+      recipientNote: 'rec_1',
+      status: 'processed'
+    }),
+    syncRouteTransferStatus({
+      transferId: 'trf_2',
+      recipientAccountId: 'acc_2',
+      amount: 300,
+      currency: 'INR',
+      sourcePaymentId: 'pay_123',
+      orderNote: 'order123',
+      recipientNote: 'rec_2',
+      status: 'processed'
+    })
+  ]);
+
+  assert.equal(res1.success, true);
+  assert.equal(res2.success, true);
+
+  const updatedOrder = mockOrders.docs[0];
+  assert.equal(updatedOrder.splitSettlement.recipients[0].status, 'PROCESSED');
+  assert.equal(updatedOrder.splitSettlement.recipients[1].status, 'PROCESSED');
+  assert.equal(updatedOrder.splitSettlement.status, 'PROCESSED');
+});
+
+test('Regression: Out-of-order or duplicate webhook delivery prevents terminal state regression', async () => {
+  const fresh = getFreshOrder();
+  fresh.splitSettlement.recipients[0].status = 'PROCESSED';
+  fresh.splitSettlement.recipients[0].transferStatus = 'processed';
+  mockOrders.docs = [fresh];
+
+  // Stale or duplicate webhook event
+  const res = await syncRouteTransferStatus({
+    transferId: 'trf_123',
+    recipientAccountId: 'acc_1',
+    amount: 500,
+    currency: 'INR',
+    sourcePaymentId: 'pay_123',
+    orderNote: 'order123',
+    recipientNote: 'rec_1',
+    status: 'processed'
+  });
+  assert.equal(res.success, true);
+  assert.equal(res.changed, false);
+  assert.equal(mockOrders.docs[0].splitSettlement.recipients[0].status, 'PROCESSED');
+});
+
+test('Regression: Worker Retry & Field-Aware Merge during CAS revision mismatch', async () => {
+  // 1. Initial State in DB: revision is 2, Recipient 1 is PROCESSED by webhook
+  const dbOrder = getFreshOrder();
+  dbOrder.splitSettlement.revision = 2;
+  dbOrder.splitSettlement.status = 'PROCESSING';
+  dbOrder.splitSettlement.processingClaimToken = 'token_abc';
+  dbOrder.splitSettlement.recipients[0].status = 'PROCESSED';
+  dbOrder.splitSettlement.recipients[0].transferStatus = 'processed';
+  dbOrder.splitSettlement.recipients[0].processedAt = new Date(1000);
+  mockOrders.docs = [dbOrder];
+
+  // 2. Worker's stale in-memory state: revision is 1, Recipient 1 is still PROCESSING
+  const workerSettlement = {
+    razorpayPaymentId: 'pay_123',
+    status: 'PROCESSING',
+    processingClaimToken: 'token_abc',
+    revision: 1,
+    recipients: [{
+      recipientId: 'rec_1',
+      linkedAccountId: 'acc_1',
+      amountPaise: 500,
+      status: 'PROCESSING',
+      transferId: 'trf_123',
+      attemptCount: 1, // worker-owned field modified in memory
+      lastAttemptAt: new Date(500)
+    }]
+  };
+
+  // Execute persistClaimedSettlement
+  const { getDB } = await import('../db.js');
+  const db = await getDB();
+  await persistClaimedSettlement(db, 'order123', 'token_abc', workerSettlement);
+
+  // 3. Verification:
+  // - Revision should be incremented to 3 (reloaded 2, updated to 3)
+  // - Recipient 1 status should be PROCESSED (merged from DB)
+  // - Recipient 1 processedAt should be Date(1000) (merged from DB)
+  // - Recipient 1 attemptCount should be 1 (worker-owned field preserved!)
+  const finalOrder = mockOrders.docs[0];
+  assert.equal(finalOrder.splitSettlement.revision, 3);
+  assert.equal(finalOrder.splitSettlement.recipients[0].status, 'PROCESSED');
+  assert.equal(finalOrder.splitSettlement.recipients[0].transferStatus, 'processed');
+  assert.equal(new Date(finalOrder.splitSettlement.recipients[0].processedAt).getTime(), 1000);
+  assert.equal(finalOrder.splitSettlement.recipients[0].attemptCount, 1);
+});
+

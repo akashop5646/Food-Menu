@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 const TOTAL_BASIS_POINTS = 10000;
 const MINIMUM_TRANSFER_PAISE = 100;
 const CLAIM_LEASE_MS = 5 * 60 * 1000;
+const MAX_SETTLEMENT_CAS_RETRIES = 3;
 
 export function allocateExternalAmounts(sourceAmountPaise, recipients) {
   const enabled = recipients.filter((recipient) => recipient.enabled);
@@ -136,14 +137,60 @@ function applyRemoteTransfer(recipient, transfer) {
   }
 }
 
-async function persistClaimedSettlement(db, orderId, claimToken, settlement) {
+export async function persistClaimedSettlement(db, orderId, claimToken, settlement) {
   settlement.updatedAt = new Date();
-  settlement.revision = (settlement.revision || 0) + 1;
-  const result = await db.collection('orders').updateOne(
-    { _id: orderId, 'splitSettlement.status': 'PROCESSING', 'splitSettlement.processingClaimToken': claimToken },
-    { $set: { splitSettlement: settlement } }
-  );
-  if (result.matchedCount !== 1) throw new Error('Settlement claim was lost');
+  let attempt = 0;
+
+  while (attempt < MAX_SETTLEMENT_CAS_RETRIES) {
+    attempt++;
+    const expectedRevision = settlement.revision || 0;
+    settlement.revision = expectedRevision + 1;
+
+    const result = await db.collection('orders').updateOne(
+      {
+        _id: orderId,
+        'splitSettlement.status': 'PROCESSING',
+        'splitSettlement.processingClaimToken': claimToken,
+        'splitSettlement.revision': expectedRevision
+      },
+      { $set: { splitSettlement: settlement } }
+    );
+
+    if (result.matchedCount === 1) {
+      return;
+    }
+
+    // CAS conflict. Loop and retry if attempts remain.
+    if (attempt < MAX_SETTLEMENT_CAS_RETRIES) {
+      const dbOrder = await db.collection('orders').findOne({ _id: orderId });
+      if (!dbOrder || dbOrder.splitSettlement?.processingClaimToken !== claimToken) {
+        throw new Error('Settlement claim was lost');
+      }
+
+      // Field-aware merge of webhook-owned fields
+      settlement.recipients.forEach((r) => {
+        const dbRecipient = dbOrder.splitSettlement.recipients.find((d) => d.recipientId === r.recipientId);
+        if (dbRecipient) {
+          if (dbRecipient.status !== r.status || dbRecipient.transferStatus !== r.transferStatus) {
+            if (['PROCESSED', 'FAILED', 'RECONCILIATION_REQUIRED'].includes(dbRecipient.status)) {
+              r.status = dbRecipient.status;
+              r.transferStatus = dbRecipient.transferStatus;
+              r.processedAt = dbRecipient.processedAt;
+              r.failureCode = dbRecipient.failureCode;
+              r.failureDescription = dbRecipient.failureDescription;
+              r.lastAttemptAt = dbRecipient.lastAttemptAt;
+            }
+          }
+        }
+      });
+
+      // Update in-memory revision to the DB's latest revision
+      settlement.revision = dbOrder.splitSettlement.revision || 0;
+      await new Promise((resolve) => setTimeout(resolve, 50 + Math.random() * 100));
+    }
+  }
+
+  throw new Error('Settlement claim was lost due to concurrent update conflict');
 }
 
 export async function initializeAndProcessSettlementForPaidOrder(orderId) {
@@ -304,7 +351,6 @@ export async function syncRouteTransferStatus({
   error
 }) {
   const db = await getDB();
-  const maxRetries = 3;
   let attempt = 0;
 
   // Backward compatibility: map flat parameters to a transfer entity if transfer is not provided
@@ -320,145 +366,166 @@ export async function syncRouteTransferStatus({
     }
   };
 
-  while (attempt < maxRetries) {
+  while (attempt < MAX_SETTLEMENT_CAS_RETRIES) {
     attempt++;
-    const order = await db.collection('orders').findOne({ 'splitSettlement.recipients.transferId': transferId });
-    if (!order) {
+    const currentOrder = await db.collection('orders').findOne({ 'splitSettlement.recipients.transferId': transferId });
+    if (!currentOrder) {
       return { success: false, retryable: false, reason: 'TRANSFER_NOT_FOUND' };
     }
 
-    const settlement = order.splitSettlement;
-    if (!settlement || !Array.isArray(settlement.recipients)) {
+    const currentSettlement = currentOrder.splitSettlement;
+    if (!currentSettlement || !Array.isArray(currentSettlement.recipients)) {
       return { success: false, retryable: false, reason: 'MALFORMED_SETTLEMENT_RECORD' };
     }
 
-    const recipientIndex = settlement.recipients.findIndex((r) => r.transferId === transferId);
+    const recipientIndex = currentSettlement.recipients.findIndex((r) => r.transferId === transferId);
     if (recipientIndex === -1) {
       return { success: false, retryable: false, reason: 'RECIPIENT_NOT_FOUND' };
     }
-    const recipient = settlement.recipients[recipientIndex];
+    const recipient = currentSettlement.recipients[recipientIndex];
 
     const now = new Date();
     let changed = false;
 
     // Validate account using the helper
-    const recipientAccountId = getTransferLinkedAccountId(resolvedTransfer);
+    const resolvedAccountId = getTransferLinkedAccountId(resolvedTransfer);
 
-    if (recipientAccountId && recipientAccountId.conflict) {
+    if (resolvedAccountId && resolvedAccountId.conflict) {
       console.warn('⚠️ Transfer webhook validation failed: reason=CONFLICTING_ACCOUNT_FIELDS');
       return { success: false, retryable: false, reason: 'RECONCILIATION_REQUIRED' };
     }
 
-    const amount = resolvedTransfer.amount;
-    const currency = resolvedTransfer.currency;
-    const sourcePaymentId = resolvedTransfer.source;
-    const orderNote = resolvedTransfer.notes?.settlement_order_id;
-    const recipientNote = resolvedTransfer.notes?.settlement_recipient_id;
+    const transferAmount = resolvedTransfer.amount;
+    const transferCurrency = resolvedTransfer.currency;
+    const transferSourcePaymentId = resolvedTransfer.source;
+    const transferOrderNote = resolvedTransfer.notes?.settlement_order_id;
+    const transferRecipientNote = resolvedTransfer.notes?.settlement_recipient_id;
 
     // Primary validation check for mismatch
     let validationError = null;
 
-    if (!recipientAccountId) {
+    if (!resolvedAccountId) {
       validationError = 'MISSING_ACCOUNT';
-    } else if (recipient.linkedAccountId !== recipientAccountId) {
+    } else if (recipient.linkedAccountId !== resolvedAccountId) {
       validationError = 'ACCOUNT_MISMATCH';
-    } else if (Number(recipient.amountPaise) !== Number(amount)) {
+    } else if (Number(recipient.amountPaise) !== Number(transferAmount)) {
       validationError = 'AMOUNT_MISMATCH';
-    } else if (String(currency).toUpperCase() !== 'INR') {
+    } else if (String(transferCurrency).toUpperCase() !== 'INR') {
       validationError = 'CURRENCY_MISMATCH';
-    } else if (sourcePaymentId && settlement.razorpayPaymentId && sourcePaymentId !== settlement.razorpayPaymentId) {
+    } else if (transferSourcePaymentId && currentSettlement.razorpayPaymentId && transferSourcePaymentId !== currentSettlement.razorpayPaymentId) {
       validationError = 'SOURCE_PAYMENT_MISMATCH';
-    } else if (orderNote && String(orderNote) !== String(order._id)) {
+    } else if (transferOrderNote && String(transferOrderNote) !== String(currentOrder._id)) {
       validationError = 'ORDER_NOTE_MISMATCH';
-    } else if (recipientNote && String(recipientNote) !== String(recipient.recipientId)) {
+    } else if (transferRecipientNote && String(transferRecipientNote) !== String(recipient.recipientId)) {
       validationError = 'RECIPIENT_NOTE_MISMATCH';
     }
 
     if (validationError) {
-      console.warn(`⚠️ Transfer webhook validation failed: reason=${validationError} recipientFieldPresent=${Boolean(resolvedTransfer.recipient)} accountFieldPresent=${Boolean(resolvedTransfer.account)} amountMatches=${Number(recipient.amountPaise) === Number(amount)} currencyMatches=${String(currency).toUpperCase() === 'INR'}`);
+      console.warn(`⚠️ Transfer webhook validation failed: reason=${validationError}`);
       return { success: false, retryable: false, reason: validationError };
     }
 
     // Idempotency & Out-of-order handling
+    let newStatus = recipient.status;
+    let newTransferStatus = recipient.transferStatus;
+    let newProcessedAt = recipient.processedAt;
+    let newFailureCode = recipient.failureCode;
+    let newFailureDescription = recipient.failureDescription;
+
     if (recipient.status === 'PROCESSED') {
       if (status === 'processed') {
         return { success: true, changed: false, status: 'PROCESSED' };
       }
       // Contradictory event: transition recipient to RECONCILIATION_REQUIRED
-      recipient.status = 'RECONCILIATION_REQUIRED';
-      recipient.failureCode = 'CONTRADICTORY_STATUS';
-      recipient.failureDescription = 'Received failure status update for a transfer marked PROCESSED';
-      recipient.lastAttemptAt = now;
+      newStatus = 'RECONCILIATION_REQUIRED';
+      newFailureCode = 'CONTRADICTORY_STATUS';
+      newFailureDescription = 'Received failure status update for a transfer marked PROCESSED';
       changed = true;
     } else if (recipient.status === 'FAILED') {
       if (status === 'failed') {
         return { success: true, changed: false, status: 'FAILED' };
       }
       // Upgrade from FAILED to PROCESSED
-      recipient.status = 'PROCESSED';
-      recipient.transferStatus = 'processed';
-      recipient.processedAt = now;
-      recipient.failureCode = null;
-      recipient.failureDescription = null;
-      recipient.lastAttemptAt = now;
+      newStatus = 'PROCESSED';
+      newTransferStatus = 'processed';
+      newProcessedAt = now;
+      newFailureCode = null;
+      newFailureDescription = null;
       changed = true;
     } else {
       // Normal update
       if (status === 'processed') {
-        recipient.status = 'PROCESSED';
-        recipient.transferStatus = 'processed';
-        recipient.processedAt = now;
-        recipient.failureCode = null;
-        recipient.failureDescription = null;
-        recipient.lastAttemptAt = now;
+        newStatus = 'PROCESSED';
+        newTransferStatus = 'processed';
+        newProcessedAt = now;
+        newFailureCode = null;
+        newFailureDescription = null;
         changed = true;
       } else {
-        recipient.status = 'FAILED';
-        recipient.transferStatus = 'failed';
-        recipient.processedAt = null;
-        recipient.failureCode = error?.code ? String(error.code).slice(0, 50) : 'RAZORPAY_TRANSFER_FAILED';
-        recipient.failureDescription = error?.description ? String(error.description).slice(0, 200) : 'Razorpay Route transfer failed';
-        recipient.lastAttemptAt = now;
+        newStatus = 'FAILED';
+        newTransferStatus = 'failed';
+        newProcessedAt = null;
+        newFailureCode = error?.code ? String(error.code).slice(0, 50) : 'RAZORPAY_TRANSFER_FAILED';
+        newFailureDescription = error?.description ? String(error.description).slice(0, 200) : 'Razorpay Route transfer failed';
         changed = true;
       }
     }
 
     if (changed) {
-      settlement.status = deriveOverallStatus(settlement.recipients);
-      if (settlement.status === 'PROCESSED') {
-        settlement.processedAt = now;
-      }
-      settlement.updatedAt = now;
+      // Temporarily update status of this recipient in memory to derive the correct overall status
+      const tempRecipients = currentSettlement.recipients.map((r) => {
+        if (r.transferId === transferId) {
+          return { ...r, status: newStatus };
+        }
+        return r;
+      });
 
-      // Smallest reliable optimistic concurrency guard
-      const expectedRevision = settlement.revision || 0;
-      settlement.revision = expectedRevision + 1;
+      const overallStatus = deriveOverallStatus(tempRecipients);
+      const expectedRevision = currentSettlement.revision || 0;
 
-      const query = { _id: order._id };
+      const casQuery = {
+        _id: currentOrder._id,
+        'splitSettlement.recipients.transferId': transferId
+      };
+
       if (expectedRevision === 0) {
-        query.$or = [
+        casQuery.$or = [
           { 'splitSettlement.revision': 0 },
           { 'splitSettlement.revision': { $exists: false } }
         ];
       } else {
-        query['splitSettlement.revision'] = expectedRevision;
+        casQuery['splitSettlement.revision'] = expectedRevision;
       }
 
-      // Smallest reliable optimistic concurrency guard
+      const updateFields = {
+        'splitSettlement.recipients.$[elem].status': newStatus,
+        'splitSettlement.recipients.$[elem].transferStatus': newTransferStatus,
+        'splitSettlement.recipients.$[elem].processedAt': newProcessedAt,
+        'splitSettlement.recipients.$[elem].failureCode': newFailureCode,
+        'splitSettlement.recipients.$[elem].failureDescription': newFailureDescription,
+        'splitSettlement.recipients.$[elem].lastAttemptAt': now,
+        'splitSettlement.status': overallStatus,
+        'splitSettlement.updatedAt': now,
+        'splitSettlement.revision': expectedRevision + 1
+      };
+
+      if (overallStatus === 'PROCESSED' || overallStatus === 'PARTIALLY_PROCESSED') {
+        updateFields['splitSettlement.processedAt'] = now;
+      }
+
       const result = await db.collection('orders').updateOne(
-        query,
+        casQuery,
         {
-          $set: {
-            splitSettlement: settlement
-          }
+          $set: updateFields
+        },
+        {
+          arrayFilters: [{ 'elem.transferId': transferId }]
         }
       );
 
-      console.log(`settlement webhook CAS: attempt=${attempt} matched=${result.matchedCount} modified=${result.modifiedCount}`);
-
       if (result.matchedCount !== 1) {
         // CAS conflict. Loop and retry if attempts remain.
-        if (attempt < maxRetries) {
+        if (attempt < MAX_SETTLEMENT_CAS_RETRIES) {
           await new Promise((resolve) => setTimeout(resolve, 50 + Math.random() * 100));
           continue;
         }
@@ -466,7 +533,7 @@ export async function syncRouteTransferStatus({
       }
     }
 
-    return { success: true, changed, status: recipient.status };
+    return { success: true, changed, status: newStatus };
   }
 
   return { success: false, retryable: true, reason: 'MAX_RETRIES_EXCEEDED' };
