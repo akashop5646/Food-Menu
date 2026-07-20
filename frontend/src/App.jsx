@@ -2563,7 +2563,7 @@ function MenuPage() {
                 onClick={() => setPaidOrderDetails(null)}
                 className="w-full bg-gold-metallic text-on-primary-fixed font-label-caps text-xs py-3.5 rounded-xl uppercase tracking-widest gold-glow font-bold transition-all active:scale-95"
               >
-                Start Tracking Order
+                Back to menu
               </button>
             </motion.div>
           </motion.div>
