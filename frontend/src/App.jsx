@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Routes, Route, useSearchParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
@@ -19,6 +19,10 @@ const formatDateForDisplay = (isoString) => {
 };
 
 function MenuPage() {
+  const shouldReduceMotion = useReducedMotion();
+  const kineticTransition = shouldReduceMotion
+    ? { duration: 0 }
+    : { type: 'spring', stiffness: 420, damping: 28, mass: 0.7 };
   const [searchParams] = useSearchParams();
   const tableParam = searchParams.get('table') || 'Walk-in';
   const locationParam = searchParams.get('location') || '';
@@ -140,6 +144,7 @@ function MenuPage() {
   // Category scrolling and fade indicators
   const categoryContainerRef = useRef(null);
   const categoryRefs = useRef({});
+  const categoryFadeFrameRef = useRef(null);
   const [showLeftFade, setShowLeftFade] = useState(false);
   const [showRightFade, setShowRightFade] = useState(false);
 
@@ -147,19 +152,30 @@ function MenuPage() {
     const el = categoryContainerRef.current;
     if (el) {
       const { scrollLeft, scrollWidth, clientWidth } = el;
-      setShowLeftFade(scrollLeft > 5);
-      setShowRightFade(scrollWidth - scrollLeft - clientWidth > 5);
+      const nextShowLeftFade = scrollLeft > 5;
+      const nextShowRightFade = scrollWidth - scrollLeft - clientWidth > 5;
+      setShowLeftFade(current => current === nextShowLeftFade ? current : nextShowLeftFade);
+      setShowRightFade(current => current === nextShowRightFade ? current : nextShowRightFade);
     }
   }, []);
 
   const handleCategoryScroll = useCallback(() => {
-    updateCategoryFades();
+    if (categoryFadeFrameRef.current) return;
+    categoryFadeFrameRef.current = window.requestAnimationFrame(() => {
+      categoryFadeFrameRef.current = null;
+      updateCategoryFades();
+    });
   }, [updateCategoryFades]);
 
   useEffect(() => {
     updateCategoryFades();
     window.addEventListener('resize', updateCategoryFades);
-    return () => window.removeEventListener('resize', updateCategoryFades);
+    return () => {
+      window.removeEventListener('resize', updateCategoryFades);
+      if (categoryFadeFrameRef.current) {
+        window.cancelAnimationFrame(categoryFadeFrameRef.current);
+      }
+    };
   }, [categories, updateCategoryFades]);
 
   useEffect(() => {
@@ -344,12 +360,15 @@ function MenuPage() {
     }
 
     let active = true;
+    const controller = new AbortController();
     const fetchFirstPage = async () => {
       setMenuLoading(true);
       setOffset(0);
       setHasMore(true);
       try {
-        const res = await fetch(`${API_BASE}/api/menu?limit=${PAGE_SIZE}&offset=0&category=${encodeURIComponent(activeCategory)}&search=${encodeURIComponent(searchQuery)}`);
+        const res = await fetch(`${API_BASE}/api/menu?limit=${PAGE_SIZE}&offset=0&category=${encodeURIComponent(activeCategory)}&search=${encodeURIComponent(searchQuery)}`, {
+          signal: controller.signal
+        });
         if (!res.ok) throw new Error('Failed to fetch menu');
         const data = await res.json();
         if (active) {
@@ -363,9 +382,9 @@ function MenuPage() {
           setHasMore(more);
 
           // If hero item is not set yet, set it from the first category fetch (normally "All")
-          if (!heroItem && processedItems.length > 0) {
+          if (processedItems.length > 0) {
             const foundHero = processedItems.find(item => item.chefPick) || processedItems[0] || null;
-            setHeroItem(foundHero);
+            setHeroItem(currentHero => currentHero || foundHero);
           }
 
           // Save to cache
@@ -376,6 +395,7 @@ function MenuPage() {
           };
         }
       } catch (err) {
+        if (err.name === 'AbortError') return;
         console.error('Error fetching initial page items:', err);
       } finally {
         if (active) {
@@ -386,8 +406,9 @@ function MenuPage() {
     fetchFirstPage();
     return () => {
       active = false;
+      controller.abort();
     };
-  }, [activeCategory, searchQuery, heroItem]);
+  }, [activeCategory, searchQuery]);
 
   // Load more menu items when user scrolls to bottom
   const loadMore = useCallback(async () => {
@@ -788,9 +809,9 @@ function MenuPage() {
           {cartCount > 0 && (
             <motion.span 
               key={cartCount}
-              initial={{ scale: 0.6, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: "spring", stiffness: 500, damping: 15 }}
+              initial={shouldReduceMotion ? false : { scale: 0.7, y: -2, opacity: 0 }}
+              animate={shouldReduceMotion ? { scale: 1, y: 0, opacity: 1 } : { scale: [1.28, 0.94, 1], y: [-2, 1, 0], opacity: 1 }}
+              transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.34, times: [0, 0.65, 1], ease: 'easeOut' }}
               className="absolute -top-0.5 -right-0.5 bg-red-600 text-white text-[10px] rounded-full h-5 w-5 flex items-center justify-center font-bold shadow-md font-sans"
             >
               {cartCount}
@@ -804,64 +825,64 @@ function MenuPage() {
         
         {/* Hero Section */}
         {heroItem ? (
-          <section className="relative bg-surface-container-lowest overflow-hidden py-12 md:py-20 border-b border-outline-variant/10">
-            {/* Background atmospheric glows */}
-            <div className="absolute top-0 right-0 w-[500px] h-[500px] rounded-full bg-primary/5 blur-[120px] pointer-events-none" />
-            <div className="absolute bottom-0 left-0 w-[300px] h-[300px] rounded-full bg-primary/3 blur-[100px] pointer-events-none" />
+          <section className="relative overflow-hidden border-b border-outline-variant/15 bg-[radial-gradient(circle_at_82%_18%,rgba(196,154,48,0.16),transparent_29%),linear-gradient(135deg,rgba(255,255,255,0.65),rgba(247,243,232,0.6))] py-10 md:py-14 dark:bg-[radial-gradient(circle_at_82%_18%,rgba(196,154,48,0.14),transparent_25%),linear-gradient(135deg,rgba(32,29,23,0.96),rgba(25,23,19,0.95))]">
+            <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent pointer-events-none" />
 
             <div className="max-w-[1200px] mx-auto px-margin-mobile md:px-margin-desktop relative z-10">
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 items-center">
                 {/* Text Info */}
                 <motion.div 
-                  initial={{ opacity: 0, x: -30 }}
+                  initial={shouldReduceMotion ? false : { opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.8, ease: "easeOut" }}
-                  className="md:col-span-7 flex flex-col items-start text-left order-2 md:order-1"
+                  transition={{ duration: 0.45, ease: "easeOut" }}
+                  className="md:col-span-6 flex flex-col items-start text-left order-2 md:order-1"
                 >
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold font-label-caps uppercase tracking-widest bg-primary/10 border border-primary/20 text-primary rounded-full mb-4 shadow-sm">
-                    <span className="material-symbols-outlined text-[12px] font-bold">restaurant</span>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold font-label-caps uppercase tracking-widest bg-surface-container-lowest/80 border border-primary/25 text-primary rounded-full mb-3 shadow-sm">
+                    <span className="material-symbols-outlined text-[12px] font-bold">award_star</span>
                     Signature Tasting
                   </span>
-                  <h1 className="font-display-lg text-4xl md:text-5xl lg:text-6xl text-primary mb-4 leading-tight font-semibold">
+                  <h1 className="font-display-lg text-4xl md:text-5xl lg:text-[3.5rem] text-primary mb-3 leading-[1.04] font-semibold text-balance">
                     {heroItem.name}
                   </h1>
-                  <p className="font-body-lg text-[15px] md:text-body-lg text-on-surface-variant/80 max-w-xl mb-8 leading-relaxed">
+                  <p className="font-body-lg text-[15px] md:text-body-lg text-on-surface-variant/85 max-w-lg mb-6 leading-relaxed">
                     {heroItem.description && heroItem.description.toLowerCase() !== heroItem.name.toLowerCase() 
                       ? heroItem.description 
                       : "Indulge in our masterfully crafted signature dish, prepared with premium local ingredients, authentic spices, and absolute culinary devotion."
                     }
                   </p>
-                  <div className="flex items-center gap-6">
-                    <div className="flex flex-col">
+                  <div className="flex items-center gap-5 sm:gap-6 flex-wrap">
+                    <div className="flex flex-col border-l-2 border-primary/50 pl-3">
                       <span className="text-[10px] font-label-caps text-on-surface-variant/50 uppercase tracking-widest">Price</span>
                       <span className="font-price-display text-3xl text-on-surface font-bold">₹{heroItem.price}</span>
                     </div>
-                    <button 
+                    <motion.button
                       onClick={() => handleOrderNow(heroItem)}
-                      className="bg-gold-metallic text-on-primary-fixed font-label-caps text-[12px] px-8 py-4 rounded-xl uppercase tracking-widest gold-glow transition-all font-bold flex items-center gap-2"
+                      whileTap={shouldReduceMotion ? undefined : { scale: 0.96 }}
+                      transition={kineticTransition}
+                      className="bg-gold-metallic text-on-primary-fixed font-label-caps text-[12px] min-h-[48px] px-6 py-3 rounded-xl uppercase tracking-widest gold-glow transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98] motion-reduce:transition-none font-bold flex items-center gap-2 focus-ring-gold focus:outline-none"
                     >
                       Order Now <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-                    </button>
+                    </motion.button>
                   </div>
                 </motion.div>
 
                 {/* Image Container */}
                 <motion.div 
-                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                  initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.98, y: 12 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
-                  transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
-                  className="md:col-span-5 flex justify-center order-1 md:order-2 w-full"
+                  transition={{ duration: 0.5, delay: shouldReduceMotion ? 0 : 0.08, ease: "easeOut" }}
+                  className="md:col-span-6 flex justify-center md:justify-end order-1 md:order-2 w-full"
                 >
-                  <div className="relative group w-full max-w-[340px] md:max-w-none aspect-square">
-                    {/* Decorative background gold glow */}
-                    <div className="absolute inset-0 bg-primary/15 rounded-[2.5rem] blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
-                    
-                    <div className="w-full h-full rounded-[2rem] overflow-hidden border border-primary/20 shadow-2xl bg-surface-container-high relative">
+                  <div className="relative group w-full max-w-[420px] aspect-[4/3]">
+                    <div className="absolute -inset-2 rounded-[2rem] border border-primary/15 pointer-events-none" />
+                    <div className="w-full h-full rounded-[1.6rem] overflow-hidden border border-primary/25 shadow-xl bg-surface-container-high relative">
                       {heroItem.image ? (
                         <img 
                           src={heroItem.image} 
                           alt={heroItem.name} 
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                          fetchPriority="high"
+                          decoding="async"
+                          className="w-full h-full object-cover md:group-hover:scale-[1.03] transition-transform duration-500 motion-reduce:transition-none"
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center bg-surface-container">
@@ -869,12 +890,11 @@ function MenuPage() {
                         </div>
                       )}
                       
-                      {/* Subtle inner overlay for luxury feel */}
-                      <div className="absolute inset-0 border border-white/10 rounded-[2rem] pointer-events-none" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent pointer-events-none" />
                     </div>
                     
                     {/* Floating Badge */}
-                    <div className="absolute -bottom-3 -right-3 bg-surface-container border border-primary/30 text-primary px-4 py-2 text-[10px] font-label-caps uppercase tracking-widest rounded-xl flex items-center gap-1 shadow-xl">
+                    <div className="absolute -bottom-3 right-3 bg-surface-container-lowest border border-primary/30 text-primary px-3.5 py-2 text-[10px] font-label-caps uppercase tracking-widest rounded-xl flex items-center gap-1 shadow-lg">
                       <span className="material-symbols-outlined text-[14px] font-bold">award_star</span>
                       Chef's Pick
                     </div>
@@ -897,23 +917,23 @@ function MenuPage() {
         )}
 
         {/* Sticky Search & Filters */}
-        <section className="sticky top-16 z-40 bg-background/95 backdrop-blur-xl border-b border-outline-variant/30 py-2 md:py-3 w-full">
-          <div className="max-w-[1200px] mx-auto px-margin-mobile md:px-margin-desktop flex flex-col gap-2.5 w-full">
-            <div className="flex gap-4 items-center justify-between w-full">
-              <div className="relative flex-1 max-w-md">
+        <section className="sticky top-16 z-40 border-b border-outline-variant/25 bg-background/95 backdrop-blur-md py-3 w-full">
+          <div className="max-w-[1200px] mx-auto px-margin-mobile md:px-margin-desktop flex flex-col gap-3 w-full">
+            <div className="flex gap-3 items-center justify-between w-full">
+              <div className="relative flex-1 max-w-xl">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
                 <input 
                   type="text" 
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   placeholder="Search menu..." 
-                  className="w-full bg-surface-container-high border-outline-variant border text-on-surface pl-10 pr-4 py-2 rounded focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors font-body-md text-body-md placeholder-on-surface-variant/50" 
+                  className="w-full min-h-[44px] bg-surface-container-low border border-outline-variant/60 text-on-surface pl-10 pr-4 py-2 rounded-xl focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors font-body-md text-body-md placeholder-on-surface-variant/50"
                 />
               </div>
               <div className="flex gap-2">
                 <button 
                   onClick={() => setIsFilterOpen(true)}
-                  className="bg-surface-container-high border border-outline-variant/50 text-on-surface-variant px-3 py-1 rounded hover:text-primary hover:border-primary/50 transition-colors flex items-center gap-1 font-label-caps text-label-caps uppercase gold-glow"
+                  className="min-h-[44px] bg-surface-container-low border border-outline-variant/50 text-on-surface-variant px-3.5 py-2 rounded-xl hover:text-primary hover:border-primary/50 transition-colors flex items-center gap-1 font-label-caps text-label-caps uppercase focus-ring-gold focus:outline-none"
                 >
                   <span className="material-symbols-outlined text-[16px]">tune</span> <span className="hidden sm:inline">Filter</span>
                 </button>
@@ -931,7 +951,7 @@ function MenuPage() {
               <div 
                 ref={categoryContainerRef}
                 onScroll={handleCategoryScroll}
-                className="overflow-x-auto hide-scrollbar flex gap-2 w-full py-1"
+                className="overflow-x-auto hide-scrollbar flex gap-2 w-full py-1.5 scroll-smooth"
               >
                 {categories.map(cat => {
                   const isActive = activeCategory === cat;
@@ -940,13 +960,20 @@ function MenuPage() {
                       key={cat}
                       ref={el => { categoryRefs.current[cat] = el; }}
                       onClick={() => setActiveCategory(cat)}
-                      className={`relative px-5 py-2 text-[10px] md:text-[11px] font-label-caps uppercase tracking-widest transition-all duration-200 whitespace-nowrap rounded-full font-semibold border ${
+                      className={`relative min-h-[36px] px-4 md:px-5 py-2 text-[10px] md:text-[11px] font-label-caps uppercase tracking-widest transition-colors duration-200 whitespace-nowrap rounded-full font-semibold border focus-ring-gold focus:outline-none ${
                         isActive 
-                          ? 'bg-gold-metallic text-on-primary-fixed shadow-sm border-transparent' 
+                          ? 'text-on-primary-fixed border-transparent'
                           : 'text-on-surface-variant/85 hover:text-primary bg-surface-container-low border-outline-variant/20'
                       }`}
                     >
-                      {cat}
+                      {isActive && (
+                        <motion.span
+                          layoutId="active-menu-category"
+                          transition={kineticTransition}
+                          className="absolute inset-0 rounded-full bg-gold-metallic shadow-sm"
+                        />
+                      )}
+                      <span className="relative z-10">{cat}</span>
                     </button>
                   );
                 })}
@@ -957,6 +984,13 @@ function MenuPage() {
                 <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none z-10" />
               )}
             </div>
+            <p className="text-[10px] font-label-caps uppercase tracking-[0.14em] text-on-surface-variant/70">
+              {searchQuery
+                ? `Results for “${searchQuery}”`
+                : activeCategory === 'All'
+                  ? 'Explore today’s menu'
+                  : `${activeCategory} selection`}
+            </p>
           </div>
         </section>
 
@@ -983,14 +1017,14 @@ function MenuPage() {
                   }
                 }
               }}
-              initial="hidden"
-              animate="show"
+              initial={shouldReduceMotion ? false : 'hidden'}
+              animate={shouldReduceMotion ? false : 'show'}
               exit="exit"
-              className="p-margin-mobile md:p-margin-desktop grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-gutter mt-8"
+              className="p-margin-mobile md:p-margin-desktop grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-gutter mt-5 md:mt-7"
             >
               {menuLoading ? (
                 Array.from({ length: 8 }).map((_, index) => (
-                  <div key={index} className="bg-surface-container/40 border border-primary/15 rounded-2xl p-3 flex flex-col gap-3 animate-pulse">
+                  <div key={index} className="bg-surface-container-low border border-outline-variant/20 rounded-2xl p-3 flex flex-col gap-3 animate-pulse">
                     <div className="w-full aspect-[4/3] rounded-xl bg-surface-container-high relative overflow-hidden" />
                     <div className="h-4 bg-surface-container-high rounded w-3/4" />
                     <div className="h-3 bg-surface-container-high rounded w-1/2 mt-1" />
@@ -1027,30 +1061,30 @@ function MenuPage() {
                       }}
                       role="button"
                       tabIndex={0}
-                      className="bg-surface-container/40 backdrop-blur-md border border-primary/15 rounded-2xl overflow-hidden group hover:border-primary/45 premium-card-shadow focus-ring-gold focus:outline-none flex flex-col cursor-pointer transition-all duration-300"
+                      className="bg-surface-container-lowest border border-outline-variant/25 rounded-2xl overflow-hidden group hover:border-primary/45 hover:-translate-y-0.5 premium-card-shadow focus-ring-gold focus:outline-none flex flex-col cursor-pointer transition-[transform,border-color,box-shadow] duration-200 motion-reduce:transition-none"
                     >
-                      <div className="relative overflow-hidden aspect-[4/3] w-full border-b border-primary/10">
+                      <div className="relative overflow-hidden aspect-[4/3] w-full border-b border-primary/10 bg-surface-container-high">
                         {item.image ? (
                           <img 
                             src={item.image} 
                             alt={item.name} 
                             loading="lazy"
-                            className="w-full h-full object-cover group-hover:scale-105 group-hover:brightness-[1.03] transition-all duration-700" 
+                            decoding="async"
+                            className="w-full h-full object-cover md:group-hover:scale-[1.03] transition-transform duration-500 motion-reduce:transition-none"
                           />
                         ) : (
                           <div className="w-full h-full bg-surface-variant flex items-center justify-center">
                             <span className="material-symbols-outlined text-4xl opacity-20">restaurant</span>
                           </div>
                         )}
-                        {/* Subtle gradient overlay on hover for a premium feel */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+                        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/25 to-transparent pointer-events-none" />
                         
                         {/* Dietary Tags Overlay */}
                         <div className="absolute top-3 left-3 z-20 flex flex-col gap-1.5 pointer-events-none">
                           {(item.dietaryTags || getDietaryTags(item) || []).map(tag => (
                             <div 
                               key={tag.type} 
-                              className={`flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-semibold font-label-caps uppercase tracking-wider rounded-md border backdrop-blur-md shadow-sm ${tag.color}`}
+                              className={`flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-semibold font-label-caps uppercase tracking-wider rounded-md border bg-surface-container-lowest/90 shadow-sm ${tag.color}`}
                             >
                               {tag.type === 'veg' || tag.type === 'nonveg' ? (
                                 <span className={`w-2.5 h-2.5 flex items-center justify-center border ${tag.type === 'veg' ? 'border-green-500' : 'border-red-500'} rounded-sm p-[1px]`}>
@@ -1065,49 +1099,59 @@ function MenuPage() {
                         </div>
 
                         {item.chefPick && (
-                          <div className="absolute z-20 bg-surface-container/85 backdrop-blur-md border border-primary/30 text-primary px-3 py-1 text-[10px] font-label-caps uppercase tracking-widest rounded-full flex items-center gap-1 top-3 right-3 shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
+                          <div className="absolute z-20 bg-surface-container-lowest/95 border border-primary/30 text-primary px-3 py-1 text-[10px] font-label-caps uppercase tracking-widest rounded-full flex items-center gap-1 top-3 right-3 shadow-md">
                             <span className="material-symbols-outlined text-[13px] font-bold">star</span> Chef's Pick
                           </div>
                         )}
                       </div>
                       
-                      <div className="flex-1 flex flex-col justify-between p-3.5 md:p-5">
+                      <div className="flex-1 flex flex-col justify-between p-3.5 md:p-4">
                         <div>
                           <h3 className="font-headline-sm text-[16px] md:text-headline-sm text-primary group-hover:text-primary-fixed transition-colors line-clamp-1 mb-1 font-semibold">{item.name}</h3>
-                          <p className="font-body-md text-[12px] md:text-body-md text-on-surface-variant/70 line-clamp-2 mb-4 leading-relaxed">
+                          <p className="font-body-md text-[12px] md:text-body-md text-on-surface-variant/75 line-clamp-2 mb-3 md:mb-4 leading-relaxed">
                             {item.description}
                           </p>
                         </div>
 
                         <div className="flex justify-between items-center mt-auto pt-2 border-t border-outline-variant/10">
-                          <span className="font-price-display text-[15px] md:text-price-display text-on-surface font-semibold">₹{item.price}</span>
+                          <span className="font-price-display text-[16px] md:text-price-display text-on-surface font-semibold">₹{item.price}</span>
                           <div onClick={(e) => e.stopPropagation()}>
                             {cartItem ? (
-                              <div className="flex items-center gap-1 bg-surface-container-high border border-outline-variant/30 rounded-full p-0.5 shadow-sm">
+                              <div className="flex items-center gap-0.5 sm:gap-1 bg-surface-container-high border border-outline-variant/30 rounded-full p-0.5 shadow-sm shrink-0">
                                 <button 
                                   onClick={() => updateQuantity(item._id, -1)} 
                                   aria-label={`Decrease quantity of ${item.name}`}
-                                  className="text-on-surface-variant hover:text-primary w-11 h-11 flex items-center justify-center rounded-full hover:bg-surface-container-highest transition-colors focus-ring-gold focus:outline-none shrink-0"
+                                  className="text-on-surface-variant hover:text-primary w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded-full hover:bg-surface-container-highest transition-colors focus-ring-gold focus:outline-none shrink-0"
                                 >
-                                  <span className="material-symbols-outlined text-[16px] md:text-[18px]">remove</span>
+                                  <span className="material-symbols-outlined text-[14px] sm:text-[16px] md:text-[18px]">remove</span>
                                 </button>
-                                <span className="font-body-md text-on-surface w-6 text-center text-[12px] md:text-[13px] font-bold shrink-0">{cartItem.quantity}</span>
+                                <motion.span
+                                  key={cartItem.quantity}
+                                  initial={shouldReduceMotion ? false : { scale: 0.82, y: 3 }}
+                                  animate={{ scale: 1, y: 0 }}
+                                  transition={kineticTransition}
+                                  className="font-body-md text-on-surface w-5 sm:w-6 text-center text-[11px] sm:text-[12px] md:text-[13px] font-bold shrink-0"
+                                >
+                                  {cartItem.quantity}
+                                </motion.span>
                                 <button 
                                   onClick={() => updateQuantity(item._id, 1)} 
                                   aria-label={`Increase quantity of ${item.name}`}
-                                  className="text-on-surface-variant hover:text-primary w-11 h-11 flex items-center justify-center rounded-full hover:bg-surface-container-highest transition-colors focus-ring-gold focus:outline-none shrink-0"
+                                  className="text-on-surface-variant hover:text-primary w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded-full hover:bg-surface-container-highest transition-colors focus-ring-gold focus:outline-none shrink-0"
                                 >
-                                  <span className="material-symbols-outlined text-[16px] md:text-[18px]">add</span>
+                                  <span className="material-symbols-outlined text-[14px] sm:text-[16px] md:text-[18px]">add</span>
                                 </button>
                               </div>
                             ) : (
-                              <button 
+                              <motion.button
                                 onClick={() => addToCart(item)}
                                 aria-label={`Add ${item.name} to cart`}
-                                className="bg-primary/15 hover:bg-primary border border-primary/20 hover:border-primary text-primary hover:text-on-primary font-label-caps text-[9px] md:text-[10px] px-4 min-h-[44px] min-w-[72px] flex items-center justify-center gap-1 rounded-full uppercase tracking-wider transition-all duration-300 shadow-sm font-bold focus-ring-gold focus:outline-none"
+                                whileTap={shouldReduceMotion ? undefined : { scale: 0.93 }}
+                                transition={kineticTransition}
+                                className="bg-primary text-on-primary hover:bg-primary-fixed-dim border border-primary font-label-caps text-[9px] md:text-[10px] px-4 min-h-[44px] min-w-[72px] flex items-center justify-center gap-1 rounded-full uppercase tracking-wider transition-transform duration-200 hover:scale-[1.03] active:scale-[0.97] motion-reduce:transition-none shadow-sm font-bold focus-ring-gold focus:outline-none"
                               >
                                 <span className="material-symbols-outlined text-[12px] md:text-[14px]">add</span> Add
-                              </button>
+                              </motion.button>
                             )}
                           </div>
                         </div>
@@ -1116,9 +1160,19 @@ function MenuPage() {
                   );
                 })
               ) : (
-                <div className="col-span-full py-16 text-center text-on-surface-variant">
+                <div className="col-span-full py-16 text-center text-on-surface-variant bg-surface-container-low rounded-2xl border border-outline-variant/20">
                   <span className="material-symbols-outlined text-5xl opacity-40 mb-3 block">search_off</span>
-                  <p className="font-body-lg text-body-lg">No dishes found matching your selection.</p>
+                  <p className="font-body-lg text-body-lg mb-4">No dishes found matching your selection.</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchInput('');
+                      setActiveCategory('All');
+                    }}
+                    className="text-primary text-[11px] font-label-caps uppercase tracking-widest hover:underline focus-ring-gold focus:outline-none rounded px-2 py-1"
+                  >
+                    Clear search and filters
+                  </button>
                 </div>
               )}
             </motion.section>
@@ -1790,11 +1844,11 @@ function MenuPage() {
 
 
       {/* Footer */}
-      <footer className="mt-20 border-t border-outline-variant/15 py-10 bg-surface-container-lowest/80 backdrop-blur-md">
-        <div className="max-w-[1200px] mx-auto px-margin-mobile md:px-margin-desktop flex flex-col md:flex-row justify-between items-center gap-6">
+      <footer className="mt-8 md:mt-10 border-t border-outline-variant/15 py-6 md:py-7 bg-surface-container-lowest/80 backdrop-blur-md">
+        <div className="max-w-[1200px] mx-auto px-margin-mobile md:px-margin-desktop flex flex-col md:flex-row justify-between items-center gap-4 md:gap-8">
           <div className="text-center md:text-left flex flex-col items-center md:items-start">
-            <div className="font-display-lg text-[18px] text-primary font-semibold mb-2">{restaurantName}</div>
-            <p className="text-body-sm text-on-surface-variant/70 max-w-xs leading-relaxed text-[12px] md:text-body-sm mb-3">
+            <div className="font-display-lg text-[17px] text-primary font-semibold mb-1.5">{restaurantName}</div>
+            <p className="text-body-sm text-on-surface-variant/70 max-w-xs leading-relaxed text-[12px] md:text-body-sm mb-2.5">
               Online tableside ordering and secure payment fulfillment for {restaurantName}. Payments are processed securely through Razorpay.
             </p>
             {restaurantMapLink && (
@@ -1809,7 +1863,7 @@ function MenuPage() {
               </a>
             )}
           </div>
-          <div className="flex flex-wrap justify-center gap-6 font-label-caps text-[11px] uppercase tracking-widest">
+          <div className="flex flex-wrap justify-center gap-x-5 gap-y-2.5 font-label-caps text-[10px] md:text-[11px] uppercase tracking-widest">
             <button onClick={() => setActivePolicy('restaurant-info')} className="text-on-surface-variant hover:text-primary transition-colors focus-ring-gold rounded px-1.5 py-0.5">About Restaurant</button>
             <button onClick={() => setActivePolicy('privacy')} className="text-on-surface-variant hover:text-primary transition-colors focus-ring-gold rounded px-1.5 py-0.5">Privacy Policy</button>
             <button onClick={() => setActivePolicy('terms')} className="text-on-surface-variant hover:text-primary transition-colors focus-ring-gold rounded px-1.5 py-0.5">Terms & Conditions</button>
@@ -1817,7 +1871,7 @@ function MenuPage() {
             <button onClick={() => setActivePolicy('contact')} className="text-on-surface-variant hover:text-primary transition-colors focus-ring-gold rounded px-1.5 py-0.5">Contact Us</button>
           </div>
         </div>
-        <div className="max-w-[1200px] mx-auto px-margin-mobile md:px-margin-desktop text-center mt-8 pt-4 border-t border-outline-variant/10 text-[10px] text-on-surface-variant/40">
+        <div className="max-w-[1200px] mx-auto px-margin-mobile md:px-margin-desktop text-center mt-5 pt-3 border-t border-outline-variant/10 text-[10px] text-on-surface-variant/40">
           © 2026 {restaurantName}. All rights reserved. Powered by Razorpay.
         </div>
       </footer>
