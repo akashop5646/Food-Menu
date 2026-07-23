@@ -129,7 +129,7 @@ function MenuPage() {
   useEffect(() => {
     localStorage.setItem('aurum_cart', JSON.stringify(cart));
   }, [cart]);
-  
+
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -579,8 +579,8 @@ function MenuPage() {
         const d = new Date(dateString);
         const today = new Date();
         return d.getDate() === today.getDate() &&
-               d.getMonth() === today.getMonth() &&
-               d.getFullYear() === today.getFullYear();
+          d.getMonth() === today.getMonth() &&
+          d.getFullYear() === today.getFullYear();
       };
 
       try {
@@ -595,8 +595,8 @@ function MenuPage() {
             setActiveOrder(prevOrder => {
               if (prevOrder && prevOrder.paymentStatus !== 'PAID' && data.order.paymentStatus === 'PAID') {
                 showNotification('Payment successful! Your order is being prepared.');
-                setPaidOrderDetails({ 
-                  orderId: data.order._id, 
+                setPaidOrderDetails({
+                  orderId: data.order._id,
                   subtotal: data.order.total,
                   convenienceFee: data.order.convenienceFee ?? 0,
                   amount: data.order.totalPayable ?? data.order.total
@@ -683,8 +683,8 @@ function MenuPage() {
             if (!verifyRes.ok) throw new Error(verifyData.error || 'Payment verification failed');
 
             showNotification('Payment successful! Your order is being prepared.');
-            setPaidOrderDetails({ 
-              orderId: targetOrderId || 'session_order', 
+            setPaidOrderDetails({
+              orderId: targetOrderId || 'session_order',
               subtotal: activeOrder ? activeOrder.total : cartTotal,
               convenienceFee: activeOrder ? (activeOrder.convenienceFee ?? 0) : calculatedConvenienceFee,
               amount: orderData.amount / 100
@@ -768,7 +768,7 @@ function MenuPage() {
       <header className="bg-surface/80 backdrop-blur-lg fixed top-0 w-full z-50 border-b border-outline-variant/15 flex justify-between items-center px-margin-mobile md:px-margin-desktop h-16 transition-all duration-300">
         <div className="flex items-center gap-3">
           {activeOrder && cart.length === 0 && (
-            <button 
+            <button
               onClick={() => setIsCheckoutOpen(true)}
               aria-label="View active order receipt"
               className="text-primary hover:text-primary-fixed-dim transition-colors hover:scale-95 duration-200 focus-ring-gold focus:outline-none rounded-full p-2"
@@ -777,9 +777,9 @@ function MenuPage() {
               <span className="material-symbols-outlined text-[24px]">receipt_long</span>
             </button>
           )}
-          
+
           {/* Theme Toggle Button */}
-          <button 
+          <button
             onClick={toggleTheme}
             aria-label={theme === 'dark' ? "Switch to Light Mode" : "Switch to Dark Mode"}
             className="text-on-surface-variant hover:text-primary transition-all duration-300 hover:scale-105 p-2 rounded-full hover:bg-surface-container-high flex items-center justify-center shadow-sm border border-outline-variant/10 focus-ring-gold focus:outline-none"
@@ -790,7 +790,7 @@ function MenuPage() {
             </span>
           </button>
         </div>
-        
+
         <div className="flex flex-col items-center select-none max-w-[50%] md:max-w-[40%]">
           <div className="font-display-lg text-[16px] sm:text-display-lg-mobile md:text-[22px] text-primary tracking-tighter text-center truncate font-semibold w-full">
             {restaurantName}
@@ -799,15 +799,15 @@ function MenuPage() {
             Prepared and fulfilled by {restaurantName}
           </div>
         </div>
-        
-        <button 
-          className="text-primary hover:text-primary-fixed-dim transition-colors hover:scale-95 duration-200 relative p-2 rounded-full hover:bg-surface-container-high flex justify-center items-center focus-ring-gold focus:outline-none" 
+
+        <button
+          className="text-primary hover:text-primary-fixed-dim transition-colors hover:scale-95 duration-200 relative p-2 rounded-full hover:bg-surface-container-high flex justify-center items-center focus-ring-gold focus:outline-none"
           onClick={toggleCart}
           aria-label={`Open shopping cart drawer with ${cartCount} items`}
         >
           <span className="material-symbols-outlined text-[24px]">shopping_bag</span>
           {cartCount > 0 && (
-            <motion.span 
+            <motion.span
               key={cartCount}
               initial={shouldReduceMotion ? false : { scale: 0.7, y: -2, opacity: 0 }}
               animate={shouldReduceMotion ? { scale: 1, y: 0, opacity: 1 } : { scale: [1.28, 0.94, 1], y: [-2, 1, 0], opacity: 1 }}
@@ -822,7 +822,7 @@ function MenuPage() {
 
       {/* Main Content Area */}
       <main className="pt-16 pb-36 md:pb-0 w-full">
-        
+
         {/* Hero Section */}
         {heroItem ? (
           <section className="relative overflow-hidden border-b border-outline-variant/15 bg-[radial-gradient(circle_at_82%_18%,rgba(196,154,48,0.16),transparent_29%),linear-gradient(135deg,rgba(255,255,255,0.65),rgba(247,243,232,0.6))] py-10 md:py-14 dark:bg-[radial-gradient(circle_at_82%_18%,rgba(196,154,48,0.14),transparent_25%),linear-gradient(135deg,rgba(32,29,23,0.96),rgba(25,23,19,0.95))]">
@@ -831,7 +831,7 @@ function MenuPage() {
             <div className="max-w-[1200px] mx-auto px-margin-mobile md:px-margin-desktop relative z-10">
               <div className="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 items-center">
                 {/* Text Info */}
-                <motion.div 
+                <motion.div
                   initial={shouldReduceMotion ? false : { opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.45, ease: "easeOut" }}
@@ -845,8 +845,8 @@ function MenuPage() {
                     {heroItem.name}
                   </h1>
                   <p className="font-body-lg text-[15px] md:text-body-lg text-on-surface-variant/85 max-w-lg mb-6 leading-relaxed">
-                    {heroItem.description && heroItem.description.toLowerCase() !== heroItem.name.toLowerCase() 
-                      ? heroItem.description 
+                    {heroItem.description && heroItem.description.toLowerCase() !== heroItem.name.toLowerCase()
+                      ? heroItem.description
                       : "Indulge in our masterfully crafted signature dish, prepared with premium local ingredients, authentic spices, and absolute culinary devotion."
                     }
                   </p>
@@ -867,7 +867,7 @@ function MenuPage() {
                 </motion.div>
 
                 {/* Image Container */}
-                <motion.div 
+                <motion.div
                   initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.98, y: 12 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   transition={{ duration: 0.5, delay: shouldReduceMotion ? 0 : 0.08, ease: "easeOut" }}
@@ -877,9 +877,9 @@ function MenuPage() {
                     <div className="absolute -inset-2 rounded-[2rem] border border-primary/15 pointer-events-none" />
                     <div className="w-full h-full rounded-[1.6rem] overflow-hidden border border-primary/25 shadow-xl bg-surface-container-high relative">
                       {heroItem.image ? (
-                        <img 
-                          src={heroItem.image} 
-                          alt={heroItem.name} 
+                        <img
+                          src={heroItem.image}
+                          alt={heroItem.name}
                           fetchPriority="high"
                           decoding="async"
                           className="w-full h-full object-cover md:group-hover:scale-[1.03] transition-transform duration-500 motion-reduce:transition-none"
@@ -889,10 +889,10 @@ function MenuPage() {
                           <span className="material-symbols-outlined text-8xl opacity-10 text-primary">restaurant</span>
                         </div>
                       )}
-                      
+
                       <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent pointer-events-none" />
                     </div>
-                    
+
                     {/* Floating Badge */}
                     <div className="absolute -bottom-3 right-3 bg-surface-container-lowest border border-primary/30 text-primary px-3.5 py-2 text-[10px] font-label-caps uppercase tracking-widest rounded-xl flex items-center gap-1 shadow-lg">
                       <span className="material-symbols-outlined text-[14px] font-bold">award_star</span>
@@ -922,16 +922,16 @@ function MenuPage() {
             <div className="flex gap-3 items-center justify-between w-full">
               <div className="relative flex-1 max-w-xl">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder="Search menu..." 
+                  placeholder="Search menu..."
                   className="w-full min-h-[44px] bg-surface-container-low border border-outline-variant/60 text-on-surface pl-10 pr-4 py-2 rounded-xl focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors font-body-md text-body-md placeholder-on-surface-variant/50"
                 />
               </div>
               <div className="flex gap-2">
-                <button 
+                <button
                   onClick={() => setIsFilterOpen(true)}
                   className="min-h-[44px] bg-surface-container-low border border-outline-variant/50 text-on-surface-variant px-3.5 py-2 rounded-xl hover:text-primary hover:border-primary/50 transition-colors flex items-center gap-1 font-label-caps text-label-caps uppercase focus-ring-gold focus:outline-none"
                 >
@@ -939,16 +939,16 @@ function MenuPage() {
                 </button>
               </div>
             </div>
-            
+
             {/* Horizontally Scrollable Categories Bar Wrapper */}
             <div className="relative w-full overflow-hidden">
               {/* Left Scroll Indicator Fade */}
               {showLeftFade && (
                 <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-background to-transparent pointer-events-none z-10" />
               )}
-              
+
               {/* Categories scroll container */}
-              <div 
+              <div
                 ref={categoryContainerRef}
                 onScroll={handleCategoryScroll}
                 className="overflow-x-auto hide-scrollbar flex gap-2 w-full py-1.5 scroll-smooth"
@@ -960,11 +960,10 @@ function MenuPage() {
                       key={cat}
                       ref={el => { categoryRefs.current[cat] = el; }}
                       onClick={() => setActiveCategory(cat)}
-                      className={`relative min-h-[36px] px-4 md:px-5 py-2 text-[10px] md:text-[11px] font-label-caps uppercase tracking-widest transition-colors duration-200 whitespace-nowrap rounded-full font-semibold border focus-ring-gold focus:outline-none ${
-                        isActive 
-                          ? 'text-on-primary-fixed border-transparent'
-                          : 'text-on-surface-variant/85 hover:text-primary bg-surface-container-low border-outline-variant/20'
-                      }`}
+                      className={`relative min-h-[36px] px-4 md:px-5 py-2 text-[10px] md:text-[11px] font-label-caps uppercase tracking-widest transition-colors duration-200 whitespace-nowrap rounded-full font-semibold border focus-ring-gold focus:outline-none ${isActive
+                        ? 'text-on-primary-fixed border-transparent'
+                        : 'text-on-surface-variant/85 hover:text-primary bg-surface-container-low border-outline-variant/20'
+                        }`}
                     >
                       {isActive && (
                         <motion.span
@@ -997,7 +996,7 @@ function MenuPage() {
         {/* Menu Grid */}
         <div className="max-w-[1200px] mx-auto w-full">
           <AnimatePresence mode="wait">
-            <motion.section 
+            <motion.section
               key={activeCategory}
               variants={{
                 hidden: { opacity: 0 },
@@ -1038,20 +1037,20 @@ function MenuPage() {
                 menuItems.map((item) => {
                   const cartItem = cartLookup[item._id];
                   return (
-                    <motion.article 
+                    <motion.article
                       variants={{
                         hidden: { opacity: 0, y: 15 },
-                        show: { 
-                          opacity: 1, 
+                        show: {
+                          opacity: 1,
                           y: 0,
-                          transition: { 
+                          transition: {
                             type: "tween",
                             ease: "easeOut",
                             duration: 0.25
-                          } 
+                          }
                         }
                       }}
-                      key={item._id} 
+                      key={item._id}
                       onClick={() => setSelectedItem(item)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
@@ -1065,9 +1064,9 @@ function MenuPage() {
                     >
                       <div className="relative overflow-hidden aspect-[4/3] w-full border-b border-primary/10 bg-surface-container-high">
                         {item.image ? (
-                          <img 
-                            src={item.image} 
-                            alt={item.name} 
+                          <img
+                            src={item.image}
+                            alt={item.name}
                             loading="lazy"
                             decoding="async"
                             className="w-full h-full object-cover md:group-hover:scale-[1.03] transition-transform duration-500 motion-reduce:transition-none"
@@ -1078,12 +1077,12 @@ function MenuPage() {
                           </div>
                         )}
                         <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/25 to-transparent pointer-events-none" />
-                        
+
                         {/* Dietary Tags Overlay */}
                         <div className="absolute top-3 left-3 z-20 flex flex-col gap-1.5 pointer-events-none">
                           {(item.dietaryTags || getDietaryTags(item) || []).map(tag => (
-                            <div 
-                              key={tag.type} 
+                            <div
+                              key={tag.type}
                               className={`flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-semibold font-label-caps uppercase tracking-wider rounded-md border bg-surface-container-lowest/90 shadow-sm ${tag.color}`}
                             >
                               {tag.type === 'veg' || tag.type === 'nonveg' ? (
@@ -1104,7 +1103,7 @@ function MenuPage() {
                           </div>
                         )}
                       </div>
-                      
+
                       <div className="flex-1 flex flex-col justify-between p-3.5 md:p-4">
                         <div>
                           <h3 className="font-headline-sm text-[16px] md:text-headline-sm text-primary group-hover:text-primary-fixed transition-colors line-clamp-1 mb-1 font-semibold">{item.name}</h3>
@@ -1118,8 +1117,8 @@ function MenuPage() {
                           <div onClick={(e) => e.stopPropagation()}>
                             {cartItem ? (
                               <div className="flex items-center gap-0.5 sm:gap-1 bg-surface-container-high border border-outline-variant/30 rounded-full p-0.5 shadow-sm shrink-0">
-                                <button 
-                                  onClick={() => updateQuantity(item._id, -1)} 
+                                <button
+                                  onClick={() => updateQuantity(item._id, -1)}
                                   aria-label={`Decrease quantity of ${item.name}`}
                                   className="text-on-surface-variant hover:text-primary w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded-full hover:bg-surface-container-highest transition-colors focus-ring-gold focus:outline-none shrink-0"
                                 >
@@ -1134,8 +1133,8 @@ function MenuPage() {
                                 >
                                   {cartItem.quantity}
                                 </motion.span>
-                                <button 
-                                  onClick={() => updateQuantity(item._id, 1)} 
+                                <button
+                                  onClick={() => updateQuantity(item._id, 1)}
                                   aria-label={`Increase quantity of ${item.name}`}
                                   className="text-on-surface-variant hover:text-primary w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded-full hover:bg-surface-container-highest transition-colors focus-ring-gold focus:outline-none shrink-0"
                                 >
@@ -1180,8 +1179,8 @@ function MenuPage() {
 
           {/* Infinite Scroll Trigger Element */}
           {hasMore && !menuLoading && (
-            <div 
-              ref={observerRef} 
+            <div
+              ref={observerRef}
               className="py-12 flex justify-center items-center w-full"
             >
               <div className="flex flex-col items-center gap-2">
@@ -1201,9 +1200,8 @@ function MenuPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
             onClick={() => setIsCartOpen(true)}
-            className={`md:hidden fixed bottom-24 left-4 right-4 z-40 bg-gold-metallic text-on-primary-fixed rounded-2xl shadow-xl flex justify-between items-center gold-glow cursor-pointer transition-all duration-300 ${
-              isCartExpanded ? 'px-5 py-4' : 'px-4 py-2.5'
-            }`}
+            className={`md:hidden fixed bottom-24 left-4 right-4 z-40 bg-gold-metallic text-on-primary-fixed rounded-2xl shadow-xl flex justify-between items-center gold-glow cursor-pointer transition-all duration-300 ${isCartExpanded ? 'px-5 py-4' : 'px-4 py-2.5'
+              }`}
           >
             {isCartExpanded ? (
               <>
@@ -1240,24 +1238,22 @@ function MenuPage() {
 
       {/* BottomNavBar (Mobile Only) */}
       <nav className="md:hidden bg-surface-container-lowest/95 backdrop-blur-lg border-t border-outline-variant/10 shadow-lg fixed bottom-0 w-full z-50 rounded-t-xl flex justify-around items-center h-20 px-4 pb-safe">
-        <button 
+        <button
           onClick={() => isCartOpen && toggleCart()}
-          className={`flex flex-col items-center justify-center transition-all duration-300 ${
-            !isCartOpen 
-              ? 'bg-secondary-container/30 text-primary rounded-xl px-3 py-1 translate-y-[-2px]' 
-              : 'text-on-surface-variant hover:text-primary-fixed-dim px-3 py-1'
-          }`}
+          className={`flex flex-col items-center justify-center transition-all duration-300 ${!isCartOpen
+            ? 'bg-secondary-container/30 text-primary rounded-xl px-3 py-1 translate-y-[-2px]'
+            : 'text-on-surface-variant hover:text-primary-fixed-dim px-3 py-1'
+            }`}
         >
           <span className="material-symbols-outlined">restaurant_menu</span>
           <span className="font-label-caps text-label-caps mt-1">Menu</span>
         </button>
-        <button 
+        <button
           onClick={toggleCart}
-          className={`flex flex-col items-center justify-center transition-all duration-300 ${
-            isCartOpen 
-              ? 'bg-secondary-container/30 text-primary rounded-xl px-3 py-1 translate-y-[-2px]' 
-              : 'text-on-surface-variant hover:text-primary-fixed-dim px-3 py-1'
-          }`}
+          className={`flex flex-col items-center justify-center transition-all duration-300 ${isCartOpen
+            ? 'bg-secondary-container/30 text-primary rounded-xl px-3 py-1 translate-y-[-2px]'
+            : 'text-on-surface-variant hover:text-primary-fixed-dim px-3 py-1'
+            }`}
         >
           <div className="relative">
             <span className="material-symbols-outlined">shopping_bag</span>
@@ -1274,12 +1270,12 @@ function MenuPage() {
       {/* Cart Drawer Overlay */}
       <AnimatePresence>
         {isCartOpen && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]" 
-            onClick={toggleCart} 
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]"
+            onClick={toggleCart}
           />
         )}
       </AnimatePresence>
@@ -1287,7 +1283,7 @@ function MenuPage() {
       {/* Cart Drawer */}
       <AnimatePresence>
         {isCartOpen && (
-          <motion.div 
+          <motion.div
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
@@ -1299,8 +1295,8 @@ function MenuPage() {
           >
             <div className="p-6 border-b border-outline-variant/20 flex justify-between items-center bg-surface-container-lowest">
               <h2 className="font-headline-sm text-headline-sm text-primary">Your Table</h2>
-              <button 
-                onClick={toggleCart} 
+              <button
+                onClick={toggleCart}
                 aria-label="Close shopping cart drawer"
                 className="text-on-surface-variant hover:text-primary transition-colors focus-ring-gold focus:outline-none rounded-full p-1"
               >
@@ -1312,12 +1308,12 @@ function MenuPage() {
             <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4 hide-scrollbar">
               {cart.length === 0 ? (
                 <div className="text-center text-on-surface-variant py-10 font-body-md">
-                  Your culinary journey awaits.<br/>Select dishes to begin.
+                  Your culinary journey awaits.<br />Select dishes to begin.
                 </div>
               ) : (
                 <AnimatePresence>
                   {cart.map(item => (
-                    <motion.div 
+                    <motion.div
                       key={item._id}
                       layout
                       initial={{ opacity: 0, scale: 0.95 }}
@@ -1330,16 +1326,16 @@ function MenuPage() {
                         <span className="font-price-display text-[14px] text-primary-fixed-dim">₹{item.price}</span>
                       </div>
                       <div className="flex items-center gap-3 bg-surface-container-high rounded border border-outline-variant/30 px-2 py-1">
-                        <button 
-                          onClick={() => updateQuantity(item._id, -1)} 
+                        <button
+                          onClick={() => updateQuantity(item._id, -1)}
                           aria-label={`Decrease quantity of ${item.name}`}
                           className="text-on-surface-variant hover:text-primary focus-ring-gold focus:outline-none rounded-full"
                         >
                           <span className="material-symbols-outlined text-[18px]">remove</span>
                         </button>
                         <span className="font-body-md text-on-surface w-4 text-center font-semibold">{item.quantity}</span>
-                        <button 
-                          onClick={() => updateQuantity(item._id, 1)} 
+                        <button
+                          onClick={() => updateQuantity(item._id, 1)}
                           aria-label={`Increase quantity of ${item.name}`}
                           className="text-on-surface-variant hover:text-primary focus-ring-gold focus:outline-none rounded-full"
                         >
@@ -1360,7 +1356,7 @@ function MenuPage() {
                 <span className="font-body-lg text-body-lg text-on-surface">Subtotal</span>
                 <span className="font-price-display text-price-display text-primary">₹{cartTotal.toFixed(2)}</span>
               </div>
-              <button 
+              <button
                 onClick={() => {
                   if (!checkoutSessionId) {
                     const newSessId = 'sess_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -1381,7 +1377,7 @@ function MenuPage() {
       {/* Checkout Drawer (Overlays Cart) */}
       <AnimatePresence>
         {isCheckoutOpen && (isCartOpen || activeOrder) && (
-          <motion.div 
+          <motion.div
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
@@ -1392,8 +1388,8 @@ function MenuPage() {
             className="fixed inset-y-0 right-0 w-full md:w-96 bg-surface-container border-l border-primary/20 shadow-2xl z-[80] flex flex-col"
           >
             <div className="p-6 border-b border-outline-variant/20 flex items-center gap-4 bg-surface-container-lowest">
-              <button 
-                onClick={() => setIsCheckoutOpen(false)} 
+              <button
+                onClick={() => setIsCheckoutOpen(false)}
                 aria-label="Back to shopping cart"
                 className="text-on-surface-variant hover:text-primary transition-colors focus-ring-gold focus:outline-none rounded-full p-1"
               >
@@ -1401,7 +1397,7 @@ function MenuPage() {
               </button>
               <h2 className="font-headline-sm text-headline-sm text-primary">{activeOrder ? 'Active Order' : 'Checkout'}</h2>
             </div>
-            
+
             <div className="flex-1 p-6 md:p-8 flex flex-col items-stretch text-center overflow-y-auto">
               {/* Order Summary */}
               <div className="grid grid-cols-3 gap-3 w-full mb-8 shrink-0">
@@ -1412,7 +1408,7 @@ function MenuPage() {
                 <div className="bg-surface-container-high border border-outline-variant/20 rounded-lg p-3">
                   <span className="font-label-caps text-label-caps text-on-surface-variant block mb-1">Items</span>
                   <strong className="font-price-display text-price-display text-primary">
-                    {activeOrder 
+                    {activeOrder
                       ? sessionItemsCount
                       : cartCount}
                   </strong>
@@ -1420,8 +1416,8 @@ function MenuPage() {
                 <div className="bg-surface-container-high border border-outline-variant/20 rounded-lg p-3">
                   <span className="font-label-caps text-label-caps text-on-surface-variant block mb-1">Total</span>
                   <strong className="font-price-display text-price-display text-primary">
-                    ₹{(activeOrder 
-                      ? ordersList.reduce((sum, o) => sum + (o.totalPayable ?? o.total), 0) 
+                    ₹{(activeOrder
+                      ? ordersList.reduce((sum, o) => sum + (o.totalPayable ?? o.total), 0)
                       : (cartTotal + calculatedConvenienceFee)
                     ).toFixed(2)}
                   </strong>
@@ -1446,54 +1442,54 @@ function MenuPage() {
               ) : (
                 <>
                   <p className="font-body-md text-body-md text-on-surface-variant mb-6">Show this code to your waiter to confirm your order. This code expires in 10 minutes.</p>
-                   
-                   {/* 4-Digit Verification Code */}
-                   <div className="relative bg-surface-container-high rounded-2xl mb-6 border-2 border-primary/30 gold-glow shrink-0 overflow-hidden px-8 py-6 flex flex-col items-center gap-3">
-                     <span className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">Your Order Code</span>
-                     {verificationCode ? (
-                       <div className="flex items-center gap-3">
-                         {verificationCode.split('').map((digit, i) => (
-                           <span key={i} className="w-14 h-16 flex items-center justify-center bg-surface-container-lowest border-2 border-primary/40 rounded-xl text-3xl font-bold text-primary font-mono shadow-lg">
-                             {digit}
-                           </span>
-                         ))}
-                       </div>
-                     ) : (
-                       <div className="flex items-center gap-2 py-4 text-on-surface-variant">
-                         <span className="material-symbols-outlined animate-spin text-primary">progress_activity</span>
-                         <span className="font-label-caps text-[11px]">Generating code...</span>
-                       </div>
-                     )}
-                   </div>
 
-                    {/* Code Details */}
-                    <div className="w-full bg-surface-container-high border border-outline-variant/20 rounded-lg p-4 mb-4 text-left shrink-0">
-                      <h4 className="font-body-md text-on-surface font-medium mb-1">Code includes</h4>
-                      <p className="font-body-md text-body-md text-on-surface-variant/70">Table number, selected items, quantity, item prices, and total.</p>
-                    </div>
-
-                    {pendingOrderId && (
-                      <div className="w-full bg-surface-container-high border border-outline-variant/20 rounded-lg p-4 mb-4 text-left shrink-0">
-                        <h4 className="font-body-md text-on-surface font-medium mb-1">Pending Order ID</h4>
-                        <p className="font-mono text-base text-primary font-bold tracking-wide">
-                          #{pendingOrderId.toString().substring(18)}
-                        </p>
+                  {/* 4-Digit Verification Code */}
+                  <div className="relative bg-surface-container-high rounded-2xl mb-6 border-2 border-primary/30 gold-glow shrink-0 overflow-hidden px-8 py-6 flex flex-col items-center gap-3">
+                    <span className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">Your Order Code</span>
+                    {verificationCode ? (
+                      <div className="flex items-center gap-3">
+                        {verificationCode.split('').map((digit, i) => (
+                          <span key={i} className="w-14 h-16 flex items-center justify-center bg-surface-container-lowest border-2 border-primary/40 rounded-xl text-3xl font-bold text-primary font-mono shadow-lg">
+                            {digit}
+                          </span>
+                        ))}
                       </div>
-                    )}            
-                   
-                   {/* Verification Status Banner */}
-                   <div className="w-full bg-error/10 border border-error/20 rounded-lg p-3.5 mb-6 text-center shrink-0">
-                     <span className="font-label-caps text-[11px] text-error font-bold flex items-center justify-center gap-1">
-                       <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
-                       Awaiting Waiter Verification
-                     </span>
-                     <p className="text-[10px] text-on-surface-variant/80 mt-1 leading-relaxed">
-                       Show the 4-digit code above to your waiter. Once verified, payment will unlock.
-                     </p>
-                   </div>
+                    ) : (
+                      <div className="flex items-center gap-2 py-4 text-on-surface-variant">
+                        <span className="material-symbols-outlined animate-spin text-primary">progress_activity</span>
+                        <span className="font-label-caps text-[11px]">Generating code...</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Code Details */}
+                  <div className="w-full bg-surface-container-high border border-outline-variant/20 rounded-lg p-4 mb-4 text-left shrink-0">
+                    <h4 className="font-body-md text-on-surface font-medium mb-1">Code includes</h4>
+                    <p className="font-body-md text-body-md text-on-surface-variant/70">Table number, selected items, quantity, item prices, and total.</p>
+                  </div>
+
+                  {pendingOrderId && (
+                    <div className="w-full bg-surface-container-high border border-outline-variant/20 rounded-lg p-4 mb-4 text-left shrink-0">
+                      <h4 className="font-body-md text-on-surface font-medium mb-1">Pending Order ID</h4>
+                      <p className="font-mono text-base text-primary font-bold tracking-wide">
+                        #{pendingOrderId.toString().substring(18)}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Verification Status Banner */}
+                  <div className="w-full bg-error/10 border border-error/20 rounded-lg p-3.5 mb-6 text-center shrink-0">
+                    <span className="font-label-caps text-[11px] text-error font-bold flex items-center justify-center gap-1">
+                      <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+                      Awaiting Waiter Verification
+                    </span>
+                    <p className="text-[10px] text-on-surface-variant/80 mt-1 leading-relaxed">
+                      Show the 4-digit code above to your waiter. Once verified, payment will unlock.
+                    </p>
+                  </div>
                 </>
               )}
-              
+
               {/* Session Order History List (renders if they have any active verified orders) */}
               {ordersList.length > 0 && (
                 <div className="w-full flex flex-col gap-3 text-left mt-2 mb-6 shrink-0">
@@ -1503,7 +1499,7 @@ function MenuPage() {
                       Total: ₹{ordersList.reduce((sum, o) => sum + (o.totalPayable ?? o.total), 0).toFixed(2)}
                     </span>
                   </h3>
-                  
+
                   <div className="space-y-3 w-full">
                     {ordersList.map((order, idx) => (
                       <div key={order._id || idx} className="bg-surface-container-high border border-outline-variant/15 rounded-xl p-3.5 flex flex-col gap-2 shadow-sm">
@@ -1514,12 +1510,12 @@ function MenuPage() {
                             {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
-                        
+
                         {/* Seller Identity */}
                         <div className="text-[10px] font-label-caps text-on-surface-variant/75 uppercase tracking-widest font-semibold">
                           {restaurantName}
                         </div>
-                        
+
                         {/* Items */}
                         <div className="space-y-1">
                           {order.items.map((item, itemIdx) => (
@@ -1531,7 +1527,7 @@ function MenuPage() {
                             </div>
                           ))}
                         </div>
-                        
+
                         {/* Status Footer */}
                         <div className="flex justify-between items-start text-[11px] font-medium border-t border-outline-variant/10 pt-1.5 mt-1 font-sans">
                           <span className="flex items-center gap-1">
@@ -1606,17 +1602,16 @@ function MenuPage() {
                       </p>
                     </div>
 
-                    <button 
+                    <button
                       onClick={handlePayNow}
-                      className={`w-full py-3 rounded font-label-caps text-label-caps uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all ${
-                        (isOrderVerified || unpaidTotal > 0)
-                          ? 'bg-gold-metallic text-on-primary-fixed gold-glow' 
-                          : 'bg-surface-container-high border border-outline-variant/30 text-on-surface-variant/40 cursor-not-allowed'
-                      }`}
+                      className={`w-full py-3 rounded font-label-caps text-label-caps uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all ${(isOrderVerified || unpaidTotal > 0)
+                        ? 'bg-gold-metallic text-on-primary-fixed gold-glow'
+                        : 'bg-surface-container-high border border-outline-variant/30 text-on-surface-variant/40 cursor-not-allowed'
+                        }`}
                     >
                       <span className="material-symbols-outlined">credit_card</span> Pay Now (₹{(unpaidTotal > 0 ? unpaidTotalPayable : (cartTotal + calculatedConvenienceFee)).toFixed(2)})
                     </button>
-                    <button 
+                    <button
                       onClick={handlePayLater}
                       className="w-full bg-surface-container-high border border-outline-variant/50 text-on-surface py-3 rounded font-body-md text-body-md hover:border-primary/50 transition-colors flex items-center justify-center gap-2 cursor-pointer"
                     >
@@ -1666,12 +1661,12 @@ function MenuPage() {
       {/* Filter Drawer Overlay */}
       <AnimatePresence>
         {isFilterOpen && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]" 
-            onClick={() => setIsFilterOpen(false)} 
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]"
+            onClick={() => setIsFilterOpen(false)}
           />
         )}
       </AnimatePresence>
@@ -1679,7 +1674,7 @@ function MenuPage() {
       {/* Filter Bottom Sheet / Drawer */}
       <AnimatePresence>
         {isFilterOpen && (
-          <motion.div 
+          <motion.div
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
@@ -1694,20 +1689,19 @@ function MenuPage() {
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
-            
+
             <div className="p-6 flex flex-col gap-4 overflow-y-auto hide-scrollbar">
               <div>
                 <label className="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest block mb-3">Categories</label>
                 <div className="flex flex-wrap gap-2">
                   {categories.map(cat => (
-                    <button 
+                    <button
                       key={cat}
                       onClick={() => setActiveCategory(cat)}
-                      className={`px-5 py-2 rounded font-label-caps text-[11px] uppercase tracking-widest transition-all ${
-                        activeCategory === cat 
-                          ? 'bg-primary text-on-primary' 
-                          : 'bg-surface-container-high border border-outline-variant/50 text-on-surface-variant hover:border-primary/50'
-                      }`}
+                      className={`px-5 py-2 rounded font-label-caps text-[11px] uppercase tracking-widest transition-all ${activeCategory === cat
+                        ? 'bg-primary text-on-primary'
+                        : 'bg-surface-container-high border border-outline-variant/50 text-on-surface-variant hover:border-primary/50'
+                        }`}
                     >
                       {cat}
                     </button>
@@ -1722,7 +1716,7 @@ function MenuPage() {
       {/* Item Detail Modal */}
       <AnimatePresence>
         {selectedItem && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -1732,7 +1726,7 @@ function MenuPage() {
             aria-modal="true"
             aria-label={`${selectedItem.name} details`}
           >
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 50, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 50, scale: 0.95 }}
@@ -1747,7 +1741,7 @@ function MenuPage() {
                     <span className="material-symbols-outlined text-6xl opacity-20">restaurant</span>
                   </div>
                 )}
-                <button 
+                <button
                   onClick={() => setSelectedItem(null)}
                   aria-label="Close details dialog"
                   className="absolute top-4 right-4 bg-black/50 hover:bg-black/80 text-white w-11 h-11 flex items-center justify-center rounded-full backdrop-blur-md transition-colors focus-ring-gold focus:outline-none shadow-md z-30"
@@ -1755,13 +1749,13 @@ function MenuPage() {
                   <span className="material-symbols-outlined text-[20px]">close</span>
                 </button>
               </div>
-              
+
               <div className="p-6 md:p-8 overflow-y-auto max-h-[40vh] md:max-h-[50vh] hide-scrollbar">
                 <div className="flex justify-between items-start mb-4 gap-4">
                   <h2 className="font-headline-md text-primary text-2xl md:text-3xl">{selectedItem.name}</h2>
                   <span className="font-price-display text-on-surface text-xl md:text-2xl shrink-0">₹{selectedItem.price}</span>
                 </div>
-                
+
                 <div className="flex flex-wrap gap-2 mb-6">
                   {(selectedItem.categories || (selectedItem.category ? [selectedItem.category] : [])).map(cat => (
                     <span key={cat} className="border border-outline-variant/30 bg-surface-container-high text-on-surface-variant px-3 py-1 rounded-full text-[11px] font-label-caps uppercase tracking-wider font-semibold">{cat}</span>
@@ -1772,8 +1766,8 @@ function MenuPage() {
                     </span>
                   )}
                   {getDietaryTags(selectedItem).map(tag => (
-                    <span 
-                      key={tag.type} 
+                    <span
+                      key={tag.type}
                       className={`px-3 py-1 rounded-full text-[11px] font-label-caps uppercase tracking-wider font-semibold flex items-center gap-1.5 border backdrop-blur-md shadow-sm ${tag.color}`}
                     >
                       {tag.type === 'veg' || tag.type === 'nonveg' ? (
@@ -1787,19 +1781,19 @@ function MenuPage() {
                     </span>
                   ))}
                 </div>
-                
+
                 <p className="font-body-md text-on-surface-variant/90 leading-relaxed whitespace-pre-wrap">
                   {selectedItem.description}
                 </p>
               </div>
-              
+
               <div className="p-6 border-t border-outline-variant/10 bg-surface-container-lowest shrink-0">
                 {selectedCartItem ? (
                   <div className="flex gap-4 items-center justify-between w-full">
                     {/* Quantity Selector */}
                     <div className="flex items-center gap-3 bg-surface-container-high border border-outline-variant/30 rounded-xl p-0.5 shadow-sm shrink-0">
-                      <button 
-                        onClick={() => updateQuantity(selectedItem._id, -1)} 
+                      <button
+                        onClick={() => updateQuantity(selectedItem._id, -1)}
                         aria-label={`Decrease quantity of ${selectedItem.name}`}
                         className="text-on-surface-variant hover:text-primary w-11 h-11 flex items-center justify-center rounded-full hover:bg-surface-container-highest transition-colors focus-ring-gold focus:outline-none"
                       >
@@ -1808,17 +1802,17 @@ function MenuPage() {
                       <span className="font-body-md text-on-surface w-6 text-center text-[15px] font-bold">
                         {selectedCartItem.quantity}
                       </span>
-                      <button 
-                        onClick={() => updateQuantity(selectedItem._id, 1)} 
+                      <button
+                        onClick={() => updateQuantity(selectedItem._id, 1)}
                         aria-label={`Increase quantity of ${selectedItem.name}`}
                         className="text-on-surface-variant hover:text-primary w-11 h-11 flex items-center justify-center rounded-full hover:bg-surface-container-highest transition-colors focus-ring-gold focus:outline-none"
                       >
                         <span className="material-symbols-outlined text-[20px]">add</span>
                       </button>
                     </div>
-                    
+
                     {/* View Cart Button */}
-                    <button 
+                    <button
                       onClick={() => {
                         setIsCartOpen(true);
                         setSelectedItem(null);
@@ -1829,7 +1823,7 @@ function MenuPage() {
                     </button>
                   </div>
                 ) : (
-                  <button 
+                  <button
                     onClick={() => addToCart(selectedItem)}
                     className="w-full bg-gold-metallic text-on-primary-fixed font-label-caps text-[14px] min-h-[44px] py-3 rounded-xl uppercase tracking-widest gold-glow font-bold transition-all active:scale-95 flex items-center justify-center gap-2"
                   >
@@ -1852,7 +1846,7 @@ function MenuPage() {
               Online tableside ordering and secure payment fulfillment for {restaurantName}. Payments are processed securely through Razorpay.
             </p>
             {restaurantMapLink && (
-              <a 
+              <a
                 href={restaurantMapLink}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -1879,7 +1873,7 @@ function MenuPage() {
       {/* Policy Modal */}
       <AnimatePresence>
         {activePolicy && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -1889,7 +1883,7 @@ function MenuPage() {
             aria-modal="true"
             aria-label={`${activePolicy} Policy`}
           >
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 50, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 50, scale: 0.95 }}
@@ -1904,7 +1898,7 @@ function MenuPage() {
                   {activePolicy === 'contact' && 'Contact Us'}
                   {activePolicy === 'restaurant-info' && 'Restaurant Information'}
                 </h2>
-                <button 
+                <button
                   onClick={() => setActivePolicy(null)}
                   aria-label="Close policy modal"
                   className="text-on-surface-variant hover:text-primary transition-colors focus-ring-gold focus:outline-none rounded-full p-1"
@@ -1912,7 +1906,7 @@ function MenuPage() {
                   <span className="material-symbols-outlined">close</span>
                 </button>
               </div>
-              
+
               <div className="p-6 md:p-8 flex-1 overflow-y-auto hide-scrollbar text-on-surface-variant/90 space-y-4 font-body-md text-sm md:text-[15px] leading-relaxed text-left">
                 {activePolicy === 'privacy' && (
                   <>
@@ -2420,7 +2414,7 @@ function MenuPage() {
                 {activePolicy === 'contact' && (
                   <>
                     <p>We would love to hear from you! For reservations, support, feedback, or business inquiries, please reach out to us using the exact details below.</p>
-                    
+
                     <h3 className="font-title-sm text-primary font-semibold text-[16px] mt-4">📍 General Inquiries & Customer Support</h3>
                     <ul className="list-none space-y-2">
                       <li><strong>Registered Business/Legal Name:</strong> {restaurantName || 'Please contact the restaurant.'}</li>
@@ -2429,10 +2423,10 @@ function MenuPage() {
                       <li>
                         <strong>Physical Address:</strong> {restaurantAddress || 'Please contact the restaurant.'}
                         {restaurantMapLink && (
-                          <a 
-                            href={restaurantMapLink} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
+                          <a
+                            href={restaurantMapLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="ml-2 text-primary hover:text-gold-metallic transition-colors inline-flex items-center gap-0.5 text-xs font-bold"
                           >
                             <span className="material-symbols-outlined text-[14px]">map</span>
@@ -2452,7 +2446,7 @@ function MenuPage() {
                     <p className="text-body-md text-on-surface-variant mb-6">
                       Official trade, licensing, and compliance information for {restaurantName || 'the restaurant'}.
                     </p>
-                    
+
                     <div className="bg-surface-container-high/40 border border-outline-variant/10 rounded-2xl p-5 flex flex-col gap-4 text-sm">
                       <div className="flex justify-between items-start pb-3 border-b border-outline-variant/10">
                         <span className="text-on-surface-variant font-medium">Restaurant Name</span>
@@ -2463,10 +2457,10 @@ function MenuPage() {
                         <div className="flex flex-col items-end gap-1 max-w-xs">
                           <span className="text-on-surface font-semibold text-right whitespace-pre-line">{restaurantAddress || 'Please contact the restaurant.'}</span>
                           {restaurantMapLink && (
-                            <a 
-                              href={restaurantMapLink} 
-                              target="_blank" 
-                              rel="noopener noreferrer" 
+                            <a
+                              href={restaurantMapLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
                               className="text-xs text-primary hover:text-gold-metallic transition-colors flex items-center gap-1 mt-1 font-bold"
                             >
                               <span className="material-symbols-outlined text-[14px]">map</span>
@@ -2489,9 +2483,9 @@ function MenuPage() {
                   </>
                 )}
               </div>
-              
+
               <div className="p-4 border-t border-outline-variant/10 bg-surface-container-lowest flex justify-end shrink-0">
-                <button 
+                <button
                   onClick={() => setActivePolicy(null)}
                   className="bg-primary hover:bg-primary-fixed-dim text-on-primary font-label-caps text-xs px-6 py-2.5 rounded-full uppercase tracking-wider transition-colors focus-ring-gold focus:outline-none"
                 >
@@ -2506,13 +2500,13 @@ function MenuPage() {
       {/* Payment Success Confirmation Modal */}
       <AnimatePresence>
         {paidOrderDetails && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/85 backdrop-blur-md z-[120] flex items-center justify-center p-4"
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
@@ -2559,7 +2553,7 @@ function MenuPage() {
                 Your payment was processed securely. The kitchen has received your order and is starting preparation.
               </p>
 
-              <button 
+              <button
                 onClick={() => setPaidOrderDetails(null)}
                 className="w-full bg-gold-metallic text-on-primary-fixed font-label-caps text-xs py-3.5 rounded-xl uppercase tracking-widest gold-glow font-bold transition-all active:scale-95"
               >
@@ -2573,7 +2567,7 @@ function MenuPage() {
       {/* Global Toast Notification */}
       <AnimatePresence>
         {notification && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.9 }}

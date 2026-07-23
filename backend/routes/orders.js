@@ -566,33 +566,41 @@ router.patch('/:id/status', requireAuth, async (req, res) => {
   }
 });
 
-// Bulk complete all active KDS orders (NEW -> COMPLETED, PREPARING -> COMPLETED, READY -> COMPLETED)
-router.post('/complete-all', requireAuth, async (req, res) => {
+// Bulk advance orders within a single KDS stage (PREPARING -> READY or READY -> COMPLETED)
+router.post('/bulk-status', requireAuth, async (req, res) => {
   try {
-    const db = await getDB();
-    const ACTIVE_STATUSES = ['NEW', 'PREPARING', 'READY'];
+    const { fromStatus, toStatus } = req.body || {};
+    const allowedTransitions = {
+      PREPARING: 'READY',
+      READY: 'COMPLETED'
+    };
 
-    // 1. Fetch active orders
-    const activeOrders = await db.collection('orders')
-      .find({ status: { $in: ACTIVE_STATUSES } })
+    if (allowedTransitions[fromStatus] !== toStatus) {
+      return res.status(400).json({ error: 'Invalid bulk KDS status transition.' });
+    }
+
+    const db = await getDB();
+
+    // Fetch the requested source lane, then guard every write against a concurrent update.
+    const sourceOrders = await db.collection('orders')
+      .find({ status: fromStatus })
       .toArray();
 
-    const completedOrderIds = [];
-    const completedOrders = [];
+    const transitionedOrderIds = [];
+    const transitionedOrders = [];
 
-    // 2. Loop through each and perform a guarded atomic update
-    for (const order of activeOrders) {
-      const completedAt = new Date();
+    for (const order of sourceOrders) {
+      const transitionedAt = new Date();
 
       const result = await db.collection('orders').findOneAndUpdate(
         {
           _id: order._id,
-          status: { $in: ACTIVE_STATUSES }
+          status: fromStatus
         },
         {
           $set: {
-            status: 'COMPLETED',
-            statusUpdatedAt: completedAt
+            status: toStatus,
+            statusUpdatedAt: transitionedAt
           }
         },
         {
@@ -605,17 +613,15 @@ router.post('/complete-all', requireAuth, async (req, res) => {
         continue;
       }
 
-      completedOrderIds.push(String(updatedOrder._id));
-      completedOrders.push(updatedOrder);
+      transitionedOrderIds.push(String(updatedOrder._id));
+      transitionedOrders.push(updatedOrder);
     }
 
-    // 3. Emit events and log audits only for successfully transitioned orders
-    for (const order of completedOrders) {
+    // Broadcast and audit only orders whose guarded update succeeded.
+    for (const order of transitionedOrders) {
       const id = String(order._id);
-      // Broadcast WebSocket change
-      broadcast('ORDER_STATUS_CHANGED', { id, status: 'COMPLETED' });
+      broadcast('ORDER_STATUS_CHANGED', { id, status: toStatus });
 
-      // Record employee audit activity
       await recordEmployeeActivity(
         {
           userId: req.user.id,
@@ -627,21 +633,21 @@ router.post('/complete-all', requireAuth, async (req, res) => {
         {
           type: 'ORDER',
           id: id,
-          displayLabel: `Order status advanced to COMPLETED`
+          displayLabel: `Order status advanced from ${fromStatus} to ${toStatus}`
         },
-        { toStatus: 'COMPLETED' }
+        { toStatus }
       ).catch(err => console.error(`Failed to record bulk activity for order ${id}:`, err));
     }
 
     res.status(200).json({
       success: true,
-      matchedCount: activeOrders.length,
-      completedCount: completedOrderIds.length,
-      completedOrderIds
+      matchedCount: sourceOrders.length,
+      transitionedCount: transitionedOrderIds.length,
+      transitionedOrderIds
     });
   } catch (error) {
-    console.error('Failed to bulk complete KDS status:', error);
-    res.status(500).json({ error: 'Failed to bulk complete order status.' });
+    console.error('Failed to bulk update KDS status:', error);
+    res.status(500).json({ error: 'Failed to bulk update order status.' });
   }
 });
 

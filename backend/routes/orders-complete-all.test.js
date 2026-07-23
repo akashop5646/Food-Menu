@@ -29,6 +29,8 @@ class MockOrdersCollection {
     let matched = this.docs;
     if (query && query.status && query.status.$in) {
       matched = this.docs.filter(d => query.status.$in.includes(d.status));
+    } else if (query && typeof query.status === 'string') {
+      matched = this.docs.filter(d => d.status === query.status);
     }
     return {
       toArray: async () => matched.map(d => ({ ...d }))
@@ -51,8 +53,10 @@ class MockOrdersCollection {
     const doc = this.docs[docIndex];
 
     // Ensure the filter status condition matches the document status
-    const statusIn = filter.status?.$in || [];
-    if (statusIn.length > 0 && !statusIn.includes(doc.status)) {
+    const statusMatches = typeof filter.status === 'string'
+      ? doc.status === filter.status
+      : !filter.status?.$in || filter.status.$in.includes(doc.status);
+    if (!statusMatches) {
       return null;
     }
 
@@ -67,7 +71,6 @@ class MockEmployeeActivityCollection {
     this.inserted = [];
   }
   async insertOne(doc) {
-    console.log('MOCK DB insertOne: this =', this, 'inserted array =', this.inserted);
     this.inserted.push(doc);
     return { insertedId: 'mock_activity_id' };
   }
@@ -151,113 +154,108 @@ const staffToken = jwt.sign(
   'test_secret_for_orders_complete_all_test'
 );
 
-test('Bulk Complete All API Tests', async (t) => {
+test('Bulk KDS status API Tests', async (t) => {
   await t.test('1. Reject unauthorized request', async () => {
     const req = {
       cookies: {}
     };
-    const res = await simulateRequest('/complete-all', 'POST', req);
+    const res = await simulateRequest('/bulk-status', 'POST', req);
     assert.equal(res.statusCode, 401);
   });
 
-  await t.test('2. Successfully complete eligible orders and skip already completed ones', async () => {
-    broadcasted.length = 0;
-    mockActivity.inserted.length = 0;
-
+  await t.test('2. Reject unsupported transitions', async () => {
     const req = {
-      cookies: { token: staffToken }
+      cookies: { token: staffToken },
+      body: { fromStatus: 'NEW', toStatus: 'COMPLETED' }
     };
-    const res = await simulateRequest('/complete-all', 'POST', req);
-    assert.equal(res.statusCode, 200);
-    assert.equal(res.body.success, true);
-    assert.equal(res.body.matchedCount, 3);
-    assert.equal(res.body.completedCount, 3);
+    const res = await simulateRequest('/bulk-status', 'POST', req);
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.body.error, 'Invalid bulk KDS status transition.');
+  });
 
-    // Check returned completed IDs matches the eligible ones
-    const expectedCompleted = [
-      '60c72b2f9b1d8e23f0c3d9c1',
-      '60c72b2f9b1d8e23f0c3d9c2',
-      '60c72b2f9b1d8e23f0c3d9c3'
+  await t.test('3. Move only Preparing orders to Ready', async () => {
+    mockOrders.docs = [
+      { _id: new ObjectId('60c72b2f9b1d8e23f0c3d9c1'), status: 'NEW', orderId: 101 },
+      { _id: new ObjectId('60c72b2f9b1d8e23f0c3d9c2'), status: 'PREPARING', orderId: 102 },
+      { _id: new ObjectId('60c72b2f9b1d8e23f0c3d9c3'), status: 'READY', orderId: 103 },
+      { _id: new ObjectId('60c72b2f9b1d8e23f0c3d9c4'), status: 'COMPLETED', orderId: 104 }
     ];
-    assert.deepEqual(res.body.completedOrderIds, expectedCompleted);
-
-    // Verify statuses in the database
-    for (const idStr of expectedCompleted) {
-      const order = mockOrders.docs.find(d => d._id.toString() === idStr);
-      assert.equal(order.status, 'COMPLETED');
-      assert.ok(order.statusUpdatedAt instanceof Date);
-    }
-    // Verify 104 was left COMPLETED and not changed/updated
-    const order104 = mockOrders.docs.find(d => d.orderId === 104);
-    assert.equal(order104.status, 'COMPLETED');
-    assert.equal(order104.statusUpdatedAt, undefined); // remained unmodified
-
-    // Verify WebSocket broadcasts
-    assert.equal(broadcasted.length, 3);
-    broadcasted.forEach(b => {
-      assert.equal(b.event, 'ORDER_STATUS_CHANGED');
-      assert.equal(b.payload.status, 'COMPLETED');
-      assert.ok(expectedCompleted.includes(b.payload.id));
-    });
-
-    // Verify audit logs
-    assert.equal(mockActivity.inserted.length, 3);
-    mockActivity.inserted.forEach(act => {
-      assert.equal(act.action, 'ORDER_STATUS_CHANGED');
-      assert.equal(act.entity.type, 'ORDER');
-      assert.ok(expectedCompleted.includes(act.entity.id));
-      assert.equal(act.context.toStatus, 'COMPLETED');
-    });
-  });
-
-  await t.test('3. Return successful zero counts when no active orders remain', async () => {
+    mockOrders.failOnFindOneAndUpdate = null;
     broadcasted.length = 0;
     mockActivity.inserted.length = 0;
 
     const req = {
-      cookies: { token: staffToken }
+      cookies: { token: staffToken },
+      body: { fromStatus: 'PREPARING', toStatus: 'READY' }
     };
-    const res = await simulateRequest('/complete-all', 'POST', req);
+    const res = await simulateRequest('/bulk-status', 'POST', req);
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.success, true);
-    assert.equal(res.body.matchedCount, 0);
-    assert.equal(res.body.completedCount, 0);
-    assert.deepEqual(res.body.completedOrderIds, []);
-    assert.equal(broadcasted.length, 0);
-    assert.equal(mockActivity.inserted.length, 0);
+    assert.equal(res.body.matchedCount, 1);
+    assert.equal(res.body.transitionedCount, 1);
+    assert.deepEqual(res.body.transitionedOrderIds, ['60c72b2f9b1d8e23f0c3d9c2']);
+    assert.equal(mockOrders.docs.find(d => d.orderId === 101).status, 'NEW');
+    assert.equal(mockOrders.docs.find(d => d.orderId === 102).status, 'READY');
+    assert.equal(mockOrders.docs.find(d => d.orderId === 103).status, 'READY');
+    assert.equal(mockOrders.docs.find(d => d.orderId === 104).status, 'COMPLETED');
+    assert.equal(broadcasted.length, 1);
+    assert.equal(broadcasted[0].payload.status, 'READY');
+    assert.equal(mockActivity.inserted.length, 1);
+    assert.equal(mockActivity.inserted[0].context.toStatus, 'READY');
   });
 
-  await t.test('4. Concurrency Test: Simulate one order being completed between fetch and update', async () => {
-    // Reset order mock docs back to active states
+  await t.test('4. Move only Ready orders to Completed', async () => {
     mockOrders.docs = [
       { _id: new ObjectId('60c72b2f9b1d8e23f0c3d9d1'), status: 'NEW', orderId: 201 },
-      { _id: new ObjectId('60c72b2f9b1d8e23f0c3d9d2'), status: 'PREPARING', orderId: 202 }
+      { _id: new ObjectId('60c72b2f9b1d8e23f0c3d9d2'), status: 'PREPARING', orderId: 202 },
+      { _id: new ObjectId('60c72b2f9b1d8e23f0c3d9d3'), status: 'READY', orderId: 203 }
     ];
+    mockOrders.failOnFindOneAndUpdate = null;
+    broadcasted.length = 0;
+    mockActivity.inserted.length = 0;
 
-    // Simulate that 60c72b2f9b1d8e23f0c3d9d1 was completed concurrently
-    mockOrders.failOnFindOneAndUpdate = '60c72b2f9b1d8e23f0c3d9d1';
+    const req = {
+      cookies: { token: staffToken },
+      body: { fromStatus: 'READY', toStatus: 'COMPLETED' }
+    };
+    const res = await simulateRequest('/bulk-status', 'POST', req);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.success, true);
+    assert.equal(res.body.matchedCount, 1);
+    assert.equal(res.body.transitionedCount, 1);
+    assert.deepEqual(res.body.transitionedOrderIds, ['60c72b2f9b1d8e23f0c3d9d3']);
+    assert.equal(mockOrders.docs.find(d => d.orderId === 201).status, 'NEW');
+    assert.equal(mockOrders.docs.find(d => d.orderId === 202).status, 'PREPARING');
+    assert.equal(mockOrders.docs.find(d => d.orderId === 203).status, 'COMPLETED');
+    assert.equal(broadcasted.length, 1);
+    assert.equal(broadcasted[0].payload.status, 'COMPLETED');
+  });
+
+  await t.test('5. Skip an order changed concurrently after the source lane is fetched', async () => {
+    mockOrders.docs = [
+      { _id: new ObjectId('60c72b2f9b1d8e23f0c3d9e1'), status: 'PREPARING', orderId: 301 },
+      { _id: new ObjectId('60c72b2f9b1d8e23f0c3d9e2'), status: 'PREPARING', orderId: 302 }
+    ];
+    mockOrders.failOnFindOneAndUpdate = '60c72b2f9b1d8e23f0c3d9e1';
 
     broadcasted.length = 0;
     mockActivity.inserted.length = 0;
 
     const req = {
-      cookies: { token: staffToken }
+      cookies: { token: staffToken },
+      body: { fromStatus: 'PREPARING', toStatus: 'READY' }
     };
-    const res = await simulateRequest('/complete-all', 'POST', req);
+    const res = await simulateRequest('/bulk-status', 'POST', req);
 
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.success, true);
     assert.equal(res.body.matchedCount, 2);
-    assert.equal(res.body.completedCount, 1);
-
-    // Only 60c72b2f9b1d8e23f0c3d9d2 should be completed
-    assert.deepEqual(res.body.completedOrderIds, ['60c72b2f9b1d8e23f0c3d9d2']);
-
-    // Only one WebSocket event and audit log should be emitted
+    assert.equal(res.body.transitionedCount, 1);
+    assert.deepEqual(res.body.transitionedOrderIds, ['60c72b2f9b1d8e23f0c3d9e2']);
     assert.equal(broadcasted.length, 1);
-    assert.equal(broadcasted[0].payload.id, '60c72b2f9b1d8e23f0c3d9d2');
-
+    assert.equal(broadcasted[0].payload.id, '60c72b2f9b1d8e23f0c3d9e2');
+    assert.equal(broadcasted[0].payload.status, 'READY');
     assert.equal(mockActivity.inserted.length, 1);
-    assert.equal(mockActivity.inserted[0].entity.id, '60c72b2f9b1d8e23f0c3d9d2');
+    assert.equal(mockActivity.inserted[0].entity.id, '60c72b2f9b1d8e23f0c3d9e2');
   });
 });

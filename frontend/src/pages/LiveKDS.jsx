@@ -53,9 +53,9 @@ export default function LiveKDS({
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editTab, setEditTab] = useState('edit'); // 'edit' or 'history'
 
-  // KDS bulk complete states
-  const [showCompleteAllConfirm, setShowCompleteAllConfirm] = useState(false);
-  const [isCompletingAll, setIsCompletingAll] = useState(false);
+  // KDS bulk stage-transition states
+  const [bulkAction, setBulkAction] = useState(null);
+  const [isBulkTransitioning, setIsBulkTransitioning] = useState(false);
   const [toast, setToast] = useState(null);
   const toastTimeoutRef = useRef(null);
 
@@ -65,49 +65,55 @@ export default function LiveKDS({
     toastTimeoutRef.current = setTimeout(() => setToast(null), 2500);
   }, []);
 
-  const completableOrders = useMemo(() => {
-    return orders.filter(order => ['NEW', 'PREPARING', 'READY'].includes(order.status));
-  }, [orders]);
+  const bulkActionOrders = useMemo(() => {
+    return bulkAction ? orders.filter(order => order.status === bulkAction.fromStatus) : [];
+  }, [orders, bulkAction]);
 
-  const handleConfirmCompleteAll = async () => {
-    if (isCompletingAll || completableOrders.length === 0) return;
-    setIsCompletingAll(true);
+  const handleConfirmBulkAction = async () => {
+    if (isBulkTransitioning || !bulkAction || bulkActionOrders.length === 0) return;
+    setIsBulkTransitioning(true);
     try {
-      const res = await fetch(`${API_BASE}/api/orders/complete-all`, {
+      const res = await fetch(`${API_BASE}/api/orders/bulk-status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fromStatus: bulkAction.fromStatus,
+          toStatus: bulkAction.toStatus
+        }),
         credentials: 'include'
       });
       const data = await res.json();
       if (res.ok) {
-        const { completedOrderIds, completedCount, matchedCount } = data;
+        const { transitionedOrderIds, transitionedCount, matchedCount } = data;
 
-        // Remove only IDs returned by completedOrderIds
-        if (completedOrderIds && completedOrderIds.length > 0) {
-          setOrders(prev => prev.filter(o => !completedOrderIds.includes(String(o._id))));
+        if (transitionedOrderIds?.length) {
+          setOrders(prev => prev
+            .map(order => transitionedOrderIds.includes(String(order._id))
+              ? { ...order, status: bulkAction.toStatus }
+              : order
+            )
+            .filter(order => order.status !== 'COMPLETED')
+          );
         }
 
-        // Run authoritative fetchActiveOrders reconciliation
         await fetchActiveOrders();
+        setBulkAction(null);
 
-        setShowCompleteAllConfirm(false);
-
-        // Result-aware success messages
-        if (completedCount > 0 && matchedCount === completedCount) {
-          showToast(`${completedCount} orders completed`, 'success');
-        } else if (completedCount === 0) {
-          showToast('No active orders remained to complete', 'success');
-        } else if (matchedCount > completedCount) {
-          showToast(`${completedCount} orders completed. KDS refreshed because another terminal updated the remaining order.`, 'success');
+        if (transitionedCount > 0 && matchedCount === transitionedCount) {
+          showToast(`${transitionedCount} orders ${bulkAction.successLabel}`, 'success');
+        } else if (transitionedCount === 0) {
+          showToast(`No orders remained in ${bulkAction.sourceLabel}`, 'success');
+        } else if (matchedCount > transitionedCount) {
+          showToast(`${transitionedCount} orders ${bulkAction.successLabel}. KDS refreshed because another terminal updated the remaining orders.`, 'success');
         }
       } else {
-        showToast(data.error || 'Failed to complete all orders.', 'error');
+        showToast(data.error || `Failed to ${bulkAction.actionLabel.toLowerCase()}.`, 'error');
       }
     } catch (e) {
       console.error(e);
-      showToast('Failed to complete all orders.', 'error');
+      showToast(`Failed to ${bulkAction.actionLabel.toLowerCase()}.`, 'error');
     } finally {
-      setIsCompletingAll(false);
+      setIsBulkTransitioning(false);
     }
   };
 
@@ -722,17 +728,6 @@ export default function LiveKDS({
             <span className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-error animate-pulse'}`} title={wsConnected ? 'Live' : 'Disconnected'} />
           </div>
           <div className="flex items-center gap-2">
-            {completableOrders.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowCompleteAllConfirm(true)}
-                aria-label="Complete all active orders"
-                className="flex items-center justify-center gap-1.5 bg-error/10 hover:bg-error text-error hover:text-on-error border border-error/30 h-10 px-3.5 rounded-xl font-label-caps text-[10px] sm:text-[11px] uppercase tracking-wider font-bold transition-all cursor-pointer min-h-[44px]"
-              >
-                <span className="material-symbols-outlined text-[16px]">done_all</span>
-                <span className="hidden sm:inline">Complete All</span>
-              </button>
-            )}
             <button
               onClick={toggleKdsSound}
               aria-label={kdsSoundEnabled ? 'Disable KDS sound' : 'Enable KDS sound'}
@@ -776,19 +771,6 @@ export default function LiveKDS({
           <div className="hidden md:block">
             <h2 className="font-headline-md text-xl md:text-2xl text-primary font-bold">Kitchen Display</h2>
             <p className="text-xs text-on-surface-variant/80 mt-0.5">Manage and track active orders on the kitchen floor.</p>
-          </div>
-          <div className="flex items-center gap-3 w-full sm:w-auto sm:ml-auto">
-            {completableOrders.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowCompleteAllConfirm(true)}
-                aria-label="Complete all active orders"
-                className="w-full sm:w-auto bg-error/10 hover:bg-error text-error hover:text-on-error border border-error/20 h-11 px-4 rounded-xl font-label-caps text-[11px] uppercase tracking-wider font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 min-h-[44px]"
-              >
-                <span className="material-symbols-outlined text-[18px]">done_all</span>
-                <span>Complete All</span>
-              </button>
-            )}
           </div>
         </div>
       )}
@@ -904,6 +886,24 @@ export default function LiveKDS({
               Preparing
               <span className="bg-primary/20 text-primary font-mono-data text-mono-data px-2 py-0.5 rounded-full">{preparingOrders.length}</span>
             </h3>
+            {preparingOrders.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setBulkAction({
+                  fromStatus: 'PREPARING',
+                  toStatus: 'READY',
+                  sourceLabel: 'Preparing',
+                  actionLabel: 'Mark all ready',
+                  successLabel: 'marked ready'
+                })}
+                aria-label={`Mark all ${preparingOrders.length} preparing orders as ready`}
+                disabled={isBulkTransitioning}
+                className="min-h-[40px] px-2.5 sm:px-3 rounded-lg bg-primary/10 hover:bg-primary text-primary hover:text-on-primary border border-primary/25 font-label-caps text-[9px] sm:text-[10px] uppercase tracking-wider font-bold transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface-container-low cursor-pointer flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <span className="material-symbols-outlined text-[15px]">notifications_active</span>
+                <span>Ready all ({preparingOrders.length})</span>
+              </button>
+            )}
           </div>
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
             {ordersLoading ? (
@@ -930,6 +930,24 @@ export default function LiveKDS({
               Ready
               <span className="bg-tertiary/20 text-tertiary font-mono-data text-mono-data px-2 py-0.5 rounded-full">{readyOrders.length}</span>
             </h3>
+            {readyOrders.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setBulkAction({
+                  fromStatus: 'READY',
+                  toStatus: 'COMPLETED',
+                  sourceLabel: 'Ready',
+                  actionLabel: 'Complete all',
+                  successLabel: 'completed'
+                })}
+                aria-label={`Complete all ${readyOrders.length} ready orders`}
+                disabled={isBulkTransitioning}
+                className="min-h-[40px] px-2.5 sm:px-3 rounded-lg bg-error/10 hover:bg-error text-error hover:text-on-error border border-error/25 font-label-caps text-[9px] sm:text-[10px] uppercase tracking-wider font-bold transition-colors focus-visible:ring-2 focus-visible:ring-error focus-visible:ring-offset-2 focus-visible:ring-offset-surface-container-low cursor-pointer flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <span className="material-symbols-outlined text-[15px]">done_all</span>
+                <span>Complete all ({readyOrders.length})</span>
+              </button>
+            )}
           </div>
           <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
             {ordersLoading ? (
@@ -1362,16 +1380,16 @@ export default function LiveKDS({
       </AnimatePresence>
 
       <AnimatePresence>
-        {showCompleteAllConfirm && (
+        {bulkAction && (
           <motion.div
-            key="complete-all-confirm-modal"
+            key="bulk-status-confirm-modal"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="app-overlay-backdrop bg-black/60 backdrop-blur-sm fixed inset-0 z-[100] flex items-center justify-center p-4"
             onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                setShowCompleteAllConfirm(false);
+              if (!isBulkTransitioning && e.target === e.currentTarget) {
+                setBulkAction(null);
               }
             }}
           >
@@ -1381,46 +1399,49 @@ export default function LiveKDS({
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               role="dialog"
               aria-modal="true"
-              aria-labelledby="complete-all-dialog-title"
+              aria-labelledby="bulk-status-dialog-title"
               className="bg-surface-container-low border border-outline-variant/30 rounded-xl w-full max-w-sm p-6 shadow-2xl app-modal-wrapper"
             >
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-full bg-error/10 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-error text-[24px]">done_all</span>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${bulkAction.toStatus === 'COMPLETED' ? 'bg-error/10' : 'bg-primary/10'}`}>
+                  <span className={`material-symbols-outlined text-[24px] ${bulkAction.toStatus === 'COMPLETED' ? 'text-error' : 'text-primary'}`}>
+                    {bulkAction.toStatus === 'COMPLETED' ? 'done_all' : 'notifications_active'}
+                  </span>
                 </div>
                 <h2
-                  id="complete-all-dialog-title"
+                  id="bulk-status-dialog-title"
                   className="font-headline-sm text-on-surface text-[20px]"
                 >
-                  Complete all {completableOrders.length} active orders?
+                  {bulkAction.actionLabel} for {bulkActionOrders.length} orders?
                 </h2>
               </div>
               <p className="font-body-sm text-[14px] text-on-surface-variant/80 mb-6">
-                This action will mark all active orders as completed and remove them from the Live KDS view.
+                This will move only the orders currently in the {bulkAction.sourceLabel} lane to {bulkAction.toStatus === 'COMPLETED' ? 'Completed' : 'Ready'}.
               </p>
               <div className="flex justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowCompleteAllConfirm(false)}
-                  className="px-5 py-2 min-h-[44px] text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
+                  onClick={() => setBulkAction(null)}
+                  disabled={isBulkTransitioning}
+                  className="px-5 py-2 min-h-[44px] text-on-surface hover:text-primary font-label-caps text-[12px] uppercase tracking-widest rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
-                  onClick={handleConfirmCompleteAll}
-                  disabled={isCompletingAll}
-                  className="bg-error text-on-error px-6 py-2 min-h-[44px] rounded-lg font-label-caps text-[12px] uppercase tracking-widest flex items-center gap-2 disabled:opacity-60 outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer"
+                  onClick={handleConfirmBulkAction}
+                  disabled={isBulkTransitioning || bulkActionOrders.length === 0}
+                  className={`${bulkAction.toStatus === 'COMPLETED' ? 'bg-error text-on-error' : 'bg-primary text-on-primary'} px-6 py-2 min-h-[44px] rounded-lg font-label-caps text-[12px] uppercase tracking-widest flex items-center gap-2 disabled:opacity-60 outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer`}
                 >
-                  {isCompletingAll ? (
+                  {isBulkTransitioning ? (
                     <>
                       <span className="material-symbols-outlined text-[16px] animate-spin">
                         progress_activity
                       </span>
-                      Completing...
+                      Updating...
                     </>
                   ) : (
-                    'Complete All Orders'
+                    bulkAction.actionLabel
                   )}
                 </button>
               </div>
