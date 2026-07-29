@@ -6,15 +6,17 @@ import { calculateSettlementSummary, getOrderSettlementBreakdown } from './settl
 export { escapeHtml, getFiniteNumber };
 
 /**
- * Build receipt data for a single PAID order.
- * Returns null if the order is not paid or invalid.
+ * Build receipt data for a single order (PAID, or UNPAID if allowUnpaid: true).
+ * Returns null if invalid or if unpaid order when allowUnpaid is false.
  */
-export function buildSinglePaymentReceiptData(order) {
-  if (!order || order.paymentStatus !== 'PAID') return null;
+export function buildSinglePaymentReceiptData(order, options = {}) {
+  const { allowUnpaid = false } = options;
+  if (!order) return null;
+  const isPaid = order.paymentStatus === 'PAID';
+  if (!isPaid && !allowUnpaid) return null;
 
   const foodSubtotal = getFiniteNumber(order.total);
   const convenienceFee = getFiniteNumber(order.convenienceFee);
-  // ponytail: matches Payments.jsx getCustomerPaidAmount precedence exactly (line 19)
   const totalPaid = getFiniteNumber(order.totalPayable ?? order.total);
 
   const items = Array.isArray(order.items) ? order.items.map(item => {
@@ -34,10 +36,15 @@ export function buildSinglePaymentReceiptData(order) {
   const createdAt = order.createdAt ? new Date(order.createdAt) : null;
   const paidAt = order.paidAt ? new Date(order.paidAt) : null;
 
+  const isCancelled = order.status === 'CANCELLED';
+  const bannerText = isCancelled
+    ? '*** CANCELLED ORDER ***'
+    : (!isPaid ? '*** UNPAID BILL ***' : '');
+
   return {
     orderId,
     shortId,
-    receiptNumber: `PAY-${shortId.toUpperCase()}`,
+    receiptNumber: isPaid ? `PAY-${shortId.toUpperCase()}` : `BILL-${shortId.toUpperCase()}`,
     createdAt: createdAt && !isNaN(createdAt.getTime()) ? createdAt.toISOString() : null,
     paidAt: paidAt && !isNaN(paidAt.getTime()) ? paidAt.toISOString() : null,
     tableName: String(order.table || 'N/A'),
@@ -47,14 +54,17 @@ export function buildSinglePaymentReceiptData(order) {
     convenienceFee,
     totalPaid,
     paymentMethod: String(order.paymentType || 'CASH'),
-    paymentStatus: 'PAID',
+    paymentStatus: String(order.paymentStatus || 'PENDING'),
+    orderStatus: String(order.status || 'NEW'),
+    bannerText,
+    cancellationReason: order.cancellationReason || null,
     razorpayPaymentId: order.razorpayPaymentId ? String(order.razorpayPaymentId) : '',
     generatedAt: new Date().toISOString()
   };
 }
 
 /**
- * Generate self-contained thermal-receipt HTML for a single paid order.
+ * Generate self-contained thermal-receipt HTML for a single order.
  */
 export function generateSinglePaymentReceiptHtml(receiptData, restaurantName = 'Aurum Table') {
   if (!receiptData) return '';
@@ -73,6 +83,14 @@ export function generateSinglePaymentReceiptHtml(receiptData, restaurantName = '
     : 'N/A';
   const escPaidAt = receiptData.paidAt
     ? esc(new Date(receiptData.paidAt).toLocaleString())
+    : '';
+
+  const bannerHtml = receiptData.bannerText
+    ? `<div style="text-align:center;font-weight:bold;font-size:13px;border-top:1px dashed #000;border-bottom:1px dashed #000;padding:4px 0;margin:6px 0;">${esc(receiptData.bannerText)}</div>`
+    : '';
+
+  const cancellationHtml = receiptData.cancellationReason
+    ? `<div class="info-row"><span>Reason:</span><span>${esc(receiptData.cancellationReason)}</span></div>`
     : '';
 
   let itemsHtml = '';
@@ -163,8 +181,9 @@ export function generateSinglePaymentReceiptHtml(receiptData, restaurantName = '
   <div class="receipt-container">
     <div class="header">
       <h1 class="brand">${escName}</h1>
-      <p class="subtitle">Admin Payment Receipt</p>
-      <div class="title-banner">Payment Receipt</div>
+      <p class="subtitle">${receiptData.paymentStatus === 'PAID' ? 'Admin Payment Receipt' : 'Order Bill'}</p>
+      <div class="title-banner">${receiptData.paymentStatus === 'PAID' ? 'Payment Receipt' : (receiptData.orderStatus === 'CANCELLED' ? 'Cancelled Bill' : 'Unpaid Bill')}</div>
+      ${bannerHtml}
     </div>
     <div class="info-section">
       <div class="info-row"><span>Receipt No:</span><span>${escReceipt}</span></div>
@@ -174,7 +193,8 @@ export function generateSinglePaymentReceiptHtml(receiptData, restaurantName = '
       <div class="info-row"><span>Table:</span><span>${escTable}</span></div>
       ${locationRow}
       <div class="info-row"><span>Payment Method:</span><span style="text-transform:uppercase;">${escMethod}</span></div>
-      <div class="info-row"><span>Status:</span><span style="color:#16a34a;font-weight:700;">${escStatus}</span></div>
+      <div class="info-row"><span>Status:</span><span style="color:${receiptData.paymentStatus === 'PAID' ? '#16a34a' : (receiptData.orderStatus === 'CANCELLED' ? '#dc2626' : '#d97706')};font-weight:700;">${esc(receiptData.orderStatus === 'CANCELLED' ? 'CANCELLED' : escStatus)}</span></div>
+      ${cancellationHtml}
       ${rzpRow}
     </div>
     <div class="items-section">
@@ -184,10 +204,10 @@ export function generateSinglePaymentReceiptHtml(receiptData, restaurantName = '
     <div class="summary-section">
       <div class="summary-row"><span>Food Subtotal</span><span>₹${receiptData.foodSubtotal.toFixed(2)}</span></div>
       ${feeRow}
-      <div class="summary-row grand-total"><span>Total Paid</span><span>₹${receiptData.totalPaid.toFixed(2)}</span></div>
+      <div class="summary-row grand-total"><span>${receiptData.paymentStatus === 'PAID' ? 'Total Paid' : 'Total Amount'}</span><span>₹${receiptData.totalPaid.toFixed(2)}</span></div>
     </div>
     <div class="footer">
-      <p style="font-weight:700;color:#8b6914;">✓ Payment Confirmed</p>
+      <p style="font-weight:700;color:${receiptData.paymentStatus === 'PAID' ? '#8b6914' : (receiptData.orderStatus === 'CANCELLED' ? '#dc2626' : '#d97706')};">${receiptData.paymentStatus === 'PAID' ? '✓ Payment Confirmed' : (receiptData.orderStatus === 'CANCELLED' ? '*** Order Cancelled ***' : '*** Unpaid Order ***')}</p>
       <p>Generated at ${escGenerated}</p>
     </div>
     <p class="historical-note">Amounts shown are based on the values stored when this payment was recorded.</p>

@@ -43,7 +43,7 @@ const CONTEXT_SCHEMAS = {
     itemsCount: (v) => Number.isInteger(v) && v >= 0,
   },
   ORDER_STATUS_CHANGED: {
-    toStatus: (v) => ['NEW', 'PREPARING', 'READY', 'COMPLETED'].includes(v),
+    toStatus: (v) => ['NEW', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED'].includes(v),
   },
   ORDER_PAYMENT_VERIFIED: {
     paymentStatus: (v) => v === 'PAID',

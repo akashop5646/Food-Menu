@@ -6,6 +6,7 @@ import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import { API_BASE } from './config';
 import { buildPaidReceiptData, generateReceiptHtml } from './utils/receiptHelper';
+import { ORDER_STATUS } from './constants/orderStatus';
 
 const formatDateForDisplay = (isoString) => {
   if (!isoString) return '';
@@ -476,13 +477,32 @@ function MenuPage() {
     return globalConvenienceFeeAmount;
   }, [globalConvenienceFeeEnabled, globalConvenienceFeeType, globalConvenienceFeePercentage, globalConvenienceFeeAmount, cartTotal]);
 
-  const ordersList = activeOrders.length > 0 ? activeOrders : (activeOrder ? [activeOrder] : []);
-  const sessionTotal = ordersList.reduce((sum, o) => sum + o.total, 0);
-  const sessionItemsCount = ordersList.reduce((sum, o) => sum + o.items.reduce((s, i) => s + i.quantity, 0), 0);
-  const unpaidOrders = ordersList.filter(o => o.paymentStatus !== 'PAID');
-  const unpaidTotal = unpaidOrders.reduce((sum, o) => sum + o.total, 0);
-  const unpaidTotalPayable = unpaidOrders.reduce((sum, o) => sum + (o.totalPayable ?? o.total), 0);
-  const unpaidConvenienceFee = unpaidOrders.reduce((sum, o) => sum + (o.convenienceFee ?? 0), 0);
+  const ordersList = useMemo(() => activeOrders.length > 0 ? activeOrders : (activeOrder ? [activeOrder] : []), [activeOrders, activeOrder]);
+
+  const payableOrders = useMemo(() => {
+    return ordersList.filter(o => o && o.paymentStatus !== 'PAID' && o.status !== ORDER_STATUS.CANCELLED);
+  }, [ordersList]);
+
+  const payableSummary = useMemo(() => {
+    return payableOrders.reduce((acc, o) => {
+      const foodSubtotal = typeof o.total === 'number' && Number.isFinite(o.total) ? o.total : 0;
+      const fee = typeof o.convenienceFee === 'number' && Number.isFinite(o.convenienceFee) ? o.convenienceFee : 0;
+      const totalPayable = typeof (o.totalPayable ?? (foodSubtotal + fee)) === 'number' && Number.isFinite(o.totalPayable ?? (foodSubtotal + fee)) ? (o.totalPayable ?? (foodSubtotal + fee)) : 0;
+      const itemsCount = Array.isArray(o.items) ? o.items.reduce((s, i) => s + (parseInt(i.quantity, 10) || 0), 0) : 0;
+
+      acc.subtotal += foodSubtotal;
+      acc.convenienceFee += fee;
+      acc.totalPayable += totalPayable;
+      acc.itemsCount += itemsCount;
+      return acc;
+    }, { subtotal: 0, convenienceFee: 0, totalPayable: 0, itemsCount: 0 });
+  }, [payableOrders]);
+
+  const unpaidTotal = payableSummary.subtotal;
+  const unpaidConvenienceFee = payableSummary.convenienceFee;
+  const unpaidTotalPayable = payableSummary.totalPayable;
+  const sessionItemsCount = payableSummary.itemsCount;
+  const hasPayableOrders = payableOrders.length > 0;
 
   const showNotification = useCallback((msg) => {
     setNotification(msg);
@@ -1417,7 +1437,7 @@ function MenuPage() {
                   <span className="font-label-caps text-label-caps text-on-surface-variant block mb-1">Total</span>
                   <strong className="font-price-display text-price-display text-primary">
                     ₹{(activeOrder
-                      ? ordersList.reduce((sum, o) => sum + (o.totalPayable ?? o.total), 0)
+                      ? (hasPayableOrders ? unpaidTotalPayable : ordersList.filter(o => o.status !== ORDER_STATUS.CANCELLED).reduce((sum, o) => sum + (o.totalPayable ?? o.total), 0))
                       : (cartTotal + calculatedConvenienceFee)
                     ).toFixed(2)}
                   </strong>
@@ -1496,7 +1516,7 @@ function MenuPage() {
                   <h3 className="font-label-caps text-[11px] text-primary border-b border-outline-variant/15 pb-2 uppercase tracking-widest font-bold flex justify-between items-center shrink-0">
                     <span>Order History ({ordersList.length})</span>
                     <span className="font-mono text-on-surface-variant text-[11px] lowercase tracking-normal">
-                      Total: ₹{ordersList.reduce((sum, o) => sum + (o.totalPayable ?? o.total), 0).toFixed(2)}
+                      Total: ₹{ordersList.filter(o => o.status !== ORDER_STATUS.CANCELLED).reduce((sum, o) => sum + (o.totalPayable ?? o.total), 0).toFixed(2)}
                     </span>
                   </h3>
 
@@ -1531,7 +1551,11 @@ function MenuPage() {
                         {/* Status Footer */}
                         <div className="flex justify-between items-start text-[11px] font-medium border-t border-outline-variant/10 pt-1.5 mt-1 font-sans">
                           <span className="flex items-center gap-1">
-                            {order.paymentStatus === 'PAID' ? (
+                            {order.status === ORDER_STATUS.CANCELLED ? (
+                              <span className="text-red-500 font-bold flex items-center gap-0.5">
+                                <span className="material-symbols-outlined text-[13px]">cancel</span> Cancelled
+                              </span>
+                            ) : order.paymentStatus === 'PAID' ? (
                               <span className="text-green-500 font-bold flex items-center gap-0.5">
                                 <span className="material-symbols-outlined text-[13px]">verified</span> Paid
                               </span>
@@ -1542,16 +1566,27 @@ function MenuPage() {
                             )}
                             <span className="text-on-surface-variant/50 font-normal">| {order.status}</span>
                           </span>
-                          <div className="text-right flex flex-col items-end">
-                            <span className="text-primary font-bold font-price-display text-xs">
-                              ₹{(order.totalPayable ?? order.total).toFixed(2)}
-                            </span>
-                            {Number(order.convenienceFee) > 0 && (
-                              <span className="text-[9px] text-on-surface-variant/70 font-normal mt-0.5">
-                                (includes ₹{order.convenienceFee} fee)
+                          {order.status === ORDER_STATUS.CANCELLED ? (
+                            <div className="text-right flex flex-col items-end">
+                              <span className="text-on-surface-variant/50 line-through font-bold font-price-display text-xs">
+                                ₹{(order.totalPayable ?? order.total).toFixed(2)}
                               </span>
-                            )}
-                          </div>
+                              <span className="text-[9px] text-red-500 font-semibold mt-0.5">
+                                Cancelled • Not Charged
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="text-right flex flex-col items-end">
+                              <span className="text-primary font-bold font-price-display text-xs">
+                                ₹{(order.totalPayable ?? order.total).toFixed(2)}
+                              </span>
+                              {Number(order.convenienceFee) > 0 && (
+                                <span className="text-[9px] text-on-surface-variant/70 font-normal mt-0.5">
+                                  (includes ₹{order.convenienceFee} fee)
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1560,7 +1595,7 @@ function MenuPage() {
               )}
 
               <div className="w-full space-y-4 shrink-0">
-                {(!activeOrder || unpaidTotal > 0) ? (
+                {(!activeOrder || hasPayableOrders) ? (
                   <>
                     {/* Bill Details Breakdown */}
                     <div className="bg-surface-container-high/60 border border-outline-variant/20 rounded-xl p-4 text-xs text-on-surface-variant text-left space-y-2">
@@ -1569,27 +1604,27 @@ function MenuPage() {
                       </strong>
                       <div className="flex justify-between">
                         <span>Food Subtotal</span>
-                        <span className="font-mono">₹{(unpaidTotal > 0 ? unpaidTotal : cartTotal).toFixed(2)}</span>
+                        <span className="font-mono">₹{(hasPayableOrders ? unpaidTotal : cartTotal).toFixed(2)}</span>
                       </div>
-                      {(unpaidTotal > 0 ? unpaidConvenienceFee > 0 : calculatedConvenienceFee > 0) && (
+                      {(hasPayableOrders ? unpaidConvenienceFee > 0 : calculatedConvenienceFee > 0) && (
                         <div className="flex justify-between">
                           <span>
                             Convenience Fee
-                            {unpaidTotal > 0 ? (
+                            {hasPayableOrders ? (
                               activeOrder?.convenienceFeePercentage !== undefined && activeOrder.convenienceFeePercentage !== null && ` (${activeOrder.convenienceFeePercentage}%)`
                             ) : (
                               globalConvenienceFeeEnabled && globalConvenienceFeeType === 'PERCENTAGE' && ` (${globalConvenienceFeePercentage}%)`
                             )}
                           </span>
                           <span className="font-mono">
-                            ₹{(unpaidTotal > 0 ? unpaidConvenienceFee : calculatedConvenienceFee).toFixed(2)}
+                            ₹{(hasPayableOrders ? unpaidConvenienceFee : calculatedConvenienceFee).toFixed(2)}
                           </span>
                         </div>
                       )}
                       <div className="flex justify-between font-semibold text-on-surface border-t border-outline-variant/10 pt-2 text-sm">
                         <span>Total Payable</span>
                         <span className="font-mono text-primary">
-                          ₹{(unpaidTotal > 0 ? unpaidTotalPayable : (cartTotal + calculatedConvenienceFee)).toFixed(2)}
+                          ₹{(hasPayableOrders ? unpaidTotalPayable : (cartTotal + calculatedConvenienceFee)).toFixed(2)}
                         </span>
                       </div>
                     </div>
@@ -1604,12 +1639,12 @@ function MenuPage() {
 
                     <button
                       onClick={handlePayNow}
-                      className={`w-full py-3 rounded font-label-caps text-label-caps uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all ${(isOrderVerified || unpaidTotal > 0)
+                      className={`w-full py-3 rounded font-label-caps text-label-caps uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-all ${(isOrderVerified || hasPayableOrders)
                         ? 'bg-gold-metallic text-on-primary-fixed gold-glow'
                         : 'bg-surface-container-high border border-outline-variant/30 text-on-surface-variant/40 cursor-not-allowed'
                         }`}
                     >
-                      <span className="material-symbols-outlined">credit_card</span> Pay Now (₹{(unpaidTotal > 0 ? unpaidTotalPayable : (cartTotal + calculatedConvenienceFee)).toFixed(2)})
+                      <span className="material-symbols-outlined">credit_card</span> Pay Now (₹{(hasPayableOrders ? unpaidTotalPayable : (cartTotal + calculatedConvenienceFee)).toFixed(2)})
                     </button>
                     <button
                       onClick={handlePayLater}

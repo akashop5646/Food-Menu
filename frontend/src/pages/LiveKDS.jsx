@@ -2,6 +2,12 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE } from '../config';
+import { ORDER_STATUS } from '../constants/orderStatus';
+import {
+  buildSinglePaymentReceiptData,
+  generateSinglePaymentReceiptHtml,
+  openPrintableDocument
+} from '../utils/paymentDocumentHelper';
 
 // KDS stage-aware overdue thresholds (minutes in current stage)
 const KDS_STAGE_THRESHOLDS = { NEW: 3, PREPARING: 15, READY: 10 };
@@ -344,6 +350,50 @@ export default function LiveKDS({
     }
   };
 
+  const [cancellingOrder, setCancellingOrder] = useState(null);
+  const [cancelReasonInput, setCancelReasonInput] = useState('');
+  const [isSubmittingCancel, setIsSubmittingCancel] = useState(false);
+  const [cancelError, setCancelError] = useState('');
+
+  const handleViewBill = (order) => {
+    const receiptData = buildSinglePaymentReceiptData(order, { allowUnpaid: true });
+    if (receiptData) {
+      const html = generateSinglePaymentReceiptHtml(receiptData, 'Aurum Restaurant');
+      openPrintableDocument(html, `Bill_${receiptData.receiptNumber}`);
+    }
+  };
+
+  const handleOpenCancelModal = (order) => {
+    setCancellingOrder(order);
+    setCancelReasonInput('');
+    setCancelError('');
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!cancellingOrder) return;
+    setIsSubmittingCancel(true);
+    setCancelError('');
+    try {
+      const res = await fetch(`${API_BASE}/api/orders/${cancellingOrder._id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: ORDER_STATUS.CANCELLED,
+          reason: cancelReasonInput
+        }),
+        credentials: 'include'
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to cancel order');
+      setCancellingOrder(null);
+      fetchActiveOrders();
+    } catch (err) {
+      setCancelError(err.message);
+    } finally {
+      setIsSubmittingCancel(false);
+    }
+  };
+
   const handleOpenEditModal = (order) => {
     setEditingOrder(order);
     setEditTableId(order.tableId || '');
@@ -670,8 +720,40 @@ export default function LiveKDS({
           ))}
         </div>
 
-        {order.status !== 'COMPLETED' && (
+        {order.status === ORDER_STATUS.CANCELLED && (
+          <div className="bg-error/10 border border-error/30 text-error p-3 rounded-xl mb-3 font-body-sm text-xs">
+            <div className="font-bold flex items-center gap-1">
+              <span className="material-symbols-outlined text-base">cancel</span>
+              ORDER CANCELLED
+            </div>
+            <div className="mt-1 opacity-90">Reason: {order.cancellationReason || 'No reason provided'}</div>
+          </div>
+        )}
+
+        {order.status !== 'COMPLETED' && order.status !== ORDER_STATUS.CANCELLED && (
           <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => handleViewBill(order)}
+              aria-label={`View Bill for order table ${order.table}`}
+              className="bg-surface-container-highest hover:bg-primary/20 hover:text-primary text-on-surface p-2 w-11 h-11 rounded-xl border border-outline-variant/50 hover:border-primary/30 transition-all flex items-center justify-center cursor-pointer shrink-0"
+              title="View & Print Bill"
+            >
+              <span className="material-symbols-outlined text-base">receipt_long</span>
+            </button>
+
+            {order.paymentStatus !== 'PAID' && ['NEW', 'PREPARING'].includes(order.status) && (
+              <button
+                type="button"
+                onClick={() => handleOpenCancelModal(order)}
+                aria-label={`Cancel order table ${order.table}`}
+                className="bg-surface-container-highest hover:bg-error/20 hover:text-error text-on-surface p-2 w-11 h-11 rounded-xl border border-outline-variant/50 hover:border-error/30 transition-all flex items-center justify-center cursor-pointer shrink-0"
+                title="Cancel Order"
+              >
+                <span className="material-symbols-outlined text-base">cancel</span>
+              </button>
+            )}
+
             {(user?.role === 'ADMIN' || user?.role === 'MASTER_ADMIN') && (
               <button
                 type="button"
@@ -1442,6 +1524,87 @@ export default function LiveKDS({
                     </>
                   ) : (
                     bulkAction.actionLabel
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {cancellingOrder && (
+          <motion.div
+            key="cancel-order-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="app-overlay-backdrop bg-black/60 backdrop-blur-sm fixed inset-0 z-[100] flex items-center justify-center p-4"
+            onClick={(e) => {
+              if (!isSubmittingCancel && e.target === e.currentTarget) {
+                setCancellingOrder(null);
+              }
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-surface-container-high border border-outline-variant/30 rounded-2xl p-6 max-w-md w-full shadow-2xl"
+            >
+              <h3 className="font-title-lg text-title-lg text-error flex items-center gap-2 mb-2">
+                <span className="material-symbols-outlined">cancel</span>
+                Cancel Order #{cancellingOrder._id?.slice(-6)?.toUpperCase()}
+              </h3>
+              <p className="font-body-sm text-[14px] text-on-surface-variant/80 mb-4">
+                Are you sure you want to cancel this order for Table {cancellingOrder.table || 'N/A'}? The payment status will remain unpaid and the order will be marked as cancelled.
+              </p>
+
+              {cancelError && (
+                <div className="p-3 bg-error/10 border border-error/30 text-error rounded-xl text-xs font-semibold mb-4">
+                  {cancelError}
+                </div>
+              )}
+
+              <div className="mb-6">
+                <label className="block text-xs font-semibold text-on-surface-variant mb-1">
+                  Cancellation Reason (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={cancelReasonInput}
+                  onChange={(e) => setCancelReasonInput(e.target.value)}
+                  placeholder="e.g. Customer requested, out of stock..."
+                  className="w-full h-11 px-3 rounded-xl bg-surface-container border border-outline-variant/50 text-on-surface text-sm focus:border-error focus:outline-none"
+                  disabled={isSubmittingCancel}
+                />
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCancellingOrder(null)}
+                  disabled={isSubmittingCancel}
+                  className="px-4 py-2 rounded-xl text-sm font-semibold border border-outline-variant hover:bg-surface-variant cursor-pointer text-on-surface transition-all disabled:opacity-50"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmCancel}
+                  disabled={isSubmittingCancel}
+                  className="px-5 py-2 rounded-xl text-sm font-semibold bg-error text-on-error hover:bg-error/90 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-all flex items-center gap-2 font-mono"
+                >
+                  {isSubmittingCancel ? (
+                    <>
+                      <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+                      Cancelling...
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-sm">cancel</span>
+                      Confirm Cancel
+                    </>
                   )}
                 </button>
               </div>

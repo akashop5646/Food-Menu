@@ -7,6 +7,7 @@ import { broadcast } from '../websocket.js';
 import { initializeAndProcessSettlementForPaidOrder } from '../services/settlement.js';
 import { recordEmployeeActivity } from '../services/employeeAudit.js';
 import { calculateOrderConvenienceFee } from '../services/convenienceFee.js';
+import { ORDER_STATUS } from '../constants/orderStatus.js';
 
 const router = Router();
 
@@ -518,26 +519,74 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-// Advance order KDS status (NEW -> PREPARING -> READY -> COMPLETED)
+// Advance or cancel order status (NEW -> PREPARING -> READY -> COMPLETED or CANCELLED)
 router.patch('/:id/status', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, reason } = req.body;
 
-    const validStatuses = ['NEW', 'PREPARING', 'READY', 'COMPLETED'];
+    const validStatuses = [ORDER_STATUS.NEW, ORDER_STATUS.PREPARING, ORDER_STATUS.READY, ORDER_STATUS.COMPLETED, ORDER_STATUS.CANCELLED];
     if (!validStatuses.includes(status)) {
-      return res.status(400).json({ error: 'Invalid KDS status.' });
+      return res.status(400).json({ error: 'Invalid order status.' });
     }
 
     const db = await getDB();
+    const existingOrder = await db.collection('orders').findOne({ _id: new ObjectId(id) });
+    if (!existingOrder) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    // Cancellation specific rules
+    if (status === ORDER_STATUS.CANCELLED) {
+      if (existingOrder.paymentStatus === 'PAID') {
+        return res.status(400).json({ error: 'Paid orders cannot be cancelled.' });
+      }
+      if (existingOrder.status === ORDER_STATUS.CANCELLED) {
+        return res.status(400).json({ error: 'Order is already cancelled.' });
+      }
+      if (![ORDER_STATUS.NEW, ORDER_STATUS.PREPARING].includes(existingOrder.status)) {
+        return res.status(400).json({ error: 'Orders in READY or COMPLETED status cannot be cancelled.' });
+      }
+
+      const cancellationReason = typeof reason === 'string' && reason.trim() ? reason.trim() : null;
+      const updateData = {
+        status: ORDER_STATUS.CANCELLED,
+        cancelledAt: new Date(),
+        cancelledBy: req.user?.id || req.user?.name || 'ADMIN',
+        cancellationReason,
+        statusUpdatedAt: new Date()
+      };
+
+      await db.collection('orders').updateOne(
+        { _id: new ObjectId(id) },
+        { $set: updateData }
+      );
+
+      broadcast('ORDER_STATUS_CHANGED', { id, status: ORDER_STATUS.CANCELLED, order: { ...existingOrder, ...updateData } });
+
+      await recordEmployeeActivity(
+        {
+          userId: req.user.id,
+          name: req.user.name,
+          email: req.user.email,
+          role: req.user.role || 'ADMIN'
+        },
+        'ORDER_STATUS_CHANGED',
+        {
+          type: 'ORDER',
+          id: id,
+          displayLabel: `Order cancelled (${cancellationReason || 'No reason provided'})`
+        },
+        { toStatus: ORDER_STATUS.CANCELLED, cancellationReason }
+      ).catch(err => console.error('Failed to log cancel activity:', err));
+
+      return res.json({ success: true, id, status: ORDER_STATUS.CANCELLED, cancellationReason });
+    }
+
     const result = await db.collection('orders').updateOne(
       { _id: new ObjectId(id) },
       { $set: { status, statusUpdatedAt: new Date() } }
     );
-
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ error: 'Order not found.' });
-    }
 
     // Broadcast status change
     broadcast('ORDER_STATUS_CHANGED', { id, status });
@@ -561,7 +610,7 @@ router.patch('/:id/status', requireAuth, async (req, res) => {
       { toStatus: status }
     );
   } catch (error) {
-    console.error('Failed to update KDS status:', error);
+    console.error('Failed to update order status:', error);
     res.status(500).json({ error: 'Failed to update order status.' });
   }
 });
@@ -667,6 +716,10 @@ router.patch('/:id/payment', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Order not found.' });
     }
 
+    if (order.status === ORDER_STATUS.CANCELLED) {
+      return res.status(400).json({ error: 'Cannot verify payment for a cancelled order.' });
+    }
+
     // Idempotency: if already paid, return success but don't broadcast
     if (order.paymentStatus === 'PAID') {
       return res.json({ success: true, id, paymentStatus: 'PAID', alreadyPaid: true });
@@ -731,6 +784,10 @@ router.post('/razorpay-order', async (req, res) => {
     const order = await db.collection('orders').findOne({ _id: new ObjectId(orderId) });
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
+    }
+
+    if (order.status === ORDER_STATUS.CANCELLED) {
+      return res.status(400).json({ error: 'Order has been cancelled' });
     }
 
     if (order.paymentStatus === 'PAID') {

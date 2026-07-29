@@ -142,7 +142,14 @@ const renderPaymentMethodBadge = (type) => {
   );
 };
 
-const renderPaymentStatusBadge = (status) => {
+const renderPaymentStatusBadge = (status, orderStatus) => {
+  if (orderStatus === 'CANCELLED') {
+    return (
+      <span className="px-2.5 py-1 rounded-lg border text-[10px] font-bold uppercase tracking-wider whitespace-nowrap bg-error/10 border-error/20 text-error">
+        CANCELLED
+      </span>
+    );
+  }
   const isPaid = status === 'PAID';
   const style = isPaid 
     ? 'bg-green-500/10 border-green-500/20 text-green-600 dark:text-green-400' 
@@ -322,17 +329,17 @@ export default function Payments({ refreshKey, user }) {
     }
     setIsGeneratingReceipt(true);
     try {
-      const receiptData = buildSinglePaymentReceiptData(order);
+      const receiptData = buildSinglePaymentReceiptData(order, { allowUnpaid: true });
       if (!receiptData) {
         printWindow.close();
-        alert('Unable to generate receipt. Only paid orders can produce receipts.');
+        alert('Unable to generate document preview.');
         return;
       }
-      const html = generateSinglePaymentReceiptHtml(receiptData);
+      const html = generateSinglePaymentReceiptHtml(receiptData, restaurantName || undefined);
       printWindow.document.open();
       printWindow.document.write(html);
       printWindow.document.close();
-      printWindow.document.title = 'Payment Receipt';
+      printWindow.document.title = receiptData.paymentStatus === 'PAID' ? 'Payment Receipt' : 'Order Bill';
       if (printWindow.document.readyState === 'complete') {
         printWindow.print();
       } else {
@@ -1033,10 +1040,21 @@ export default function Payments({ refreshKey, user }) {
                             {renderPaymentMethodBadge(order.paymentType)}
                           </td>
                           <td className="py-3.5 px-4">
-                            {renderPaymentStatusBadge(order.paymentStatus)}
+                            {renderPaymentStatusBadge(order.paymentStatus, order.status)}
                           </td>
                           <td className="py-3.5 px-4 text-right">
                             <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePrintReceipt(order);
+                                }}
+                                className="text-on-surface-variant hover:text-primary transition-all p-1.5 hover:bg-surface-container-high rounded-lg cursor-pointer"
+                                aria-label="View Bill"
+                                title="View & Print Bill"
+                              >
+                                <span className="material-symbols-outlined text-base">receipt_long</span>
+                              </button>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1047,7 +1065,7 @@ export default function Payments({ refreshKey, user }) {
                               >
                                 <span className="material-symbols-outlined text-base">visibility</span>
                               </button>
-                              {order.paymentStatus === 'PENDING' && (
+                              {order.paymentStatus === 'PENDING' && order.status !== 'CANCELLED' && (
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
