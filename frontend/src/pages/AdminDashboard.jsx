@@ -63,8 +63,19 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [restaurantProfile, setRestaurantProfile] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // ponytail: fetch restaurant profile once on init for layout branding
+  useEffect(() => {
+    fetch(API_BASE + '/api/settings/restaurant-profile', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setRestaurantProfile(d); })
+      .catch(() => {});
+  }, []);
+
+  const restaurantName = restaurantProfile?.restaurantName || 'Restaurant';
 
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
 
@@ -488,7 +499,7 @@ export default function AdminDashboard() {
       {!isKitchenMode && (
         <nav className="hidden md:flex flex-col h-screen w-[280px] fixed left-0 top-0 bg-surface-container/60 backdrop-blur-[30px] border-r border-outline-variant/20 shadow-[0_0_20px_rgba(212,175,55,0.05)] py-margin-desktop z-50">
           <div className="px-6 mb-12">
-            <h1 className="font-display-lg text-display-lg font-bold text-primary tracking-tight">Aurum Table</h1>
+            <h1 className="font-display-lg text-display-lg font-bold text-primary tracking-tight">{restaurantName}</h1>
             <p className="font-body-sm text-body-sm text-on-surface-variant mt-2">Digital Concierge</p>
           </div>
           <ul className="flex-1 space-y-2 overflow-y-auto hide-scrollbar pr-1">
@@ -568,7 +579,7 @@ export default function AdminDashboard() {
               >
                 <span className="material-symbols-outlined text-[24px]">menu</span>
               </button>
-              <h2 className="font-headline-lg text-headline-lg text-primary tracking-tight">Aurum OS</h2>
+              <h2 className="font-headline-lg text-headline-lg text-primary tracking-tight">{restaurantName}</h2>
             </div>
             <div className="flex items-center gap-2 sm:gap-6">
               <button onClick={handleThemeToggle} className="text-on-surface-variant hover:text-primary transition-all ripple-effect cursor-pointer">
@@ -722,7 +733,7 @@ export default function AdminDashboard() {
           {activeTab === 'menu' && <MenuManager />}
           {activeTab === 'scanner' && <OrderScanner />}
           {activeTab === 'tables' && <TablesAndQR />}
-          {activeTab === 'settings' && <Settings user={user} />}
+          {activeTab === 'settings' && <Settings user={user} onProfileUpdate={setRestaurantProfile} />}
           {activeTab === 'payments' && <Payments refreshKey={refreshKey} user={user} />}
           {activeTab === 'analytics' && <Analytics />}
           {activeTab === 'settlements' && user?.role === 'MASTER_ADMIN' && <SettlementMonitor />}
@@ -762,7 +773,7 @@ export default function AdminDashboard() {
             >
               <div className="px-6 mb-8 flex justify-between items-center">
                 <div>
-                  <h1 className="font-display-lg text-2xl font-bold text-primary tracking-tight">Aurum Table</h1>
+                  <h1 className="font-display-lg text-2xl font-bold text-primary tracking-tight">{restaurantName}</h1>
                   <p className="font-body-sm text-[12px] text-on-surface-variant mt-1">Digital Concierge</p>
                 </div>
                 <button 

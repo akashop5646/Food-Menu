@@ -15,7 +15,7 @@ const percentageToBasisPoints = (value) => {
   return (Number(whole || 0) * 100) + Number((decimal + '00').slice(0, 2));
 };
 
-export default function Settings({ user }) {
+export default function Settings({ user, onProfileUpdate }) {
   const canModifyConvenienceFee = user?.role === 'MASTER_ADMIN';
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -268,6 +268,10 @@ export default function Settings({ user }) {
       const profileData = await profileRes.json();
 
       if (!profileRes.ok) throw new Error(profileData.error || 'Failed to save restaurant profile');
+
+      if (typeof onProfileUpdate === 'function' && profileData?.profile) {
+        onProfileUpdate(profileData.profile);
+      }
 
       setConfigSuccess(true);
       setTimeout(() => setConfigSuccess(false), 3000);
