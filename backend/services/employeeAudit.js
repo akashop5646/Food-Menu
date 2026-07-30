@@ -13,6 +13,7 @@ const ACTION_TAXONOMY = [
   'ORDER_CREATED',
   'ORDER_STATUS_CHANGED',
   'ORDER_PAYMENT_VERIFIED',
+  'ORDER_PAYMENT_METHOD_CHANGED',
   'MENU_ITEM_CREATED',
   'MENU_ITEM_UPDATED',
   'MENU_ITEM_AVAILABILITY_CHANGED',
@@ -47,6 +48,10 @@ const CONTEXT_SCHEMAS = {
   },
   ORDER_PAYMENT_VERIFIED: {
     paymentStatus: (v) => v === 'PAID',
+  },
+  ORDER_PAYMENT_METHOD_CHANGED: {
+    fromPaymentMethod: (v) => typeof v === 'string' && v.trim().length > 0,
+    toPaymentMethod: (v) => typeof v === 'string' && v.trim().length > 0,
   },
   MENU_ITEM_CREATED: {
     price: (v) => typeof v === 'number' && v >= 0,

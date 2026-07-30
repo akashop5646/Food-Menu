@@ -10,6 +10,7 @@ import {
   openPrintableDocument
 } from '../utils/paymentDocumentHelper';
 import { calculateSettlementSummary, getOrderSettlementBreakdown } from '../utils/settlementHelper';
+import { PAYMENT_TYPE, ADMIN_SELECTABLE_PAYMENT_TYPES } from '../constants/paymentType';
 
 // Money formatting and numeric extraction helpers
 const getFoodSubtotal = (order) => {
@@ -117,27 +118,52 @@ const calculateGrowth = (current, previous) => {
   };
 };
 
-const renderPaymentMethodBadge = (type) => {
-  const t = type || 'UNKNOWN';
+const renderPaymentMethodBadge = (type, isEditable = false, onEditClick = null) => {
+  const t = (type || 'UNKNOWN').toUpperCase();
   let label = 'Method';
   let style = 'bg-surface-container-high border-outline-variant/30 text-on-surface-variant/80';
 
   if (t === 'RAZORPAY' || t === 'ONLINE' || t === 'NOW') {
     label = 'Razorpay';
     style = 'bg-primary/10 border-primary/20 text-primary';
-  } else if (t === 'LATER') {
-    label = 'Pay Later';
-    style = 'bg-yellow-500/10 border-yellow-500/20 text-yellow-600 dark:text-yellow-400';
+  } else if (t === 'CASH') {
+    label = 'Cash';
+    style = 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400';
+  } else if (t === 'CARD') {
+    label = 'Card';
+    style = 'bg-purple-500/10 border-purple-500/20 text-purple-600 dark:text-purple-400';
   } else if (t === 'UPI') {
     label = 'UPI';
     style = 'bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-400';
+  } else if (t === 'LATER') {
+    label = 'Pay Later';
+    style = 'bg-yellow-500/10 border-yellow-500/20 text-yellow-600 dark:text-yellow-400';
   } else {
     label = t;
   }
 
+  if (isEditable) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (onEditClick) onEditClick();
+        }}
+        className={`px-2.5 py-1 rounded-lg border text-[10px] font-bold uppercase tracking-wider whitespace-nowrap cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all inline-flex items-center gap-1 shadow-xs ${style}`}
+        title="Click to change payment method"
+      >
+        <span className="material-symbols-outlined text-[12px]">credit_card</span>
+        <span>{label}</span>
+        <span className="material-symbols-outlined text-[12px]">arrow_drop_down</span>
+      </button>
+    );
+  }
+
   return (
-    <span className={`px-2.5 py-1 rounded-lg border text-[10px] font-bold uppercase tracking-wider whitespace-nowrap ${style}`}>
-      {label}
+    <span className={`px-2.5 py-1 rounded-lg border text-[10px] font-bold uppercase tracking-wider whitespace-nowrap inline-flex items-center gap-1 ${style}`}>
+      <span className="material-symbols-outlined text-[11px] opacity-70">lock</span>
+      <span>{label}</span>
     </span>
   );
 };
@@ -289,7 +315,48 @@ export default function Payments({ refreshKey, user }) {
   const selectedOrder = useMemo(() => {
     if (!selectedOrderId) return null;
     return paymentOrders.find(o => o._id === selectedOrderId) || null;
-  }, [selectedOrderId, paymentOrders]);
+  }, [paymentOrders, selectedOrderId]);
+
+  const [changingPaymentMethodOrder, setChangingPaymentMethodOrder] = useState(null);
+  const [newPaymentMethodInput, setNewPaymentMethodInput] = useState('CASH');
+  const [changeReasonInput, setChangeReasonInput] = useState('');
+  const [isSubmittingPaymentMethodChange, setIsSubmittingPaymentMethodChange] = useState(false);
+  const [paymentMethodChangeError, setPaymentMethodChangeError] = useState('');
+
+  const handleOpenPaymentMethodModal = (order) => {
+    setChangingPaymentMethodOrder(order);
+    const current = (order.paymentType || 'CASH').toUpperCase();
+    const defaultNew = ADMIN_SELECTABLE_PAYMENT_TYPES.find(m => m !== current) || 'CASH';
+    setNewPaymentMethodInput(defaultNew);
+    setChangeReasonInput('');
+    setPaymentMethodChangeError('');
+  };
+
+  const handleConfirmPaymentMethodChange = async () => {
+    if (!changingPaymentMethodOrder) return;
+    setIsSubmittingPaymentMethodChange(true);
+    setPaymentMethodChangeError('');
+    try {
+      const res = await fetch(`${API_BASE}/api/orders/${changingPaymentMethodOrder._id}/payment-method`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paymentMethod: newPaymentMethodInput,
+          reason: changeReasonInput
+        }),
+        credentials: 'include'
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update payment method');
+
+      setPaymentOrders(prev => prev.map(o => o._id === changingPaymentMethodOrder._id ? { ...o, paymentType: data.paymentType } : o));
+      setChangingPaymentMethodOrder(null);
+    } catch (err) {
+      setPaymentMethodChangeError(err.message);
+    } finally {
+      setIsSubmittingPaymentMethodChange(false);
+    }
+  };
 
   // Drawer accessibility & scroll lock
   useScrollLock(!!selectedOrderId);
@@ -1037,7 +1104,11 @@ export default function Payments({ refreshKey, user }) {
                             </div>
                           </td>
                           <td className="py-3.5 px-4">
-                            {renderPaymentMethodBadge(order.paymentType)}
+                            {renderPaymentMethodBadge(
+                              order.paymentType,
+                              order.paymentStatus !== 'PAID' && order.status !== 'CANCELLED',
+                              () => handleOpenPaymentMethodModal(order)
+                            )}
                           </td>
                           <td className="py-3.5 px-4">
                             {renderPaymentStatusBadge(order.paymentStatus, order.status)}
@@ -1282,7 +1353,13 @@ export default function Payments({ refreshKey, user }) {
 
                     <div>
                       <span className="text-[11px] font-label-caps text-on-surface-variant/70 uppercase tracking-widest block mb-0.5">Payment Method</span>
-                      <div>{renderPaymentMethodBadge(selectedOrder.paymentType)}</div>
+                      <div>
+                        {renderPaymentMethodBadge(
+                          selectedOrder.paymentType,
+                          selectedOrder.paymentStatus !== 'PAID' && selectedOrder.status !== 'CANCELLED',
+                          () => handleOpenPaymentMethodModal(selectedOrder)
+                        )}
+                      </div>
                     </div>
 
                     <div>
@@ -1482,6 +1559,116 @@ export default function Payments({ refreshKey, user }) {
               </div>
             </aside>
           </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {changingPaymentMethodOrder && (
+          <motion.div
+            key="change-payment-method-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="app-overlay-backdrop bg-black/60 backdrop-blur-sm fixed inset-0 z-[110] flex items-center justify-center p-4"
+            onClick={(e) => {
+              if (!isSubmittingPaymentMethodChange && e.target === e.currentTarget) {
+                setChangingPaymentMethodOrder(null);
+              }
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-surface-container-high border border-outline-variant/30 rounded-2xl p-6 max-w-md w-full shadow-2xl"
+            >
+              <h3 className="font-title-lg text-title-lg text-primary flex items-center gap-2 mb-2">
+                <span className="material-symbols-outlined">credit_card</span>
+                Change Payment Method
+              </h3>
+              <p className="font-body-sm text-[14px] text-on-surface-variant/80 mb-4">
+                Update payment method for Order #{changingPaymentMethodOrder._id?.slice(-6)?.toUpperCase()} (Table {changingPaymentMethodOrder.table || 'N/A'}).
+              </p>
+
+              {paymentMethodChangeError && (
+                <div className="p-3 bg-error/10 border border-error/30 text-error rounded-xl text-xs font-semibold mb-4">
+                  {paymentMethodChangeError}
+                </div>
+              )}
+
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="block text-xs font-semibold text-on-surface-variant/70 uppercase tracking-widest mb-1">
+                    Current Method
+                  </label>
+                  <div className="py-1">
+                    {renderPaymentMethodBadge(changingPaymentMethodOrder.paymentType)}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-on-surface-variant/70 uppercase tracking-widest mb-1">
+                    New Payment Method
+                  </label>
+                  <select
+                    value={newPaymentMethodInput}
+                    onChange={(e) => setNewPaymentMethodInput(e.target.value)}
+                    className="w-full h-11 px-3 rounded-xl bg-surface-container border border-outline-variant/50 text-on-surface text-sm font-semibold focus:border-primary focus:outline-none cursor-pointer"
+                    disabled={isSubmittingPaymentMethodChange}
+                  >
+                    {ADMIN_SELECTABLE_PAYMENT_TYPES.map((type) => (
+                      <option key={type} value={type} disabled={type === (changingPaymentMethodOrder.paymentType || '').toUpperCase()}>
+                        {type} {type === (changingPaymentMethodOrder.paymentType || '').toUpperCase() ? '(Current)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-on-surface-variant/70 uppercase tracking-widest mb-1">
+                    Reason (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={changeReasonInput}
+                    onChange={(e) => setChangeReasonInput(e.target.value)}
+                    placeholder="e.g. Customer requested cash, card terminal issue..."
+                    className="w-full h-11 px-3 rounded-xl bg-surface-container border border-outline-variant/50 text-on-surface text-sm focus:border-primary focus:outline-none"
+                    disabled={isSubmittingPaymentMethodChange}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setChangingPaymentMethodOrder(null)}
+                  disabled={isSubmittingPaymentMethodChange}
+                  className="px-4 py-2 rounded-xl text-sm font-semibold border border-outline-variant hover:bg-surface-variant cursor-pointer text-on-surface transition-all disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmPaymentMethodChange}
+                  disabled={isSubmittingPaymentMethodChange || newPaymentMethodInput === (changingPaymentMethodOrder.paymentType || '').toUpperCase()}
+                  className="px-5 py-2 rounded-xl text-sm font-semibold bg-primary text-on-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-all flex items-center gap-2 font-mono"
+                >
+                  {isSubmittingPaymentMethodChange ? (
+                    <>
+                      <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-sm">check</span>
+                      Confirm Change
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

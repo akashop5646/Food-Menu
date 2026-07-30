@@ -8,6 +8,7 @@ import { initializeAndProcessSettlementForPaidOrder } from '../services/settleme
 import { recordEmployeeActivity } from '../services/employeeAudit.js';
 import { calculateOrderConvenienceFee } from '../services/convenienceFee.js';
 import { ORDER_STATUS } from '../constants/orderStatus.js';
+import { PAYMENT_TYPE } from '../constants/paymentType.js';
 
 const router = Router();
 
@@ -772,6 +773,102 @@ router.patch('/:id/payment', requireAuth, async (req, res) => {
   }
 });
 
+// Change payment method for unpaid order (CASH, RAZORPAY, CARD, UPI)
+router.patch('/:id/payment-method', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { paymentMethod, reason } = req.body || {};
+
+    if (!id || !ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Invalid order ID.' });
+    }
+
+    const normalizedMethod = typeof paymentMethod === 'string' ? paymentMethod.trim().toUpperCase() : '';
+    if (!Object.values(PAYMENT_TYPE).includes(normalizedMethod)) {
+      return res.status(400).json({ error: 'Invalid payment method.' });
+    }
+
+    const db = await getDB();
+    const existingOrder = await db.collection('orders').findOne({ _id: new ObjectId(id) });
+    if (!existingOrder) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    if (existingOrder.paymentStatus === 'PAID') {
+      return res.status(400).json({ error: 'Paid orders cannot change payment method.' });
+    }
+
+    if (existingOrder.status === ORDER_STATUS.CANCELLED) {
+      return res.status(400).json({ error: 'Cancelled orders cannot change payment method.' });
+    }
+
+    if (existingOrder.paymentType === normalizedMethod) {
+      return res.status(400).json({ error: `Payment method is already ${normalizedMethod}.` });
+    }
+
+    // Atomic compare-and-set update to prevent concurrent modification race conditions
+    const result = await db.collection('orders').findOneAndUpdate(
+      {
+        _id: new ObjectId(id),
+        paymentStatus: { $ne: 'PAID' },
+        status: { $ne: ORDER_STATUS.CANCELLED },
+        paymentType: { $ne: normalizedMethod }
+      },
+      {
+        $set: { paymentType: normalizedMethod }
+      },
+      { returnDocument: 'after' }
+    );
+
+    const updatedOrder = result?.value ?? result;
+    if (!updatedOrder) {
+      return res.status(409).json({ error: 'Order status or payment status changed concurrently.' });
+    }
+
+    const fromPaymentMethod = existingOrder.paymentType || 'UNKNOWN';
+
+    // Broadcast WebSocket update
+    broadcast('ORDER_PAYMENT_METHOD_CHANGED', {
+      id,
+      fromPaymentMethod,
+      toPaymentMethod: normalizedMethod,
+      paymentType: normalizedMethod,
+      table: updatedOrder.table
+    });
+
+    // Record employee activity in existing audit system
+    await recordEmployeeActivity(
+      {
+        userId: req.user.id,
+        name: req.user.name,
+        email: req.user.email,
+        role: req.user.role || 'ADMIN'
+      },
+      'ORDER_PAYMENT_METHOD_CHANGED',
+      {
+        type: 'ORDER',
+        id: id,
+        displayLabel: `Payment method changed from ${fromPaymentMethod} to ${normalizedMethod}`
+      },
+      {
+        fromPaymentMethod,
+        toPaymentMethod: normalizedMethod,
+        reason: typeof reason === 'string' && reason.trim() ? reason.trim() : null
+      }
+    ).catch(err => console.error('Failed to log payment method change activity:', err));
+
+    return res.json({
+      success: true,
+      id,
+      fromPaymentMethod,
+      paymentType: normalizedMethod
+    });
+  } catch (error) {
+    console.error('Failed to update payment method:', error);
+    res.status(500).json({ error: 'Failed to update payment method.' });
+  }
+});
+
 // Create a Razorpay Order (Public/Customer endpoint)
 router.post('/razorpay-order', async (req, res) => {
   try {
@@ -792,6 +889,10 @@ router.post('/razorpay-order', async (req, res) => {
 
     if (order.paymentStatus === 'PAID') {
       return res.status(400).json({ error: 'Order has already been paid' });
+    }
+
+    if (order.paymentType !== 'RAZORPAY' && order.paymentType !== 'ONLINE' && order.paymentType !== 'NOW') {
+      return res.status(400).json({ error: `Payment method ${order.paymentType} does not support online checkout.` });
     }
 
     const amount = order.totalPayable ?? order.total;
