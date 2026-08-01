@@ -1003,13 +1003,6 @@ function MenuPage() {
                 <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none z-10" />
               )}
             </div>
-            <p className="text-[10px] font-label-caps uppercase tracking-[0.14em] text-on-surface-variant/70">
-              {searchQuery
-                ? `Results for “${searchQuery}”`
-                : activeCategory === 'All'
-                  ? 'Explore today’s menu'
-                  : `${activeCategory} selection`}
-            </p>
           </div>
         </section>
 
