@@ -1,57 +1,62 @@
 <!doctype html>
 <html lang="en" class="dark">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Aurum Table  | Food Menu</title>
-    <meta
-      name="description"
-      content="A premium React digital food menu page for restaurants."
-    />
-    <!-- Open Graph / Facebook -->
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="Aurum Table | Premium Digital Dining Experience" />
-    <meta property="og:description" content="Discover and order curated culinary masterworks directly from your table with our premium digital menu and concierge service." />
-    <meta property="og:image" content="/aurum-og.png" />
 
-    <!-- Twitter -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Aurum Table | Premium Digital Dining Experience" />
-    <meta name="twitter:description" content="Discover and order curated culinary masterworks directly from your table with our premium digital menu and concierge service." />
-    <meta name="twitter:image" content="/aurum-og.png" />
-    <script>
-      (function() {
-        const path = window.location.pathname;
-        let isDark = true;
-        if (path.startsWith('/admin')) {
-          const savedAdmin = localStorage.getItem('aurum_admin_theme');
-          if (savedAdmin) {
-            isDark = savedAdmin === 'dark';
-          } else {
-            isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-          }
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aurum Table | Food Menu</title>
+  <meta name="description" content="A premium React digital food menu page for restaurants." />
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="KC Dhaba | Premium Digital Dining Experience" />
+  <meta property="og:description"
+    content="Discover and order curated culinary masterworks directly from your table with our premium digital menu and concierge service." />
+  <meta property="og:image" content="/kc-dhaba-og.png" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="KC Dhaba | Premium Digital Dining Experience" />
+  <meta name="twitter:description"
+    content="Discover and order curated culinary masterworks directly from your table with our premium digital menu and concierge service." />
+  <meta name="twitter:image" content="/kc-dhaba-og.png" />
+  <script>
+    (function () {
+      const path = window.location.pathname;
+      let isDark = true;
+      if (path.startsWith('/admin')) {
+        const savedAdmin = localStorage.getItem('aurum_admin_theme');
+        if (savedAdmin) {
+          isDark = savedAdmin === 'dark';
         } else {
-          const savedCustomer = localStorage.getItem('aurum_theme');
-          if (savedCustomer) {
-            isDark = savedCustomer === 'dark';
-          } else {
-            isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-          }
+          isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         }
-        if (isDark) {
-          document.documentElement.classList.add('dark');
+      } else {
+        const savedCustomer = localStorage.getItem('aurum_theme');
+        if (savedCustomer) {
+          isDark = savedCustomer === 'dark';
         } else {
-          document.documentElement.classList.remove('dark');
+          isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         }
-      })();
-    </script>
-    <link rel="preconnect" href="https://images.unsplash.com" />
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
-    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+      }
+      if (isDark) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    })();
+  </script>
+  <link rel="preconnect" href="https://images.unsplash.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+    rel="stylesheet">
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
 </html>
